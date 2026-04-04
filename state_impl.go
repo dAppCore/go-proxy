@@ -1307,7 +1307,7 @@ func (s *Stats) OnReject(e Event) {
 		return
 	}
 	s.rejected.Add(1)
-	if strings.Contains(strings.ToLower(e.Error), "difficulty") || strings.Contains(strings.ToLower(e.Error), "invalid") || strings.Contains(strings.ToLower(e.Error), "nonce") {
+	if isInvalidShareReason(e.Error) {
 		s.invalid.Add(1)
 	}
 }
@@ -1520,7 +1520,7 @@ func (w *Workers) OnReject(e Event) {
 	}
 	record := &w.entries[index]
 	record.Rejected++
-	if strings.Contains(strings.ToLower(e.Error), "difficulty") || strings.Contains(strings.ToLower(e.Error), "invalid") || strings.Contains(strings.ToLower(e.Error), "nonce") {
+	if isInvalidShareReason(e.Error) {
 		record.Invalid++
 	}
 	record.LastIP = e.Miner.ip
