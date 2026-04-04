@@ -256,11 +256,15 @@ func (rl *RateLimiter) Tick() {
 //		proxyInstance.Reload(cfg)
 //	})
 func NewConfigWatcher(path string, onChange func(*Config)) *ConfigWatcher {
-	return &ConfigWatcher{
+	watcher := &ConfigWatcher{
 		path:     path,
 		onChange: onChange,
 		done:     make(chan struct{}),
 	}
+	if info, err := os.Stat(path); err == nil {
+		watcher.lastMod = info.ModTime()
+	}
+	return watcher
 }
 
 // Start begins the 1-second polling loop.

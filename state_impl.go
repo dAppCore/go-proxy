@@ -542,40 +542,88 @@ func (p *Proxy) writeJSON(w http.ResponseWriter, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-func (p *Proxy) summaryDocument() any {
+type summaryDocumentPayload struct {
+	Version         string                           `json:"version"`
+	Mode            string                           `json:"mode"`
+	Hashrate        summaryHashratePayload           `json:"hashrate"`
+	Miners          summaryMinersPayload             `json:"miners"`
+	Workers         uint64                           `json:"workers"`
+	Upstreams       summaryUpstreamsPayload          `json:"upstreams"`
+	Results         summaryResultsPayload            `json:"results"`
+	CustomDiffStats map[uint64]CustomDiffBucketStats `json:"custom_diff_stats,omitempty"`
+}
+
+type summaryHashratePayload struct {
+	Total [6]float64 `json:"total"`
+}
+
+type summaryMinersPayload struct {
+	Now uint64 `json:"now"`
+	Max uint64 `json:"max"`
+}
+
+type summaryUpstreamsPayload struct {
+	Active uint64  `json:"active"`
+	Sleep  uint64  `json:"sleep"`
+	Error  uint64  `json:"error"`
+	Total  uint64  `json:"total"`
+	Ratio  float64 `json:"ratio"`
+}
+
+type summaryResultsPayload struct {
+	Accepted    uint64     `json:"accepted"`
+	Rejected    uint64     `json:"rejected"`
+	Invalid     uint64     `json:"invalid"`
+	Expired     uint64     `json:"expired"`
+	AvgTime     uint32     `json:"avg_time"`
+	Latency     uint32     `json:"latency"`
+	HashesTotal uint64     `json:"hashes_total"`
+	Best        [10]uint64 `json:"best"`
+}
+
+type workersDocumentPayload struct {
+	Mode    string  `json:"mode"`
+	Workers [][]any `json:"workers"`
+}
+
+type minersDocumentPayload struct {
+	Format []string `json:"format"`
+	Miners [][]any  `json:"miners"`
+}
+
+func (p *Proxy) summaryDocument() summaryDocumentPayload {
 	summary := p.Summary()
 	now, max := p.MinerCount()
 	upstreams := p.Upstreams()
-	workerCount := uint64(len(p.WorkerRecords()))
-	return map[string]any{
-		"version": "1.0.0",
-		"mode":    p.Mode(),
-		"hashrate": map[string]any{
-			"total": summary.Hashrate,
+	return summaryDocumentPayload{
+		Version: "1.0.0",
+		Mode:    p.Mode(),
+		Hashrate: summaryHashratePayload{
+			Total: summary.Hashrate,
 		},
-		"custom_diff_stats": summary.CustomDiffStats,
-		"miners": map[string]any{
-			"now": now,
-			"max": max,
+		CustomDiffStats: summary.CustomDiffStats,
+		Miners: summaryMinersPayload{
+			Now: now,
+			Max: max,
 		},
-		"workers":   workerCount,
-		"upstreams": map[string]any{"active": upstreams.Active, "sleep": upstreams.Sleep, "error": upstreams.Error, "total": upstreams.Total, "ratio": upstreamRatio(now, upstreams)},
-		"results": map[string]any{
-			"accepted":     summary.Accepted,
-			"rejected":     summary.Rejected,
-			"invalid":      summary.Invalid,
-			"expired":      summary.Expired,
-			"avg_time":     summary.AvgTime,
-			"latency":      summary.AvgLatency,
-			"hashes_total": summary.Hashes,
-			"best":         summary.TopDiff,
+		Workers:   uint64(len(p.WorkerRecords())),
+		Upstreams: summaryUpstreamsPayload{Active: upstreams.Active, Sleep: upstreams.Sleep, Error: upstreams.Error, Total: upstreams.Total, Ratio: upstreamRatio(now, upstreams)},
+		Results: summaryResultsPayload{
+			Accepted:    summary.Accepted,
+			Rejected:    summary.Rejected,
+			Invalid:     summary.Invalid,
+			Expired:     summary.Expired,
+			AvgTime:     summary.AvgTime,
+			Latency:     summary.AvgLatency,
+			HashesTotal: summary.Hashes,
+			Best:        summary.TopDiff,
 		},
 	}
 }
 
-func (p *Proxy) workersDocument() any {
+func (p *Proxy) workersDocument() workersDocumentPayload {
 	records := p.WorkerRecords()
-	rows := make([]any, 0, len(records))
+	rows := make([][]any, 0, len(records))
 	for _, record := range records {
 		rows = append(rows, []any{
 			record.Name,
@@ -593,15 +641,15 @@ func (p *Proxy) workersDocument() any {
 			record.Hashrate(86400),
 		})
 	}
-	return map[string]any{
-		"mode":    string(p.WorkersMode()),
-		"workers": rows,
+	return workersDocumentPayload{
+		Mode:    string(p.WorkersMode()),
+		Workers: rows,
 	}
 }
 
-func (p *Proxy) minersDocument() any {
+func (p *Proxy) minersDocument() minersDocumentPayload {
 	records := p.MinerSnapshots()
-	rows := make([]any, 0, len(records))
+	rows := make([][]any, 0, len(records))
 	for _, miner := range records {
 		rows = append(rows, []any{
 			miner.ID,
@@ -616,9 +664,9 @@ func (p *Proxy) minersDocument() any {
 			miner.Agent,
 		})
 	}
-	return map[string]any{
-		"format": []string{"id", "ip", "tx", "rx", "state", "diff", "user", "password", "rig_id", "agent"},
-		"miners": rows,
+	return minersDocumentPayload{
+		Format: []string{"id", "ip", "tx", "rx", "state", "diff", "user", "password", "rig_id", "agent"},
+		Miners: rows,
 	}
 }
 
