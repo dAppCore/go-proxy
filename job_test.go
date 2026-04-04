@@ -18,7 +18,14 @@ func TestJob_BlobWithFixedByte(t *testing.T) {
 
 func TestJob_DifficultyFromTarget(t *testing.T) {
 	job := Job{Target: "b88d0600"}
-	if got := job.DifficultyFromTarget(); got == 0 {
-		t.Fatalf("expected non-zero difficulty")
+	if got := job.DifficultyFromTarget(); got != 100000 {
+		t.Fatalf("expected difficulty 100000, got %d", got)
+	}
+}
+
+func TestJob_DifficultyFromTarget_MaxTarget(t *testing.T) {
+	job := Job{Target: "ffffffff"}
+	if got := job.DifficultyFromTarget(); got != 1 {
+		t.Fatalf("expected minimum difficulty 1, got %d", got)
 	}
 }

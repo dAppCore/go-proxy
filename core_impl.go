@@ -186,7 +186,10 @@ func (j Job) DifficultyFromTarget() uint64 {
 	if target == 0 {
 		return 0
 	}
-	return uint64(math.MaxUint32 / uint64(target))
+	if target == math.MaxUint32 {
+		return 1
+	}
+	return uint64((uint64(math.MaxUint32) * 10) / uint64(target))
 }
 
 func targetFromDifficulty(diff uint64) string {
@@ -194,7 +197,7 @@ func targetFromDifficulty(diff uint64) string {
 		return "ffffffff"
 	}
 	maxTarget := uint64(math.MaxUint32)
-	target := (maxTarget + diff - 1) / diff
+	target := (maxTarget*10 + diff - 1) / diff
 	if target == 0 {
 		target = 1
 	}
