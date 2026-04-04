@@ -476,6 +476,20 @@ func applyTLSCiphers(tlsConfig *tls.Config, ciphers string) {
 	if tlsConfig == nil || strings.TrimSpace(ciphers) == "" {
 		return
 	}
+	parts := splitTLSConfigList(ciphers)
+	for _, part := range parts {
+		if id, ok := lookupTLSCipherSuite(part); ok {
+			tlsConfig.CipherSuites = append(tlsConfig.CipherSuites, id)
+		}
+	}
+}
+
+func lookupTLSCipherSuite(value string) (uint16, bool) {
+	name := strings.ToLower(strings.TrimSpace(value))
+	if name == "" {
+		return 0, false
+	}
+
 	allowed := map[string]uint16{}
 	for _, suite := range tls.CipherSuites() {
 		allowed[strings.ToLower(suite.Name)] = suite.ID
@@ -483,12 +497,36 @@ func applyTLSCiphers(tlsConfig *tls.Config, ciphers string) {
 	for _, suite := range tls.InsecureCipherSuites() {
 		allowed[strings.ToLower(suite.Name)] = suite.ID
 	}
-	parts := splitTLSConfigList(ciphers)
-	for _, part := range parts {
-		if id, ok := allowed[strings.ToLower(part)]; ok {
-			tlsConfig.CipherSuites = append(tlsConfig.CipherSuites, id)
+	if id, ok := allowed[name]; ok {
+		return id, true
+	}
+
+	if alias, ok := tlsCipherSuiteAliases[name]; ok {
+		if id, ok := allowed[strings.ToLower(alias)]; ok {
+			return id, true
 		}
 	}
+
+	return 0, false
+}
+
+var tlsCipherSuiteAliases = map[string]string{
+	"ecdhe-ecdsa-aes128-gcm-sha256": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+	"ecdhe-rsa-aes128-gcm-sha256":   "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+	"ecdhe-ecdsa-aes256-gcm-sha384": "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+	"ecdhe-rsa-aes256-gcm-sha384":   "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+	"ecdhe-ecdsa-chacha20-poly1305": "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305",
+	"ecdhe-rsa-chacha20-poly1305":   "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305",
+	"dhe-rsa-aes128-gcm-sha256":     "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256",
+	"dhe-rsa-aes256-gcm-sha384":     "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",
+	"aes128-gcm-sha256":             "TLS_RSA_WITH_AES_128_GCM_SHA256",
+	"aes256-gcm-sha384":             "TLS_RSA_WITH_AES_256_GCM_SHA384",
+	"aes128-sha":                    "TLS_RSA_WITH_AES_128_CBC_SHA",
+	"aes256-sha":                    "TLS_RSA_WITH_AES_256_CBC_SHA",
+	"ecdhe-ecdsa-aes128-sha256":     "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256",
+	"ecdhe-rsa-aes128-sha256":       "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+	"ecdhe-ecdsa-aes256-sha384":     "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384",
+	"ecdhe-rsa-aes256-sha384":       "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
 }
 
 func splitTLSConfigList(value string) []string {
