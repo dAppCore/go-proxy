@@ -138,6 +138,27 @@ func (s *SimpleSplitter) GC() {
 
 // Tick advances timeout checks in simple mode.
 func (s *SimpleSplitter) Tick(ticks uint64) {
+	if s == nil {
+		return
+	}
+	strategies := make([]pool.Strategy, 0, len(s.active)+len(s.idle))
+	s.mu.Lock()
+	for _, mapper := range s.active {
+		if mapper != nil && mapper.strategy != nil {
+			strategies = append(strategies, mapper.strategy)
+		}
+	}
+	for _, mapper := range s.idle {
+		if mapper != nil && mapper.strategy != nil {
+			strategies = append(strategies, mapper.strategy)
+		}
+	}
+	s.mu.Unlock()
+	for _, strategy := range strategies {
+		if ticker, ok := strategy.(interface{ Tick(uint64) }); ok {
+			ticker.Tick(ticks)
+		}
+	}
 	s.GC()
 }
 

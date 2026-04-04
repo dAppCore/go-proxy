@@ -113,7 +113,25 @@ func (s *NonceSplitter) GC() {
 }
 
 // Tick is called once per second.
-func (s *NonceSplitter) Tick(ticks uint64) {}
+func (s *NonceSplitter) Tick(ticks uint64) {
+	if s == nil {
+		return
+	}
+	strategies := make([]pool.Strategy, 0, len(s.mappers))
+	s.mu.RLock()
+	for _, mapper := range s.mappers {
+		if mapper == nil || mapper.strategy == nil {
+			continue
+		}
+		strategies = append(strategies, mapper.strategy)
+	}
+	s.mu.RUnlock()
+	for _, strategy := range strategies {
+		if ticker, ok := strategy.(interface{ Tick(uint64) }); ok {
+			ticker.Tick(ticks)
+		}
+	}
+}
 
 // Upstreams returns pool connection counts.
 func (s *NonceSplitter) Upstreams() proxy.UpstreamStats {

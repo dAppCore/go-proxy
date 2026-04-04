@@ -138,6 +138,22 @@ func (c *StratumClient) Submit(jobID, nonce, result, algo string) int64 {
 	return seq
 }
 
+// Keepalive sends a lightweight keepalived request to the pool when enabled.
+func (c *StratumClient) Keepalive() {
+	if c == nil || c.conn == nil || !c.IsActive() {
+		return
+	}
+	req := map[string]any{
+		"id":      atomic.AddInt64(&c.seq, 1),
+		"jsonrpc": "2.0",
+		"method":  "keepalived",
+		"params": map[string]any{
+			"id": c.sessionID,
+		},
+	}
+	_ = c.writeJSON(req)
+}
+
 // Disconnect closes the connection and notifies the listener.
 func (c *StratumClient) Disconnect() {
 	if c == nil {
@@ -402,6 +418,19 @@ func (s *FailoverStrategy) Disconnect() {
 // IsActive reports whether the current client has received a job.
 func (s *FailoverStrategy) IsActive() bool {
 	return s != nil && s.client != nil && s.client.IsActive()
+}
+
+// Tick keeps an active pool connection alive when configured.
+func (s *FailoverStrategy) Tick(ticks uint64) {
+	if s == nil || ticks == 0 || ticks%60 != 0 {
+		return
+	}
+	s.mu.Lock()
+	client := s.client
+	s.mu.Unlock()
+	if client != nil && client.cfg.Keepalive {
+		client.Keepalive()
+	}
 }
 
 // OnJob forwards the pool job to the outer listener.
