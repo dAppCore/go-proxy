@@ -14,12 +14,13 @@ import (
 //
 //	m := simple.NewSimpleMapper(id, strategy)
 type SimpleMapper struct {
-	id       int64
-	miner    *proxy.Miner // nil when idle
-	strategy pool.Strategy
-	idleAt   time.Time // zero when active
-	stopped  bool
-	events   *proxy.EventBus
-	pending  map[int64]*proxy.SubmitEvent
-	mu       sync.Mutex
+	id         int64
+	miner      *proxy.Miner // nil when idle
+	currentJob proxy.Job
+	strategy   pool.Strategy
+	idleAt     time.Time // zero when active
+	stopped    bool
+	events     *proxy.EventBus
+	pending    map[int64]*proxy.SubmitEvent
+	mu         sync.Mutex
 }

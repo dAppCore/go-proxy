@@ -30,6 +30,7 @@ type Miner struct {
 	state          MinerState
 	extAlgo        bool   // miner sent algo list in login params
 	extNH          bool   // NiceHash mode active (fixed byte splitting)
+	algoEnabled    bool   // proxy is configured to negotiate the algo extension
 	ip             string // remote IP (without port, for logging)
 	localPort      uint16
 	user           string // login params.login (wallet address), custom diff suffix stripped

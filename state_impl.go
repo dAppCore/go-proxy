@@ -60,6 +60,9 @@ func New(cfg *Config) (*Proxy, Result) {
 	p.events.Subscribe(EventAccept, p.workers.OnAccept)
 	p.events.Subscribe(EventReject, p.stats.OnReject)
 	p.events.Subscribe(EventReject, p.workers.OnReject)
+	if cfg.Watch && cfg.sourcePath != "" {
+		p.watcher = NewConfigWatcher(cfg.sourcePath, p.Reload)
+	}
 
 	if factory, ok := getSplitterFactory(cfg.Mode); ok {
 		p.splitter = factory(cfg, p.events)
@@ -161,6 +164,9 @@ func (p *Proxy) Start() {
 	if p.splitter != nil {
 		p.splitter.Connect()
 	}
+	if p.watcher != nil {
+		p.watcher.Start()
+	}
 	if p.config.HTTP.Enabled {
 		p.startHTTP()
 	}
@@ -230,10 +236,12 @@ func (p *Proxy) Reload(cfg *Config) {
 		preservedBind := append([]BindAddr(nil), p.config.Bind...)
 		preservedMode := p.config.Mode
 		preservedWorkers := p.config.Workers
+		preservedSourcePath := p.config.sourcePath
 		*p.config = *cfg
 		p.config.Bind = preservedBind
 		p.config.Mode = preservedMode
 		p.config.Workers = preservedWorkers
+		p.config.sourcePath = preservedSourcePath
 	}
 	if p.customDiff != nil {
 		p.customDiff.globalDiff = cfg.CustomDiff
@@ -251,6 +259,7 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	}
 	miner := NewMiner(conn, localPort, nil)
 	miner.accessPassword = p.config.AccessPassword
+	miner.algoEnabled = p.config.AlgoExtension
 	miner.globalDiff = p.config.CustomDiff
 	miner.extNH = strings.EqualFold(p.config.Mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
@@ -513,6 +522,10 @@ func (m *Miner) State() MinerState {
 	return m.state
 }
 
+func (m *Miner) supportsAlgoExtension() bool {
+	return m != nil && m.algoEnabled && m.extAlgo
+}
+
 // Start launches the read loop.
 func (m *Miner) Start() {
 	if m == nil {
@@ -627,7 +640,7 @@ func (m *Miner) handleLogin(req stratumRequest) {
 	if m.onLogin != nil {
 		m.onLogin(m)
 	}
-	m.Success(requestID(req.ID), "OK")
+	m.replyLoginSuccess(requestID(req.ID))
 }
 
 func parseLoginUser(login string, globalDiff uint64) (string, uint64) {
@@ -737,16 +750,57 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 			"blob":      blob,
 			"job_id":    job.JobID,
 			"target":    job.Target,
-			"algo":      algo,
 			"id":        m.rpcID,
 			"height":    job.Height,
 			"seed_hash": job.SeedHash,
 		},
 	}
+	if m.supportsAlgoExtension() && algo != "" {
+		payload["params"].(map[string]any)["algo"] = algo
+	}
 	_ = m.writeJSON(payload)
 	if m.state == MinerStateWaitReady {
 		m.state = MinerStateReady
 	}
+}
+
+func (m *Miner) replyLoginSuccess(id int64) {
+	if m == nil {
+		return
+	}
+	result := map[string]any{
+		"id":     m.rpcID,
+		"status": "OK",
+	}
+	if m.supportsAlgoExtension() {
+		result["extensions"] = []string{"algo"}
+	}
+	if job := m.CurrentJob(); job.IsValid() {
+		blob := job.Blob
+		if m.extNH {
+			blob = job.BlobWithFixedByte(m.fixedByte)
+		}
+		jobPayload := map[string]any{
+			"blob":      blob,
+			"job_id":    job.JobID,
+			"target":    job.Target,
+			"id":        m.rpcID,
+			"height":    job.Height,
+			"seed_hash": job.SeedHash,
+		}
+		if m.supportsAlgoExtension() && job.Algo != "" {
+			jobPayload["algo"] = job.Algo
+		}
+		result["job"] = jobPayload
+		m.state = MinerStateReady
+	}
+	payload := map[string]any{
+		"id":      id,
+		"jsonrpc": "2.0",
+		"error":   nil,
+		"result":  result,
+	}
+	_ = m.writeJSON(payload)
 }
 
 func (m *Miner) ReplyWithError(id int64, message string) {

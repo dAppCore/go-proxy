@@ -179,7 +179,7 @@ func (m *NonceMapper) Add(miner *proxy.Miner) bool {
 		job := m.storage.job
 		m.storage.mu.Unlock()
 		if job.IsValid() {
-			miner.ForwardJob(job, job.Algo)
+			miner.SetCurrentJob(job)
 		}
 	}
 	return ok

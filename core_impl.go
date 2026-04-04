@@ -59,6 +59,7 @@ func LoadConfig(path string) (*Config, Result) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, errorResult(err)
 	}
+	cfg.sourcePath = path
 	return cfg, cfg.Validate()
 }
 

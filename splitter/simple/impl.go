@@ -63,6 +63,9 @@ func (s *SimpleSplitter) OnLogin(event *proxy.LoginEvent) {
 				mapper.stopped = false
 				s.active[event.Miner.ID()] = mapper
 				event.Miner.SetRouteID(mapper.id)
+				if mapper.currentJob.IsValid() {
+					event.Miner.SetCurrentJob(mapper.currentJob)
+				}
 				return
 			}
 		}
@@ -182,6 +185,7 @@ func (m *SimpleMapper) OnJob(job proxy.Job) {
 		return
 	}
 	m.mu.Lock()
+	m.currentJob = job
 	miner := m.miner
 	m.mu.Unlock()
 	if miner == nil {
