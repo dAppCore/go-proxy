@@ -47,3 +47,38 @@ func TestWorker_NewWorkers_Ugly(t *testing.T) {
 		t.Fatalf("expected a single subscription path, got %d connections", records[0].Connections)
 	}
 }
+
+func TestWorker_CustomDiffOrdering_Good(t *testing.T) {
+	cfg := &Config{
+		Mode:          "nicehash",
+		Workers:       WorkersByUser,
+		Bind:          []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:         []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		CustomDiff:    50000,
+		AccessLogFile: "",
+	}
+
+	p, result := New(cfg)
+	if !result.OK {
+		t.Fatalf("expected valid proxy, got error: %v", result.Error)
+	}
+
+	miner := &Miner{
+		id:   21,
+		user: "WALLET+50000",
+		ip:   "10.0.0.3",
+		conn: noopConn{},
+	}
+	p.events.Dispatch(Event{Type: EventLogin, Miner: miner})
+
+	records := p.WorkerRecords()
+	if len(records) != 1 {
+		t.Fatalf("expected one worker record, got %d", len(records))
+	}
+	if records[0].Name != "WALLET" {
+		t.Fatalf("expected custom diff login suffix to be stripped before worker registration, got %q", records[0].Name)
+	}
+	if miner.User() != "WALLET" {
+		t.Fatalf("expected miner user to be stripped before downstream consumers, got %q", miner.User())
+	}
+}

@@ -56,9 +56,8 @@ func New(cfg *Config) (*Proxy, Result) {
 		shareLog:          newShareLogSink(cfg.ShareLogFile),
 		done:              make(chan struct{}),
 	}
-	p.workers.bindEvents(p.events)
-
 	p.events.Subscribe(EventLogin, p.customDiff.OnLogin)
+	p.workers.bindEvents(p.events)
 	if p.accessLog != nil {
 		p.events.Subscribe(EventLogin, p.accessLog.OnLogin)
 		p.events.Subscribe(EventClose, p.accessLog.OnClose)
