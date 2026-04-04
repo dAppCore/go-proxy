@@ -125,7 +125,7 @@ func summaryResponse(p *proxy.Proxy) SummaryResponse {
 			Expired:     summary.Expired,
 			AvgTime:     summary.AvgTime,
 			Latency:     summary.AvgLatency,
-			HashesTotal: summary.Hashes,
+			HashesTotal: summary.HashesTotal,
 			Best:        summary.TopDiff,
 		},
 	}
@@ -142,7 +142,7 @@ func workersResponse(p *proxy.Proxy) any {
 			record.Accepted,
 			record.Rejected,
 			record.Invalid,
-			record.Hashes,
+			record.HashesTotal,
 			unixOrZero(record.LastHashAt),
 			record.Hashrate(60),
 			record.Hashrate(600),

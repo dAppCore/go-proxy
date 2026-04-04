@@ -7,11 +7,11 @@ import (
 
 // CustomDiffBucketStats tracks per-custom-difficulty share outcomes.
 type CustomDiffBucketStats struct {
-	Accepted uint64 `json:"accepted"`
-	Rejected uint64 `json:"rejected"`
-	Invalid  uint64 `json:"invalid"`
-	Expired  uint64 `json:"expired"`
-	Hashes   uint64 `json:"hashes_total"`
+	Accepted    uint64 `json:"accepted"`
+	Rejected    uint64 `json:"rejected"`
+	Invalid     uint64 `json:"invalid"`
+	Expired     uint64 `json:"expired"`
+	HashesTotal uint64 `json:"hashes_total"`
 }
 
 // CustomDiffBuckets records share totals grouped by miner custom difficulty.
@@ -52,7 +52,7 @@ func (b *CustomDiffBuckets) OnAccept(e Event) {
 		bucket.Expired++
 	}
 	if e.Diff > 0 {
-		bucket.Hashes += e.Diff
+		bucket.HashesTotal += e.Diff
 	}
 }
 

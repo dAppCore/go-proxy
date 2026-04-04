@@ -23,7 +23,7 @@ func TestProxy_CustomDiffStats_Good(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected custom diff bucket 50000 to be present")
 	}
-	if bucket.Accepted != 1 || bucket.Expired != 1 || bucket.Hashes != 75 {
+	if bucket.Accepted != 1 || bucket.Expired != 1 || bucket.HashesTotal != 75 {
 		t.Fatalf("unexpected bucket totals: %+v", bucket)
 	}
 }
