@@ -601,7 +601,7 @@ func (p *Proxy) startHTTP() bool {
 			w.WriteHeader(status)
 			return
 		}
-		p.writeJSON(w, p.summaryDocument())
+		p.writeJSON(w, p.SummaryDocument())
 	})
 	mux.HandleFunc("/1/workers", func(w http.ResponseWriter, r *http.Request) {
 		if status, ok := p.allowHTTP(r); !ok {
@@ -611,7 +611,7 @@ func (p *Proxy) startHTTP() bool {
 			w.WriteHeader(status)
 			return
 		}
-		p.writeJSON(w, p.workersDocument())
+		p.writeJSON(w, p.WorkersDocument())
 	})
 	mux.HandleFunc("/1/miners", func(w http.ResponseWriter, r *http.Request) {
 		if status, ok := p.allowHTTP(r); !ok {
@@ -621,7 +621,7 @@ func (p *Proxy) startHTTP() bool {
 			w.WriteHeader(status)
 			return
 		}
-		p.writeJSON(w, p.minersDocument())
+		p.writeJSON(w, p.MinersDocument())
 	})
 	addr := net.JoinHostPort(p.config.HTTP.Host, strconv.Itoa(int(p.config.HTTP.Port)))
 	listener, err := net.Listen("tcp", addr)
@@ -659,73 +659,27 @@ func (p *Proxy) writeJSON(w http.ResponseWriter, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-type summaryDocumentPayload struct {
-	Version         string                           `json:"version"`
-	Mode            string                           `json:"mode"`
-	Hashrate        summaryHashratePayload           `json:"hashrate"`
-	Miners          summaryMinersPayload             `json:"miners"`
-	Workers         uint64                           `json:"workers"`
-	Upstreams       summaryUpstreamsPayload          `json:"upstreams"`
-	Results         summaryResultsPayload            `json:"results"`
-	CustomDiffStats map[uint64]CustomDiffBucketStats `json:"custom_diff_stats,omitempty"`
-}
-
-type summaryHashratePayload struct {
-	Total [6]float64 `json:"total"`
-}
-
-type summaryMinersPayload struct {
-	Now uint64 `json:"now"`
-	Max uint64 `json:"max"`
-}
-
-type summaryUpstreamsPayload struct {
-	Active uint64  `json:"active"`
-	Sleep  uint64  `json:"sleep"`
-	Error  uint64  `json:"error"`
-	Total  uint64  `json:"total"`
-	Ratio  float64 `json:"ratio"`
-}
-
-type summaryResultsPayload struct {
-	Accepted    uint64     `json:"accepted"`
-	Rejected    uint64     `json:"rejected"`
-	Invalid     uint64     `json:"invalid"`
-	Expired     uint64     `json:"expired"`
-	AvgTime     uint32     `json:"avg_time"`
-	Latency     uint32     `json:"latency"`
-	HashesTotal uint64     `json:"hashes_total"`
-	Best        [10]uint64 `json:"best"`
-}
-
-type workersDocumentPayload struct {
-	Mode    string      `json:"mode"`
-	Workers []WorkerRow `json:"workers"`
-}
-
-type minersDocumentPayload struct {
-	Format []string   `json:"format"`
-	Miners []MinerRow `json:"miners"`
-}
-
-func (p *Proxy) summaryDocument() summaryDocumentPayload {
+// SummaryDocument builds the RFC-shaped /1/summary response body.
+//
+//	doc := p.SummaryDocument()
+func (p *Proxy) SummaryDocument() SummaryDocument {
 	summary := p.Summary()
 	now, max := p.MinerCount()
 	upstreams := p.Upstreams()
-	return summaryDocumentPayload{
+	return SummaryDocument{
 		Version: "1.0.0",
 		Mode:    p.Mode(),
-		Hashrate: summaryHashratePayload{
+		Hashrate: HashrateDocument{
 			Total: summary.Hashrate,
 		},
 		CustomDiffStats: summary.CustomDiffStats,
-		Miners: summaryMinersPayload{
+		Miners: MinersCountDocument{
 			Now: now,
 			Max: max,
 		},
 		Workers:   uint64(len(p.WorkerRecords())),
-		Upstreams: summaryUpstreamsPayload{Active: upstreams.Active, Sleep: upstreams.Sleep, Error: upstreams.Error, Total: upstreams.Total, Ratio: upstreamRatio(now, upstreams)},
-		Results: summaryResultsPayload{
+		Upstreams: UpstreamDocument{Active: upstreams.Active, Sleep: upstreams.Sleep, Error: upstreams.Error, Total: upstreams.Total, Ratio: upstreamRatio(now, upstreams)},
+		Results: ResultsDocument{
 			Accepted:    summary.Accepted,
 			Rejected:    summary.Rejected,
 			Invalid:     summary.Invalid,
@@ -738,7 +692,10 @@ func (p *Proxy) summaryDocument() summaryDocumentPayload {
 	}
 }
 
-func (p *Proxy) workersDocument() workersDocumentPayload {
+// WorkersDocument builds the RFC-shaped /1/workers response body.
+//
+//	doc := p.WorkersDocument()
+func (p *Proxy) WorkersDocument() WorkersDocument {
 	records := p.WorkerRecords()
 	rows := make([]WorkerRow, 0, len(records))
 	for _, record := range records {
@@ -758,13 +715,16 @@ func (p *Proxy) workersDocument() workersDocumentPayload {
 			record.Hashrate(86400),
 		})
 	}
-	return workersDocumentPayload{
+	return WorkersDocument{
 		Mode:    string(p.WorkersMode()),
 		Workers: rows,
 	}
 }
 
-func (p *Proxy) minersDocument() minersDocumentPayload {
+// MinersDocument builds the RFC-shaped /1/miners response body.
+//
+//	doc := p.MinersDocument()
+func (p *Proxy) MinersDocument() MinersDocument {
 	records := p.MinerSnapshots()
 	rows := make([]MinerRow, 0, len(records))
 	for _, miner := range records {
@@ -781,7 +741,7 @@ func (p *Proxy) minersDocument() minersDocumentPayload {
 			miner.Agent,
 		})
 	}
-	return minersDocumentPayload{
+	return MinersDocument{
 		Format: []string{"id", "ip", "tx", "rx", "state", "diff", "user", "password", "rig_id", "agent"},
 		Miners: rows,
 	}

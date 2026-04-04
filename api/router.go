@@ -12,7 +12,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"dappco.re/go/proxy"
 )
@@ -22,195 +21,30 @@ type Router interface {
 	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
 }
 
-// SummaryResponse is the /1/summary JSON body.
-//
-//	{"version":"1.0.0","mode":"nicehash","hashrate":{"total":[...]}, ...}
-type SummaryResponse struct {
-	Version         string                                 `json:"version"`
-	Mode            string                                 `json:"mode"`
-	Hashrate        HashrateResponse                       `json:"hashrate"`
-	Miners          MinersCountResponse                    `json:"miners"`
-	Workers         uint64                                 `json:"workers"`
-	Upstreams       UpstreamResponse                       `json:"upstreams"`
-	Results         ResultsResponse                        `json:"results"`
-	CustomDiffStats map[uint64]proxy.CustomDiffBucketStats `json:"custom_diff_stats,omitempty"`
-}
-
-// HashrateResponse carries the per-window hashrate array.
-//
-//	HashrateResponse{Total: [6]float64{12345.67, 11900.00, 12100.00, 11800.00, 12000.00, 12200.00}}
-type HashrateResponse struct {
-	Total [6]float64 `json:"total"`
-}
-
-// MinersCountResponse carries current and peak miner counts.
-//
-//	MinersCountResponse{Now: 142, Max: 200}
-type MinersCountResponse struct {
-	Now uint64 `json:"now"`
-	Max uint64 `json:"max"`
-}
-
-// UpstreamResponse carries pool connection state counts.
-//
-//	UpstreamResponse{Active: 1, Sleep: 0, Error: 0, Total: 1, Ratio: 142.0}
-type UpstreamResponse struct {
-	Active uint64  `json:"active"`
-	Sleep  uint64  `json:"sleep"`
-	Error  uint64  `json:"error"`
-	Total  uint64  `json:"total"`
-	Ratio  float64 `json:"ratio"`
-}
-
-// ResultsResponse carries share acceptance statistics.
-//
-//	ResultsResponse{Accepted: 4821, Rejected: 3, Invalid: 0, Expired: 12}
-type ResultsResponse struct {
-	Accepted    uint64     `json:"accepted"`
-	Rejected    uint64     `json:"rejected"`
-	Invalid     uint64     `json:"invalid"`
-	Expired     uint64     `json:"expired"`
-	AvgTime     uint32     `json:"avg_time"`
-	Latency     uint32     `json:"latency"`
-	HashesTotal uint64     `json:"hashes_total"`
-	Best        [10]uint64 `json:"best"`
-}
-
-// WorkersResponse is the /1/workers JSON body.
-//
-//	{"mode":"rig-id","workers":[["rig-alpha","10.0.0.1",1,10,0,0,100000,1712232000,1.0,1.0,1.0,1.0,1.0]]}
-type WorkersResponse struct {
-	Mode    string            `json:"mode"`
-	Workers []proxy.WorkerRow `json:"workers"`
-}
-
-// MinersResponse is the /1/miners JSON body.
-//
-//	{"format":["id","ip","tx","rx","state","diff","user","password","rig_id","agent"],"miners":[[1,"10.0.0.1:49152",4096,512,2,100000,"WALLET","********","rig-alpha","XMRig/6.21.0"]]}
-type MinersResponse struct {
-	Format []string         `json:"format"`
-	Miners []proxy.MinerRow `json:"miners"`
-}
-
 // RegisterRoutes wires the monitoring endpoints onto the supplied router.
 //
 //	proxyapi.RegisterRoutes(mux, p)
 //	// GET /1/summary, /1/workers, and /1/miners are now live.
-func RegisterRoutes(r Router, p *proxy.Proxy) {
-	if r == nil || p == nil {
+func RegisterRoutes(router Router, p *proxy.Proxy) {
+	if router == nil || p == nil {
 		return
 	}
-	r.HandleFunc("/1/summary", func(w http.ResponseWriter, req *http.Request) {
-		writeJSON(w, summaryResponse(p))
-	})
-	r.HandleFunc("/1/workers", func(w http.ResponseWriter, req *http.Request) {
-		writeJSON(w, workersResponse(p))
-	})
-	r.HandleFunc("/1/miners", func(w http.ResponseWriter, req *http.Request) {
-		writeJSON(w, minersResponse(p))
-	})
+	registerGETRoute(router, "/1/summary", func() any { return p.SummaryDocument() })
+	registerGETRoute(router, "/1/workers", func() any { return p.WorkersDocument() })
+	registerGETRoute(router, "/1/miners", func() any { return p.MinersDocument() })
 }
 
-func summaryResponse(p *proxy.Proxy) SummaryResponse {
-	summary := p.Summary()
-	now, max := p.MinerCount()
-	upstreams := p.Upstreams()
-	return SummaryResponse{
-		Version: "1.0.0",
-		Mode:    p.Mode(),
-		Hashrate: HashrateResponse{
-			Total: summary.Hashrate,
-		},
-		CustomDiffStats: summary.CustomDiffStats,
-		Miners: MinersCountResponse{
-			Now: now,
-			Max: max,
-		},
-		Workers: uint64(len(p.WorkerRecords())),
-		Upstreams: UpstreamResponse{
-			Active: upstreams.Active,
-			Sleep:  upstreams.Sleep,
-			Error:  upstreams.Error,
-			Total:  upstreams.Total,
-			Ratio:  upstreamRatio(now, upstreams.Total),
-		},
-		Results: ResultsResponse{
-			Accepted:    summary.Accepted,
-			Rejected:    summary.Rejected,
-			Invalid:     summary.Invalid,
-			Expired:     summary.Expired,
-			AvgTime:     summary.AvgTime,
-			Latency:     summary.AvgLatency,
-			HashesTotal: summary.Hashes,
-			Best:        summary.TopDiff,
-		},
-	}
-}
-
-func workersResponse(p *proxy.Proxy) WorkersResponse {
-	records := p.WorkerRecords()
-	rows := make([]proxy.WorkerRow, 0, len(records))
-	for _, record := range records {
-		rows = append(rows, proxy.WorkerRow{
-			record.Name,
-			record.LastIP,
-			record.Connections,
-			record.Accepted,
-			record.Rejected,
-			record.Invalid,
-			record.Hashes,
-			unixOrZero(record.LastHashAt),
-			record.Hashrate(60),
-			record.Hashrate(600),
-			record.Hashrate(3600),
-			record.Hashrate(43200),
-			record.Hashrate(86400),
-		})
-	}
-	return WorkersResponse{
-		Mode:    string(p.WorkersMode()),
-		Workers: rows,
-	}
-}
-
-func minersResponse(p *proxy.Proxy) MinersResponse {
-	records := p.MinerSnapshots()
-	rows := make([]proxy.MinerRow, 0, len(records))
-	for _, miner := range records {
-		rows = append(rows, proxy.MinerRow{
-			miner.ID,
-			miner.IP,
-			miner.TX,
-			miner.RX,
-			miner.State,
-			miner.Diff,
-			miner.User,
-			miner.Password,
-			miner.RigID,
-			miner.Agent,
-		})
-	}
-	return MinersResponse{
-		Format: []string{"id", "ip", "tx", "rx", "state", "diff", "user", "password", "rig_id", "agent"},
-		Miners: rows,
-	}
+func registerGETRoute(router Router, pattern string, document func() any) {
+	router.HandleFunc(pattern, func(w http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		writeJSON(w, document())
+	})
 }
 
 func writeJSON(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(payload)
-}
-
-func upstreamRatio(now, total uint64) float64 {
-	if total == 0 {
-		return 0
-	}
-	return float64(now) / float64(total)
-}
-
-func unixOrZero(value time.Time) int64 {
-	if value.IsZero() {
-		return 0
-	}
-	return value.Unix()
 }
