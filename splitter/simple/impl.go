@@ -217,8 +217,12 @@ func (m *SimpleMapper) Submit(event *proxy.SubmitEvent) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	seq := m.strategy.Submit(event.JobID, event.Nonce, event.Result, event.Algo)
-	m.pending[seq] = submitContext{RequestID: event.RequestID, StartedAt: time.Now()}
+	jobID := event.JobID
+	if jobID == "" {
+		jobID = m.currentJob.JobID
+	}
+	seq := m.strategy.Submit(jobID, event.Nonce, event.Result, event.Algo)
+	m.pending[seq] = submitContext{RequestID: event.RequestID, StartedAt: time.Now(), JobID: jobID}
 }
 
 // OnJob forwards the latest pool job to the active miner.
@@ -227,6 +231,7 @@ func (m *SimpleMapper) OnJob(job proxy.Job) {
 		return
 	}
 	m.mu.Lock()
+	m.prevJob = m.currentJob
 	m.currentJob = job
 	miner := m.miner
 	m.mu.Unlock()
@@ -247,6 +252,8 @@ func (m *SimpleMapper) OnResultAccepted(sequence int64, accepted bool, errorMess
 		delete(m.pending, sequence)
 	}
 	miner := m.miner
+	currentJob := m.currentJob
+	prevJob := m.prevJob
 	m.mu.Unlock()
 	if !ok || miner == nil {
 		return
@@ -260,17 +267,21 @@ func (m *SimpleMapper) OnResultAccepted(sequence int64, accepted bool, errorMess
 			latency = uint16(elapsed)
 		}
 	}
+	job := currentJob
+	expired := false
+	if ctx.JobID != "" && ctx.JobID == prevJob.JobID && ctx.JobID != currentJob.JobID {
+		job = prevJob
+		expired = true
+	}
 	if accepted {
 		miner.Success(ctx.RequestID, "OK")
 		if m.events != nil {
-			job := miner.CurrentJob()
-			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job, Latency: latency})
+			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job, Latency: latency, Expired: expired})
 		}
 		return
 	}
 	miner.ReplyWithError(ctx.RequestID, errorMessage)
 	if m.events != nil {
-		job := miner.CurrentJob()
 		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job, Error: errorMessage, Latency: latency})
 	}
 }

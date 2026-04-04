@@ -17,6 +17,7 @@ type SimpleMapper struct {
 	id         int64
 	miner      *proxy.Miner // nil when idle
 	currentJob proxy.Job
+	prevJob    proxy.Job
 	strategy   pool.Strategy
 	idleAt     time.Time // zero when active
 	stopped    bool
@@ -28,4 +29,5 @@ type SimpleMapper struct {
 type submitContext struct {
 	RequestID int64
 	StartedAt time.Time
+	JobID     string
 }

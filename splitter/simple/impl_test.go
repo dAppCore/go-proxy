@@ -1,6 +1,9 @@
 package simple
 
 import (
+	"io"
+	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -110,5 +113,53 @@ func TestSimpleSplitter_Upstreams_Ugly(t *testing.T) {
 	}
 	if stats.Total != 2 {
 		t.Fatalf("expected total upstreams to be 2, got %d", stats.Total)
+	}
+}
+
+type discardConn struct{}
+
+func (discardConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (discardConn) Write(p []byte) (int, error)      { return len(p), nil }
+func (discardConn) Close() error                     { return nil }
+func (discardConn) LocalAddr() net.Addr              { return nil }
+func (discardConn) RemoteAddr() net.Addr             { return nil }
+func (discardConn) SetDeadline(time.Time) error      { return nil }
+func (discardConn) SetReadDeadline(time.Time) error  { return nil }
+func (discardConn) SetWriteDeadline(time.Time) error { return nil }
+
+func TestSimpleMapper_OnResultAccepted_Expired(t *testing.T) {
+	bus := proxy.NewEventBus()
+	events := make(chan proxy.Event, 1)
+	var once sync.Once
+	bus.Subscribe(proxy.EventAccept, func(e proxy.Event) {
+		once.Do(func() {
+			events <- e
+		})
+	})
+
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	miner.SetID(1)
+	mapper := &SimpleMapper{
+		miner:      miner,
+		currentJob: proxy.Job{JobID: "job-new", Blob: "blob-new", Target: "b88d0600"},
+		prevJob:    proxy.Job{JobID: "job-old", Blob: "blob-old", Target: "b88d0600"},
+		events:     bus,
+		pending: map[int64]submitContext{
+			7: {RequestID: 9, StartedAt: time.Now(), JobID: "job-old"},
+		},
+	}
+
+	mapper.OnResultAccepted(7, true, "")
+
+	select {
+	case event := <-events:
+		if !event.Expired {
+			t.Fatalf("expected expired share to be flagged")
+		}
+		if event.Job == nil || event.Job.JobID != "job-old" {
+			t.Fatalf("expected previous job to be attached, got %+v", event.Job)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected accept event")
 	}
 }
