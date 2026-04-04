@@ -88,6 +88,18 @@ func TestProxy_allowHTTP_Ugly(t *testing.T) {
 	}
 }
 
+func TestProxy_allowHTTP_NilConfig_Ugly(t *testing.T) {
+	p := &Proxy{}
+
+	status, ok := p.allowMonitoringRequest(&http.Request{Method: http.MethodGet})
+	if ok {
+		t.Fatal("expected nil config request to be rejected")
+	}
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, status)
+	}
+}
+
 func TestProxy_startHTTP_Good(t *testing.T) {
 	p := &Proxy{
 		config: &Config{
@@ -104,6 +116,14 @@ func TestProxy_startHTTP_Good(t *testing.T) {
 		t.Fatal("expected HTTP server to start on a free port")
 	}
 	p.Stop()
+}
+
+func TestProxy_startHTTP_NilConfig_Bad(t *testing.T) {
+	p := &Proxy{}
+
+	if ok := p.startMonitoringServer(); ok {
+		t.Fatal("expected nil config to skip HTTP server start")
+	}
 }
 
 func TestProxy_startHTTP_Bad(t *testing.T) {

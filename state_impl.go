@@ -192,6 +192,9 @@ func (p *Proxy) Start() {
 	if p == nil {
 		return
 	}
+	if p.config == nil {
+		return
+	}
 	for _, bind := range p.config.Bind {
 		var tlsCfg *tls.Config
 		if bind.TLS {
@@ -590,8 +593,8 @@ func parseTLSVersion(value string) uint16 {
 }
 
 func (p *Proxy) startMonitoringServer() bool {
-	if p == nil || !p.config.HTTP.Enabled {
-		return true
+	if p == nil || p.config == nil || !p.config.HTTP.Enabled {
+		return false
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/1/summary", func(w http.ResponseWriter, r *http.Request) {
@@ -640,10 +643,10 @@ func (p *Proxy) startMonitoringServer() bool {
 }
 
 func (p *Proxy) allowMonitoringRequest(r *http.Request) (int, bool) {
-	if p == nil {
+	if p == nil || p.config == nil {
 		return http.StatusServiceUnavailable, false
 	}
-	if p.config != nil && p.config.HTTP.Restricted && r.Method != http.MethodGet {
+	if p.config.HTTP.Restricted && r.Method != http.MethodGet {
 		return http.StatusMethodNotAllowed, false
 	}
 	if token := p.config.HTTP.AccessToken; token != "" {
