@@ -14,6 +14,22 @@ func NewAccessLog(path string) *AccessLog {
 	return &AccessLog{path: path}
 }
 
+// Close releases the underlying file handle if the log has been opened.
+//
+//	al := log.NewAccessLog("/var/log/proxy-access.log")
+//	defer al.Close()
+func (l *AccessLog) Close() {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.f != nil {
+		_ = l.f.Close()
+		l.f = nil
+	}
+}
+
 // OnLogin writes a CONNECT line.
 func (l *AccessLog) OnLogin(e proxy.Event) {
 	if l == nil || e.Miner == nil {
@@ -33,6 +49,22 @@ func (l *AccessLog) OnClose(e proxy.Event) {
 // NewShareLog creates an append-only share log.
 func NewShareLog(path string) *ShareLog {
 	return &ShareLog{path: path}
+}
+
+// Close releases the underlying file handle if the log has been opened.
+//
+//	sl := log.NewShareLog("/var/log/proxy-shares.log")
+//	defer sl.Close()
+func (l *ShareLog) Close() {
+	if l == nil {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if l.f != nil {
+		_ = l.f.Close()
+		l.f = nil
+	}
 }
 
 // OnAccept writes an ACCEPT line.
