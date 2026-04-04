@@ -148,11 +148,11 @@ func (s *NonceSplitter) Upstreams() proxy.UpstreamStats {
 	for _, mapper := range s.mappers {
 		if mapper.strategy != nil && mapper.strategy.IsActive() {
 			stats.Active++
-		} else if mapper.suspended > 0 {
+		} else if mapper.suspended > 0 || !mapper.active {
 			stats.Error++
 		}
 	}
-	stats.Total = uint64(len(s.mappers))
+	stats.Total = stats.Active + stats.Sleep + stats.Error
 	return stats
 }
 
