@@ -46,6 +46,28 @@ The v1 scope covers:
 
 ---
 
+## 1.1 Import Graph (no circular imports)
+
+Shared types (`Job`, `PoolConfig`, `Config`, `Miner`, `UpstreamStats`, event types) are defined in the root `proxy` package. Sub-packages import `proxy` but `proxy` never imports sub-packages directly — it uses interfaces (`Splitter`, `ShareSink`) injected at construction time.
+
+```
+proxy (root)        ← defines shared types, Splitter interface, Proxy orchestrator
+  ├── pool          ← imports proxy (for Job, PoolConfig). proxy does NOT import pool.
+  ├── nicehash      ← imports proxy (for Miner, Job, events) and pool (for Strategy)
+  ├── simple        ← imports proxy and pool
+  ├── log           ← imports proxy (for Event)
+  └── api           ← imports proxy (for Proxy) and core/api
+```
+
+The `Proxy` orchestrator wires sub-packages via interface injection:
+```go
+// proxy.go receives a Splitter (implemented by nicehash or simple)
+// and a pool.StrategyFactory (closure that creates pool.Strategy instances).
+// No import of nicehash, simple, or pool packages from proxy.go.
+```
+
+---
+
 ## 2. File Map
 
 | File | Package | Purpose |
@@ -565,6 +587,29 @@ func (m *NonceMapper) Submit(event *proxy.SubmitEvent) {}
 //
 //   if mapper.IsActive() { /* safe to assign miners */ }
 func (m *NonceMapper) IsActive() bool {}
+
+// Start connects the pool strategy. Called by NonceSplitter after creating the mapper.
+//
+//   mapper.Start()
+func (m *NonceMapper) Start() {}
+
+// OnJob receives a new job from the pool. Implements pool.StratumListener.
+// Calls storage.SetJob to distribute to all active miners.
+//
+//   // called by pool.StratumClient when pool pushes a job
+func (m *NonceMapper) OnJob(job proxy.Job) {}
+
+// OnResultAccepted receives a share result from the pool. Implements pool.StratumListener.
+// Correlates by sequence to the originating miner and sends success/error reply.
+//
+//   // called by pool.StratumClient on pool reply
+func (m *NonceMapper) OnResultAccepted(sequence int64, accepted bool, errorMessage string) {}
+
+// OnDisconnect handles pool connection loss. Implements pool.StratumListener.
+// Suspends the mapper; miners keep their slots but receive no new jobs until reconnect.
+//
+//   // called by pool.StratumClient on disconnect
+func (m *NonceMapper) OnDisconnect() {}
 ```
 
 ### 8.3 NonceStorage
@@ -841,6 +886,32 @@ type Event struct {
 
 func NewEventBus() *EventBus {}
 
+// LoginEvent is the typed event passed to Splitter.OnLogin.
+//
+//   splitter.OnLogin(&LoginEvent{Miner: m})
+type LoginEvent struct {
+    Miner *Miner
+}
+
+// SubmitEvent is the typed event passed to Splitter.OnSubmit.
+//
+//   splitter.OnSubmit(&SubmitEvent{Miner: m, JobID: "abc", Nonce: "deadbeef"})
+type SubmitEvent struct {
+    Miner     *Miner
+    JobID     string
+    Nonce     string
+    Result    string
+    Algo      string
+    RequestID int64
+}
+
+// CloseEvent is the typed event passed to Splitter.OnClose.
+//
+//   splitter.OnClose(&CloseEvent{Miner: m})
+type CloseEvent struct {
+    Miner *Miner
+}
+
 // Subscribe registers a handler for the given event type. Safe to call before Start.
 //
 //   bus.Subscribe(proxy.EventAccept, func(e proxy.Event) { stats.OnAccept(e.Diff) })
@@ -979,6 +1050,21 @@ func (w *Workers) List() []WorkerRecord {}
 //
 //   w.Tick()
 func (w *Workers) Tick() {}
+
+// OnLogin upserts the worker record for the miner's login. Called via EventBus subscription.
+//
+//   bus.Subscribe(proxy.EventLogin, func(e proxy.Event) { w.OnLogin(e) })
+func (w *Workers) OnLogin(e Event) {}
+
+// OnAccept records an accepted share for the worker. Called via EventBus subscription.
+//
+//   bus.Subscribe(proxy.EventAccept, func(e proxy.Event) { w.OnAccept(e) })
+func (w *Workers) OnAccept(e Event) {}
+
+// OnReject records a rejected share for the worker. Called via EventBus subscription.
+//
+//   bus.Subscribe(proxy.EventReject, func(e proxy.Event) { w.OnReject(e) })
+func (w *Workers) OnReject(e Event) {}
 ```
 
 ---
@@ -1025,7 +1111,7 @@ func (cd *CustomDiff) OnLogin(e proxy.Event) {}
 type AccessLog struct {
     path string
     mu   sync.Mutex
-    f    core.File // opened append-only on first write; nil until first event
+    f    io.WriteCloser // opened append-only on first write; nil until first event
 }
 
 func NewAccessLog(path string) *AccessLog {}
@@ -1055,7 +1141,7 @@ func (l *AccessLog) OnClose(e proxy.Event) {}
 type ShareLog struct {
     path string
     mu   sync.Mutex
-    f    core.File
+    f    io.WriteCloser
 }
 
 func NewShareLog(path string) *ShareLog {}
@@ -1076,13 +1162,13 @@ func (l *ShareLog) OnReject(e proxy.Event) {}
 ## 16. HTTP Monitoring API
 
 ```go
-// RegisterRoutes registers the proxy monitoring routes on a core/api Router.
+// RegisterRoutes registers the proxy monitoring routes on a core/api Engine.
 // GET /1/summary — aggregated proxy stats
 // GET /1/workers — per-worker hashrate table
 // GET /1/miners  — per-connection state table
 //
-//   proxyapi.RegisterRoutes(apiRouter, p)
-func RegisterRoutes(r api.Router, p *proxy.Proxy) {}
+//   proxyapi.RegisterRoutes(engine, p)
+func RegisterRoutes(r *api.Engine, p *proxy.Proxy) {}
 ```
 
 ### GET /1/summary — response shape
@@ -1402,7 +1488,7 @@ func TestStorage_Add_Good(t *testing.T) {
 // TestJob_BlobWithFixedByte_Bad: blob shorter than 80 chars → returns original blob unchanged.
 // TestJob_BlobWithFixedByte_Ugly: fixedByte 0xFF → "ff" (lowercase, not "FF").
 func TestJob_BlobWithFixedByte_Good(t *testing.T) {
-    j := proxy.Job{Blob: core.RepeatString("0", 160)}
+    j := proxy.Job{Blob: strings.Repeat("0", 160)}
     result := j.BlobWithFixedByte(0x2A)
     require.Equal(t, "2a", result[78:80])
     require.Equal(t, 160, len(result))
