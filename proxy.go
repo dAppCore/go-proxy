@@ -37,6 +37,7 @@ type Proxy struct {
 	customDiff *CustomDiff
 	rateLimit  *RateLimiter
 	httpServer *http.Server
+	accessLog  *accessLogSink
 }
 
 // Splitter is the interface both NonceSplitter and SimpleSplitter satisfy.

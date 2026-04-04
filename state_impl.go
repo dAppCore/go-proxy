@@ -46,11 +46,16 @@ func New(cfg *Config) (*Proxy, Result) {
 		miners:     make(map[int64]*Miner),
 		customDiff: NewCustomDiff(cfg.CustomDiff),
 		rateLimit:  NewRateLimiter(cfg.RateLimit),
+		accessLog:  newAccessLogSink(cfg.AccessLogFile),
 		done:       make(chan struct{}),
 	}
 	p.workers.bindEvents(p.events)
 
 	p.events.Subscribe(EventLogin, p.customDiff.OnLogin)
+	if p.accessLog != nil {
+		p.events.Subscribe(EventLogin, p.accessLog.OnLogin)
+		p.events.Subscribe(EventClose, p.accessLog.OnClose)
+	}
 	p.events.Subscribe(EventLogin, p.stats.OnLogin)
 	p.events.Subscribe(EventLogin, p.workers.OnLogin)
 	p.events.Subscribe(EventClose, p.stats.OnClose)
@@ -229,6 +234,9 @@ func (p *Proxy) Stop() {
 			defer cancel()
 			_ = p.httpServer.Shutdown(ctx)
 		}
+		if p.accessLog != nil {
+			p.accessLog.Close()
+		}
 	})
 }
 
@@ -254,6 +262,9 @@ func (p *Proxy) Reload(cfg *Config) {
 		p.customDiff.globalDiff = cfg.CustomDiff
 	}
 	p.rateLimit = NewRateLimiter(cfg.RateLimit)
+	if p.accessLog != nil {
+		p.accessLog.SetPath(cfg.AccessLogFile)
+	}
 }
 
 func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
