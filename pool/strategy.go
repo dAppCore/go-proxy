@@ -17,7 +17,7 @@ type FailoverStrategy struct {
 	current  int
 	client   *StratumClient
 	listener StratumListener
-	cfg      *proxy.Config
+	config   *proxy.Config
 	closing  bool
 	mu       sync.Mutex
 }

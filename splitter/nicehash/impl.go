@@ -20,7 +20,7 @@ func NewNonceSplitter(cfg *proxy.Config, events *proxy.EventBus, factory pool.St
 	}
 	return &NonceSplitter{
 		byID:            make(map[int64]*NonceMapper),
-		cfg:             cfg,
+		config:          cfg,
 		events:          events,
 		strategyFactory: factory,
 	}
@@ -171,7 +171,7 @@ func (s *NonceSplitter) Disconnect() {
 func (s *NonceSplitter) addMapperLocked() *NonceMapper {
 	id := s.seq
 	s.seq++
-	mapper := NewNonceMapper(id, s.cfg, nil)
+	mapper := NewNonceMapper(id, s.config, nil)
 	mapper.events = s.events
 	mapper.lastUsed = time.Now()
 	mapper.strategy = s.strategyFactory(mapper)
@@ -191,7 +191,7 @@ func NewNonceMapper(id int64, cfg *proxy.Config, strategy pool.Strategy) *NonceM
 		storage:  NewNonceStorage(),
 		strategy: strategy,
 		pending:  make(map[int64]SubmitContext),
-		cfg:      cfg,
+		config:   cfg,
 	}
 }
 

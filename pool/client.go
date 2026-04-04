@@ -19,7 +19,7 @@ import (
 //	client := pool.NewStratumClient(poolCfg, listener)
 //	client.Connect()
 type StratumClient struct {
-	cfg        proxy.PoolConfig
+	config     proxy.PoolConfig
 	listener   StratumListener
 	conn       net.Conn
 	tlsConn    *tls.Conn // nil if plain TCP

@@ -21,7 +21,7 @@ func NewSimpleSplitter(cfg *proxy.Config, events *proxy.EventBus, factory pool.S
 	return &SimpleSplitter{
 		active:  make(map[int64]*SimpleMapper),
 		idle:    make(map[int64]*SimpleMapper),
-		cfg:     cfg,
+		config:  cfg,
 		events:  events,
 		factory: factory,
 	}
@@ -55,9 +55,9 @@ func (s *SimpleSplitter) OnLogin(event *proxy.LoginEvent) {
 	defer s.mu.Unlock()
 	now := time.Now()
 
-	if s.cfg.ReuseTimeout > 0 {
+	if s.config.ReuseTimeout > 0 {
 		for id, mapper := range s.idle {
-			if mapper.strategy != nil && mapper.strategy.IsActive() && !mapper.idleAt.IsZero() && now.Sub(mapper.idleAt) <= time.Duration(s.cfg.ReuseTimeout)*time.Second {
+			if mapper.strategy != nil && mapper.strategy.IsActive() && !mapper.idleAt.IsZero() && now.Sub(mapper.idleAt) <= time.Duration(s.config.ReuseTimeout)*time.Second {
 				delete(s.idle, id)
 				mapper.miner = event.Miner
 				mapper.idleAt = time.Time{}
@@ -109,7 +109,7 @@ func (s *SimpleSplitter) OnClose(event *proxy.CloseEvent) {
 	mapper.miner = nil
 	mapper.idleAt = time.Now()
 	event.Miner.SetRouteID(-1)
-	if s.cfg.ReuseTimeout > 0 {
+	if s.config.ReuseTimeout > 0 {
 		s.idle[mapper.id] = mapper
 		return
 	}
@@ -128,7 +128,7 @@ func (s *SimpleSplitter) GC() {
 	defer s.mu.Unlock()
 	now := time.Now()
 	for id, mapper := range s.idle {
-		if mapper.stopped || (s.cfg.ReuseTimeout > 0 && now.Sub(mapper.idleAt) > time.Duration(s.cfg.ReuseTimeout)*time.Second) {
+		if mapper.stopped || (s.config.ReuseTimeout > 0 && now.Sub(mapper.idleAt) > time.Duration(s.config.ReuseTimeout)*time.Second) {
 			if mapper.strategy != nil {
 				mapper.strategy.Disconnect()
 			}

@@ -18,7 +18,7 @@ type NonceMapper struct {
 	storage   *NonceStorage
 	strategy  pool.Strategy           // manages pool client lifecycle and failover
 	pending   map[int64]SubmitContext // sequence → {requestID, minerID}
-	cfg       *proxy.Config
+	config    *proxy.Config
 	events    *proxy.EventBus
 	active    bool // true once pool has sent at least one job
 	suspended int  // > 0 when pool connection is in error/reconnecting

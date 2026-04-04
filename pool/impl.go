@@ -27,7 +27,7 @@ func NewStrategyFactory(cfg *proxy.Config) StrategyFactory {
 // NewStratumClient constructs a pool client.
 func NewStratumClient(cfg proxy.PoolConfig, listener StratumListener) *StratumClient {
 	return &StratumClient{
-		cfg:      cfg,
+		config:   cfg,
 		listener: listener,
 		pending:  make(map[int64]struct{}),
 	}
@@ -48,7 +48,7 @@ func (c *StratumClient) Connect() proxy.Result {
 	if c == nil {
 		return proxy.Result{OK: false, Error: errors.New("client is nil")}
 	}
-	addr := c.cfg.URL
+	addr := c.config.URL
 	if addr == "" {
 		return proxy.Result{OK: false, Error: errors.New("pool url is empty")}
 	}
@@ -56,7 +56,7 @@ func (c *StratumClient) Connect() proxy.Result {
 	if err != nil {
 		return proxy.Result{OK: false, Error: err}
 	}
-	if c.cfg.TLS {
+	if c.config.TLS {
 		host := addr
 		if strings.Contains(addr, ":") {
 			host, _, _ = net.SplitHostPort(addr)
@@ -67,7 +67,7 @@ func (c *StratumClient) Connect() proxy.Result {
 			_ = conn.Close()
 			return proxy.Result{OK: false, Error: err}
 		}
-		if fp := strings.TrimSpace(strings.ToLower(c.cfg.TLSFingerprint)); fp != "" {
+		if fp := strings.TrimSpace(strings.ToLower(c.config.TLSFingerprint)); fp != "" {
 			cert := tlsConn.ConnectionState().PeerCertificates
 			if len(cert) == 0 {
 				_ = tlsConn.Close()
@@ -94,14 +94,14 @@ func (c *StratumClient) Login() {
 		return
 	}
 	params := map[string]any{
-		"login": c.cfg.User,
-		"pass":  c.cfg.Pass,
+		"login": c.config.User,
+		"pass":  c.config.Pass,
 	}
-	if c.cfg.RigID != "" {
-		params["rigid"] = c.cfg.RigID
+	if c.config.RigID != "" {
+		params["rigid"] = c.config.RigID
 	}
-	if c.cfg.Algo != "" {
-		params["algo"] = []string{c.cfg.Algo}
+	if c.config.Algo != "" {
+		params["algo"] = []string{c.config.Algo}
 	}
 	req := map[string]any{
 		"id":      1,
@@ -339,7 +339,7 @@ func NewFailoverStrategy(pools []proxy.PoolConfig, listener StratumListener, cfg
 	return &FailoverStrategy{
 		pools:    pools,
 		listener: listener,
-		cfg:      cfg,
+		config:   cfg,
 	}
 }
 
@@ -361,12 +361,12 @@ func (s *FailoverStrategy) connectLocked(start int) {
 	}
 	retries := 1
 	retryPause := time.Second
-	if s.cfg != nil {
-		if s.cfg.Retries > 0 {
-			retries = s.cfg.Retries
+	if s.config != nil {
+		if s.config.Retries > 0 {
+			retries = s.config.Retries
 		}
-		if s.cfg.RetryPause > 0 {
-			retryPause = time.Duration(s.cfg.RetryPause) * time.Second
+		if s.config.RetryPause > 0 {
+			retryPause = time.Duration(s.config.RetryPause) * time.Second
 		}
 	}
 	for attempt := 0; attempt < retries; attempt++ {
@@ -389,8 +389,8 @@ func (s *FailoverStrategy) currentPools() []proxy.PoolConfig {
 	if s == nil {
 		return nil
 	}
-	if s.cfg != nil && len(s.cfg.Pools) > 0 {
-		return s.cfg.Pools
+	if s.config != nil && len(s.config.Pools) > 0 {
+		return s.config.Pools
 	}
 	return s.pools
 }
@@ -431,7 +431,7 @@ func (s *FailoverStrategy) Tick(ticks uint64) {
 	s.mu.Lock()
 	client := s.client
 	s.mu.Unlock()
-	if client != nil && client.cfg.Keepalive {
+	if client != nil && client.config.Keepalive {
 		client.Keepalive()
 	}
 }

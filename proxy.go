@@ -106,7 +106,7 @@ type ConfigWatcher struct {
 //	rl := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
 //	if rl.Allow("1.2.3.4:3333") { proceed() }
 type RateLimiter struct {
-	cfg     RateLimit
+	config  RateLimit
 	buckets map[string]*tokenBucket
 	banned  map[string]time.Time
 	mu      sync.Mutex

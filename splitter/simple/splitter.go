@@ -20,7 +20,7 @@ import (
 type SimpleSplitter struct {
 	active  map[int64]*SimpleMapper // minerID → mapper
 	idle    map[int64]*SimpleMapper // mapperID → mapper (reuse pool, keyed by mapper seq)
-	cfg     *proxy.Config
+	config  *proxy.Config
 	events  *proxy.EventBus
 	factory pool.StrategyFactory
 	mu      sync.Mutex

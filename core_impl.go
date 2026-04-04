@@ -218,7 +218,7 @@ func (cd *CustomDiff) OnLogin(e Event) {
 //	if limiter.Allow("203.0.113.42:3333") { /* accept */ }
 func NewRateLimiter(cfg RateLimit) *RateLimiter {
 	return &RateLimiter{
-		cfg:     cfg,
+		config:  cfg,
 		buckets: make(map[string]*tokenBucket),
 		banned:  make(map[string]time.Time),
 	}
@@ -226,7 +226,7 @@ func NewRateLimiter(cfg RateLimit) *RateLimiter {
 
 // Allow returns true if the IP address is permitted to open a new connection.
 func (rl *RateLimiter) Allow(ip string) bool {
-	if rl == nil || rl.cfg.MaxConnectionsPerMinute <= 0 {
+	if rl == nil || rl.config.MaxConnectionsPerMinute <= 0 {
 		return true
 	}
 	host := hostOnly(ip)
@@ -244,14 +244,14 @@ func (rl *RateLimiter) Allow(ip string) bool {
 
 	bucket, ok := rl.buckets[host]
 	if !ok {
-		bucket = &tokenBucket{tokens: rl.cfg.MaxConnectionsPerMinute, lastRefill: now}
+		bucket = &tokenBucket{tokens: rl.config.MaxConnectionsPerMinute, lastRefill: now}
 		rl.buckets[host] = bucket
 	}
 
-	refillBucket(bucket, rl.cfg.MaxConnectionsPerMinute, now)
+	refillBucket(bucket, rl.config.MaxConnectionsPerMinute, now)
 	if bucket.tokens <= 0 {
-		if rl.cfg.BanDurationSeconds > 0 {
-			rl.banned[host] = now.Add(time.Duration(rl.cfg.BanDurationSeconds) * time.Second)
+		if rl.config.BanDurationSeconds > 0 {
+			rl.banned[host] = now.Add(time.Duration(rl.config.BanDurationSeconds) * time.Second)
 		}
 		return false
 	}
@@ -263,7 +263,7 @@ func (rl *RateLimiter) Allow(ip string) bool {
 
 // Tick removes expired ban entries and refills token buckets.
 func (rl *RateLimiter) Tick() {
-	if rl == nil || rl.cfg.MaxConnectionsPerMinute <= 0 {
+	if rl == nil || rl.config.MaxConnectionsPerMinute <= 0 {
 		return
 	}
 	now := time.Now()
@@ -277,7 +277,7 @@ func (rl *RateLimiter) Tick() {
 		}
 	}
 	for _, bucket := range rl.buckets {
-		refillBucket(bucket, rl.cfg.MaxConnectionsPerMinute, now)
+		refillBucket(bucket, rl.config.MaxConnectionsPerMinute, now)
 	}
 }
 
