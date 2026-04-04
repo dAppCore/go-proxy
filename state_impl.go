@@ -221,7 +221,7 @@ func (p *Proxy) Start() {
 		p.watcher.Start()
 	}
 	if p.config.HTTP.Enabled {
-		if !p.startHTTP() {
+		if !p.startMonitoringServer() {
 			p.Stop()
 			return
 		}
@@ -589,40 +589,40 @@ func parseTLSVersion(value string) uint16 {
 	}
 }
 
-func (p *Proxy) startHTTP() bool {
+func (p *Proxy) startMonitoringServer() bool {
 	if p == nil || !p.config.HTTP.Enabled {
 		return true
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/1/summary", func(w http.ResponseWriter, r *http.Request) {
-		if status, ok := p.allowHTTP(r); !ok {
+		if status, ok := p.allowMonitoringRequest(r); !ok {
 			if status == http.StatusUnauthorized {
 				w.Header().Set("WWW-Authenticate", "Bearer")
 			}
 			w.WriteHeader(status)
 			return
 		}
-		p.writeJSON(w, p.SummaryDocument())
+		p.writeJSONResponse(w, p.SummaryDocument())
 	})
 	mux.HandleFunc("/1/workers", func(w http.ResponseWriter, r *http.Request) {
-		if status, ok := p.allowHTTP(r); !ok {
+		if status, ok := p.allowMonitoringRequest(r); !ok {
 			if status == http.StatusUnauthorized {
 				w.Header().Set("WWW-Authenticate", "Bearer")
 			}
 			w.WriteHeader(status)
 			return
 		}
-		p.writeJSON(w, p.WorkersDocument())
+		p.writeJSONResponse(w, p.WorkersDocument())
 	})
 	mux.HandleFunc("/1/miners", func(w http.ResponseWriter, r *http.Request) {
-		if status, ok := p.allowHTTP(r); !ok {
+		if status, ok := p.allowMonitoringRequest(r); !ok {
 			if status == http.StatusUnauthorized {
 				w.Header().Set("WWW-Authenticate", "Bearer")
 			}
 			w.WriteHeader(status)
 			return
 		}
-		p.writeJSON(w, p.MinersDocument())
+		p.writeJSONResponse(w, p.MinersDocument())
 	})
 	addr := net.JoinHostPort(p.config.HTTP.Host, strconv.Itoa(int(p.config.HTTP.Port)))
 	listener, err := net.Listen("tcp", addr)
@@ -639,7 +639,7 @@ func (p *Proxy) startHTTP() bool {
 	return true
 }
 
-func (p *Proxy) allowHTTP(r *http.Request) (int, bool) {
+func (p *Proxy) allowMonitoringRequest(r *http.Request) (int, bool) {
 	if p == nil {
 		return http.StatusServiceUnavailable, false
 	}
@@ -655,7 +655,7 @@ func (p *Proxy) allowHTTP(r *http.Request) (int, bool) {
 	return http.StatusOK, true
 }
 
-func (p *Proxy) writeJSON(w http.ResponseWriter, payload any) {
+func (p *Proxy) writeJSONResponse(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(payload)
 }

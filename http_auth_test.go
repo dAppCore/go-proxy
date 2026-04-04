@@ -17,7 +17,7 @@ func TestProxy_allowHTTP_Good(t *testing.T) {
 		},
 	}
 
-	status, ok := p.allowHTTP(&http.Request{
+	status, ok := p.allowMonitoringRequest(&http.Request{
 		Method: http.MethodGet,
 		Header: http.Header{
 			"Authorization": []string{"Bearer secret"},
@@ -40,7 +40,7 @@ func TestProxy_allowHTTP_Bad(t *testing.T) {
 		},
 	}
 
-	status, ok := p.allowHTTP(&http.Request{Method: http.MethodPost})
+	status, ok := p.allowMonitoringRequest(&http.Request{Method: http.MethodPost})
 	if ok {
 		t.Fatal("expected non-GET request to be rejected")
 	}
@@ -56,7 +56,7 @@ func TestProxy_allowHTTP_MethodRestricted_Bad(t *testing.T) {
 		},
 	}
 
-	status, ok := p.allowHTTP(&http.Request{Method: http.MethodPost})
+	status, ok := p.allowMonitoringRequest(&http.Request{Method: http.MethodPost})
 	if ok {
 		t.Fatal("expected non-GET request to be rejected")
 	}
@@ -74,7 +74,7 @@ func TestProxy_allowHTTP_Ugly(t *testing.T) {
 		},
 	}
 
-	status, ok := p.allowHTTP(&http.Request{
+	status, ok := p.allowMonitoringRequest(&http.Request{
 		Method: http.MethodGet,
 		Header: http.Header{
 			"Authorization": []string{"Bearer wrong"},
@@ -100,7 +100,7 @@ func TestProxy_startHTTP_Good(t *testing.T) {
 		done: make(chan struct{}),
 	}
 
-	if ok := p.startHTTP(); !ok {
+	if ok := p.startMonitoringServer(); !ok {
 		t.Fatal("expected HTTP server to start on a free port")
 	}
 	p.Stop()
@@ -133,7 +133,7 @@ func TestProxy_startHTTP_Bad(t *testing.T) {
 		done: make(chan struct{}),
 	}
 
-	if ok := p.startHTTP(); ok {
+	if ok := p.startMonitoringServer(); ok {
 		t.Fatal("expected HTTP server start to fail when the port is already in use")
 	}
 }
