@@ -736,7 +736,7 @@ func (p *Proxy) MinersDocument() MinersDocument {
 			miner.State,
 			miner.Diff,
 			miner.User,
-			miner.Password,
+			"********",
 			miner.RigID,
 			miner.Agent,
 		})
