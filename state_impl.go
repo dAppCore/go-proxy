@@ -244,6 +244,7 @@ func (p *Proxy) Stop() {
 		for _, server := range p.servers {
 			server.Stop()
 		}
+		p.closeAllMiners()
 		if p.watcher != nil {
 			p.watcher.Stop()
 		}
@@ -260,6 +261,23 @@ func (p *Proxy) Stop() {
 			p.accessLog.Close()
 		}
 	})
+}
+
+func (p *Proxy) closeAllMiners() {
+	if p == nil {
+		return
+	}
+	p.minersMu.RLock()
+	miners := make([]*Miner, 0, len(p.miners))
+	for _, miner := range p.miners {
+		miners = append(miners, miner)
+	}
+	p.minersMu.RUnlock()
+	for _, miner := range miners {
+		if miner != nil {
+			miner.Close()
+		}
+	}
 }
 
 // Reload swaps the live configuration and updates dependent state.
