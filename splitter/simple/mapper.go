@@ -31,3 +31,14 @@ type submitContext struct {
 	StartedAt time.Time
 	JobID     string
 }
+
+// NewSimpleMapper creates a passthrough mapper for one pool connection.
+//
+//	m := simple.NewSimpleMapper(7, strategy)
+func NewSimpleMapper(id int64, strategy pool.Strategy) *SimpleMapper {
+	return &SimpleMapper{
+		id:       id,
+		strategy: strategy,
+		pending:  make(map[int64]submitContext),
+	}
+}

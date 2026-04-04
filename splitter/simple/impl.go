@@ -248,11 +248,8 @@ func (s *SimpleSplitter) ReloadPools() {
 func (s *SimpleSplitter) newMapperLocked() *SimpleMapper {
 	id := s.seq
 	s.seq++
-	mapper := &SimpleMapper{
-		id:      id,
-		events:  s.events,
-		pending: make(map[int64]submitContext),
-	}
+	mapper := NewSimpleMapper(id, nil)
+	mapper.events = s.events
 	mapper.strategy = s.factory(mapper)
 	if mapper.strategy == nil {
 		mapper.strategy = s.factory(mapper)

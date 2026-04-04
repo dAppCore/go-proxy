@@ -20,6 +20,24 @@ func (a activeStrategy) Submit(string, string, string, string) int64 { return 0 
 func (a activeStrategy) Disconnect()                                 {}
 func (a activeStrategy) IsActive() bool                              { return true }
 
+func TestSimpleMapper_New_Good(t *testing.T) {
+	strategy := activeStrategy{}
+	mapper := NewSimpleMapper(7, strategy)
+
+	if mapper == nil {
+		t.Fatal("expected mapper")
+	}
+	if mapper.id != 7 {
+		t.Fatalf("expected mapper id 7, got %d", mapper.id)
+	}
+	if mapper.strategy != strategy {
+		t.Fatalf("expected strategy to be stored")
+	}
+	if mapper.pending == nil {
+		t.Fatal("expected pending map to be initialised")
+	}
+}
+
 func TestSimpleSplitter_OnLogin_Good(t *testing.T) {
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, func(listener pool.StratumListener) pool.Strategy {
 		return activeStrategy{}
