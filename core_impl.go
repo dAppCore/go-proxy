@@ -50,6 +50,8 @@ func getSplitterFactory(mode string) (func(*Config, *EventBus) Splitter, bool) {
 }
 
 // LoadConfig reads and unmarshals a JSON config file.
+//
+//	cfg, result := LoadConfig("config.json")
 func LoadConfig(path string) (*Config, Result) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -65,6 +67,10 @@ func LoadConfig(path string) (*Config, Result) {
 }
 
 // Validate checks that mandatory bind and pool settings are present.
+//
+//	if result := cfg.Validate(); !result.OK {
+//	    return result
+//	}
 func (c *Config) Validate() Result {
 	if c == nil {
 		return errorResult(errors.New("config is nil"))
@@ -216,8 +222,7 @@ func (cd *CustomDiff) OnLogin(e Event) {
 
 // NewRateLimiter creates a per-IP token bucket limiter.
 //
-//	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
-//	if limiter.Allow("203.0.113.42:3333") { /* accept */ }
+//	limiter := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
 func NewRateLimiter(config RateLimit) *RateLimiter {
 	return &RateLimiter{
 		config:  config,
@@ -228,7 +233,7 @@ func NewRateLimiter(config RateLimit) *RateLimiter {
 
 // Allow returns true if the IP address is permitted to open a new connection.
 //
-//	if rl.Allow("203.0.113.42:3333") {
+//	if limiter.Allow("203.0.113.42:3333") {
 //	    // accept the socket
 //	}
 func (rl *RateLimiter) Allow(ip string) bool {
@@ -268,6 +273,8 @@ func (rl *RateLimiter) Allow(ip string) bool {
 }
 
 // Tick removes expired ban entries and refills token buckets.
+//
+//	limiter.Tick()
 func (rl *RateLimiter) Tick() {
 	if rl == nil || rl.config.MaxConnectionsPerMinute <= 0 {
 		return
@@ -289,9 +296,7 @@ func (rl *RateLimiter) Tick() {
 
 // NewConfigWatcher creates a polling watcher for a config file.
 //
-//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
-//		proxyInstance.Reload(cfg)
-//	})
+//	watcher := NewConfigWatcher("config.json", func(cfg *Config) { _ = cfg })
 func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher {
 	watcher := &ConfigWatcher{
 		path:     configPath,
