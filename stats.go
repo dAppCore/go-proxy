@@ -49,13 +49,14 @@ type tickWindow struct {
 //
 //	summary := stats.Summary()
 type StatsSummary struct {
-	Accepted   uint64     `json:"accepted"`
-	Rejected   uint64     `json:"rejected"`
-	Invalid    uint64     `json:"invalid"`
-	Expired    uint64     `json:"expired"`
-	Hashes     uint64     `json:"hashes_total"`
-	AvgTime    uint32     `json:"avg_time"` // seconds per accepted share
-	AvgLatency uint32     `json:"latency"`  // median pool response latency in ms
-	Hashrate   [6]float64 `json:"hashrate"` // H/s per window (index = HashrateWindow* constants)
-	TopDiff    [10]uint64 `json:"best"`
+	Accepted        uint64                           `json:"accepted"`
+	Rejected        uint64                           `json:"rejected"`
+	Invalid         uint64                           `json:"invalid"`
+	Expired         uint64                           `json:"expired"`
+	Hashes          uint64                           `json:"hashes_total"`
+	AvgTime         uint32                           `json:"avg_time"` // seconds per accepted share
+	AvgLatency      uint32                           `json:"latency"`  // median pool response latency in ms
+	Hashrate        [6]float64                       `json:"hashrate"` // H/s per window (index = HashrateWindow* constants)
+	TopDiff         [10]uint64                       `json:"best"`
+	CustomDiffStats map[uint64]CustomDiffBucketStats `json:"custom_diff_stats,omitempty"`
 }

@@ -25,13 +25,14 @@ type Router interface {
 //
 //	{"version":"1.0.0","mode":"nicehash","hashrate":{"total":[...]}, ...}
 type SummaryResponse struct {
-	Version   string              `json:"version"`
-	Mode      string              `json:"mode"`
-	Hashrate  HashrateResponse    `json:"hashrate"`
-	Miners    MinersCountResponse `json:"miners"`
-	Workers   uint64              `json:"workers"`
-	Upstreams UpstreamResponse    `json:"upstreams"`
-	Results   ResultsResponse     `json:"results"`
+	Version         string                                 `json:"version"`
+	Mode            string                                 `json:"mode"`
+	Hashrate        HashrateResponse                       `json:"hashrate"`
+	Miners          MinersCountResponse                    `json:"miners"`
+	Workers         uint64                                 `json:"workers"`
+	Upstreams       UpstreamResponse                       `json:"upstreams"`
+	Results         ResultsResponse                        `json:"results"`
+	CustomDiffStats map[uint64]proxy.CustomDiffBucketStats `json:"custom_diff_stats,omitempty"`
 }
 
 // HashrateResponse carries the per-window hashrate array.
@@ -100,6 +101,7 @@ func summaryResponse(p *proxy.Proxy) SummaryResponse {
 		Hashrate: HashrateResponse{
 			Total: summary.Hashrate,
 		},
+		CustomDiffStats: summary.CustomDiffStats,
 		Miners: MinersCountResponse{
 			Now: now,
 			Max: max,

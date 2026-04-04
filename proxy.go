@@ -23,23 +23,24 @@ import (
 //	p, result := proxy.New(cfg)
 //	if result.OK { p.Start() }
 type Proxy struct {
-	config      *Config
-	splitter    Splitter
-	stats       *Stats
-	workers     *Workers
-	events      *EventBus
-	servers     []*Server
-	ticker      *time.Ticker
-	watcher     *ConfigWatcher
-	done        chan struct{}
-	stopOnce    sync.Once
-	minersMu    sync.RWMutex
-	miners      map[int64]*Miner
-	customDiff  *CustomDiff
-	rateLimit   *RateLimiter
-	httpServer  *http.Server
-	accessLog   *accessLogSink
-	submitCount atomic.Int64
+	config            *Config
+	splitter          Splitter
+	stats             *Stats
+	workers           *Workers
+	events            *EventBus
+	servers           []*Server
+	ticker            *time.Ticker
+	watcher           *ConfigWatcher
+	done              chan struct{}
+	stopOnce          sync.Once
+	minersMu          sync.RWMutex
+	miners            map[int64]*Miner
+	customDiff        *CustomDiff
+	customDiffBuckets *CustomDiffBuckets
+	rateLimit         *RateLimiter
+	httpServer        *http.Server
+	accessLog         *accessLogSink
+	submitCount       atomic.Int64
 }
 
 // Splitter is the interface both NonceSplitter and SimpleSplitter satisfy.

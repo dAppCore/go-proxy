@@ -39,15 +39,16 @@ func New(cfg *Config) (*Proxy, Result) {
 	}
 
 	p := &Proxy{
-		config:     cfg,
-		events:     NewEventBus(),
-		stats:      NewStats(),
-		workers:    NewWorkers(cfg.Workers, nil),
-		miners:     make(map[int64]*Miner),
-		customDiff: NewCustomDiff(cfg.CustomDiff),
-		rateLimit:  NewRateLimiter(cfg.RateLimit),
-		accessLog:  newAccessLogSink(cfg.AccessLogFile),
-		done:       make(chan struct{}),
+		config:            cfg,
+		events:            NewEventBus(),
+		stats:             NewStats(),
+		workers:           NewWorkers(cfg.Workers, nil),
+		miners:            make(map[int64]*Miner),
+		customDiff:        NewCustomDiff(cfg.CustomDiff),
+		customDiffBuckets: NewCustomDiffBuckets(cfg.CustomDiffStats),
+		rateLimit:         NewRateLimiter(cfg.RateLimit),
+		accessLog:         newAccessLogSink(cfg.AccessLogFile),
+		done:              make(chan struct{}),
 	}
 	p.workers.bindEvents(p.events)
 
@@ -60,6 +61,10 @@ func New(cfg *Config) (*Proxy, Result) {
 	p.events.Subscribe(EventClose, p.stats.OnClose)
 	p.events.Subscribe(EventAccept, p.stats.OnAccept)
 	p.events.Subscribe(EventReject, p.stats.OnReject)
+	if p.customDiffBuckets != nil {
+		p.events.Subscribe(EventAccept, p.customDiffBuckets.OnAccept)
+		p.events.Subscribe(EventReject, p.customDiffBuckets.OnReject)
+	}
 	if cfg.Watch && cfg.sourcePath != "" {
 		p.watcher = NewConfigWatcher(cfg.sourcePath, p.Reload)
 	}
@@ -94,7 +99,11 @@ func (p *Proxy) Summary() StatsSummary {
 	if p == nil || p.stats == nil {
 		return StatsSummary{}
 	}
-	return p.stats.Summary()
+	summary := p.stats.Summary()
+	if p.customDiffBuckets != nil {
+		summary.CustomDiffStats = p.customDiffBuckets.Snapshot()
+	}
+	return summary
 }
 
 // WorkerRecords returns a stable snapshot of worker rows.
@@ -273,6 +282,9 @@ func (p *Proxy) Reload(cfg *Config) {
 	}
 	if p.customDiff != nil {
 		p.customDiff.globalDiff = cfg.CustomDiff
+	}
+	if p.customDiffBuckets != nil {
+		p.customDiffBuckets.SetEnabled(cfg.CustomDiffStats)
 	}
 	p.rateLimit = NewRateLimiter(cfg.RateLimit)
 	for _, server := range p.servers {
@@ -499,6 +511,7 @@ func (p *Proxy) summaryDocument() any {
 		"hashrate": map[string]any{
 			"total": summary.Hashrate,
 		},
+		"custom_diff_stats": summary.CustomDiffStats,
 		"miners": map[string]any{
 			"now": now,
 			"max": max,

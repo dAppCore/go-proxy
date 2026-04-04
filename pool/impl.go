@@ -350,6 +350,7 @@ func (s *FailoverStrategy) Connect() {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.closing = false
 	s.connectLocked(0)
 }
 
@@ -408,10 +409,12 @@ func (s *FailoverStrategy) Disconnect() {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.client != nil {
-		s.client.Disconnect()
-		s.client = nil
+	client := s.client
+	s.closing = true
+	s.client = nil
+	s.mu.Unlock()
+	if client != nil {
+		client.Disconnect()
 	}
 }
 
@@ -450,6 +453,15 @@ func (s *FailoverStrategy) OnResultAccepted(sequence int64, accepted bool, error
 // OnDisconnect retries from the primary pool and forwards the disconnect.
 func (s *FailoverStrategy) OnDisconnect() {
 	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	closing := s.closing
+	if closing {
+		s.closing = false
+	}
+	s.mu.Unlock()
+	if closing {
 		return
 	}
 	if s.listener != nil {
