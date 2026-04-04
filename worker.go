@@ -11,9 +11,9 @@ import (
 //	w := proxy.NewWorkers(proxy.WorkersByRigID, bus)
 type Workers struct {
 	mode      WorkersMode
-	entries   []WorkerRecord       // ordered by first-seen (stable)
-	nameIndex map[string]int       // workerName → entries index
-	idIndex   map[int64]int        // minerID → entries index
+	entries   []WorkerRecord // ordered by first-seen (stable)
+	nameIndex map[string]int // workerName → entries index
+	idIndex   map[int64]int  // minerID → entries index
 	mu        sync.RWMutex
 }
 
@@ -27,7 +27,7 @@ type WorkerRecord struct {
 	Accepted    uint64
 	Rejected    uint64
 	Invalid     uint64
-	Hashes      uint64    // sum of accepted share difficulties
+	Hashes      uint64 // sum of accepted share difficulties
 	LastHashAt  time.Time
 	windows     [5]tickWindow // 60s, 600s, 3600s, 12h, 24h
 }

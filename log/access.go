@@ -5,7 +5,10 @@
 //	bus.Subscribe(proxy.EventClose, al.OnClose)
 package log
 
-import "sync"
+import (
+	"os"
+	"sync"
+)
 
 // AccessLog writes connection lifecycle lines to an append-only text file.
 //
@@ -18,6 +21,5 @@ import "sync"
 type AccessLog struct {
 	path string
 	mu   sync.Mutex
-	// f is opened append-only on first write; nil until first event.
-	// Uses core.File for I/O abstraction.
+	f    *os.File
 }

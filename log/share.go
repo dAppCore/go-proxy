@@ -1,6 +1,9 @@
 package log
 
-import "sync"
+import (
+	"os"
+	"sync"
+)
 
 // ShareLog writes share result lines to an append-only text file.
 //
@@ -13,6 +16,5 @@ import "sync"
 type ShareLog struct {
 	path string
 	mu   sync.Mutex
-	// f is opened append-only on first write; nil until first event.
-	// Uses core.File for I/O abstraction.
+	f    *os.File
 }

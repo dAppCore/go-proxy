@@ -5,22 +5,22 @@ package proxy
 //	cfg, result := proxy.LoadConfig("config.json")
 //	if !result.OK { log.Fatal(result.Error) }
 type Config struct {
-	Mode            string      `json:"mode"`              // "nicehash" or "simple"
-	Bind            []BindAddr  `json:"bind"`              // listen addresses
-	Pools           []PoolConfig `json:"pools"`            // ordered primary + fallbacks
-	TLS             TLSConfig   `json:"tls"`               // inbound TLS (miner-facing)
-	HTTP            HTTPConfig  `json:"http"`              // monitoring API
-	AccessPassword  string      `json:"access-password"`   // "" = no auth required
-	CustomDiff      uint64      `json:"custom-diff"`       // 0 = disabled
-	CustomDiffStats bool        `json:"custom-diff-stats"` // report per custom-diff bucket
-	AlgoExtension   bool        `json:"algo-ext"`          // forward algo field in jobs
-	Workers         WorkersMode `json:"workers"`           // "rig-id", "user", "password", "agent", "ip", "false"
-	AccessLogFile   string      `json:"access-log-file"`   // "" = disabled
-	ReuseTimeout    int         `json:"reuse-timeout"`     // seconds; simple mode upstream reuse
-	Retries         int         `json:"retries"`           // pool reconnect attempts
-	RetryPause      int         `json:"retry-pause"`       // seconds between retries
-	Watch           bool        `json:"watch"`             // hot-reload on file change
-	RateLimit       RateLimit   `json:"rate-limit"`        // per-IP connection rate limit
+	Mode            string       `json:"mode"`              // "nicehash" or "simple"
+	Bind            []BindAddr   `json:"bind"`              // listen addresses
+	Pools           []PoolConfig `json:"pools"`             // ordered primary + fallbacks
+	TLS             TLSConfig    `json:"tls"`               // inbound TLS (miner-facing)
+	HTTP            HTTPConfig   `json:"http"`              // monitoring API
+	AccessPassword  string       `json:"access-password"`   // "" = no auth required
+	CustomDiff      uint64       `json:"custom-diff"`       // 0 = disabled
+	CustomDiffStats bool         `json:"custom-diff-stats"` // report per custom-diff bucket
+	AlgoExtension   bool         `json:"algo-ext"`          // forward algo field in jobs
+	Workers         WorkersMode  `json:"workers"`           // "rig-id", "user", "password", "agent", "ip", "false"
+	AccessLogFile   string       `json:"access-log-file"`   // "" = disabled
+	ReuseTimeout    int          `json:"reuse-timeout"`     // seconds; simple mode upstream reuse
+	Retries         int          `json:"retries"`           // pool reconnect attempts
+	RetryPause      int          `json:"retry-pause"`       // seconds between retries
+	Watch           bool         `json:"watch"`             // hot-reload on file change
+	RateLimit       RateLimit    `json:"rate-limit"`        // per-IP connection rate limit
 }
 
 // BindAddr is one TCP listen endpoint.
@@ -81,7 +81,7 @@ type RateLimit struct {
 type WorkersMode string
 
 const (
-	WorkersByRigID  WorkersMode = "rig-id"   // rigid field, fallback to user
+	WorkersByRigID  WorkersMode = "rig-id" // rigid field, fallback to user
 	WorkersByUser   WorkersMode = "user"
 	WorkersByPass   WorkersMode = "password"
 	WorkersByAgent  WorkersMode = "agent"

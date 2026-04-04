@@ -23,8 +23,10 @@ import (
 //	s.Connect()
 type NonceSplitter struct {
 	mappers         []*NonceMapper
+	byID            map[int64]*NonceMapper
 	cfg             *proxy.Config
 	events          *proxy.EventBus
 	strategyFactory pool.StrategyFactory
 	mu              sync.RWMutex
+	seq             int64
 }

@@ -2,6 +2,7 @@ package nicehash
 
 import (
 	"sync"
+	"time"
 
 	"dappco.re/go/core/proxy"
 	"dappco.re/go/core/proxy/pool"
@@ -15,11 +16,13 @@ import (
 type NonceMapper struct {
 	id        int64
 	storage   *NonceStorage
-	strategy  pool.Strategy          // manages pool client lifecycle and failover
+	strategy  pool.Strategy           // manages pool client lifecycle and failover
 	pending   map[int64]SubmitContext // sequence → {requestID, minerID}
 	cfg       *proxy.Config
+	events    *proxy.EventBus
 	active    bool // true once pool has sent at least one job
 	suspended int  // > 0 when pool connection is in error/reconnecting
+	lastUsed  time.Time
 	mu        sync.Mutex
 }
 
@@ -29,4 +32,5 @@ type NonceMapper struct {
 type SubmitContext struct {
 	RequestID int64 // JSON-RPC id from the miner's submit request
 	MinerID   int64 // miner that submitted
+	JobID     string
 }

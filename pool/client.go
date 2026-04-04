@@ -19,14 +19,17 @@ import (
 //	client := pool.NewStratumClient(poolCfg, listener)
 //	client.Connect()
 type StratumClient struct {
-	cfg       proxy.PoolConfig
-	listener  StratumListener
-	conn      net.Conn
-	tlsConn   *tls.Conn // nil if plain TCP
-	sessionID string    // pool-assigned session id from login reply
-	seq       int64     // atomic JSON-RPC request id counter
-	active    bool      // true once first job received
-	sendMu    sync.Mutex
+	cfg        proxy.PoolConfig
+	listener   StratumListener
+	conn       net.Conn
+	tlsConn    *tls.Conn // nil if plain TCP
+	sessionID  string    // pool-assigned session id from login reply
+	seq        int64     // atomic JSON-RPC request id counter
+	active     bool      // true once first job received
+	pending    map[int64]struct{}
+	closedOnce sync.Once
+	mu         sync.Mutex
+	sendMu     sync.Mutex
 }
 
 // StratumListener receives events from the pool connection.
