@@ -1,6 +1,7 @@
 package simple
 
 import (
+	"sync"
 	"time"
 
 	"dappco.re/go/core/proxy"
@@ -18,4 +19,7 @@ type SimpleMapper struct {
 	strategy pool.Strategy
 	idleAt   time.Time // zero when active
 	stopped  bool
+	events   *proxy.EventBus
+	pending  map[int64]*proxy.SubmitEvent
+	mu       sync.Mutex
 }

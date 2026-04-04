@@ -19,6 +19,7 @@ type Stats struct {
 	expired     atomic.Uint64
 	hashes      atomic.Uint64 // cumulative sum of accepted share difficulties
 	connections atomic.Uint64 // total TCP connections accepted (ever)
+	miners      atomic.Uint64 // current connected miners
 	maxMiners   atomic.Uint64 // peak concurrent miner count
 	topDiff     [10]uint64    // top-10 accepted difficulties, sorted descending; guarded by mu
 	latency     []uint16      // pool response latencies in ms; capped at 10000 samples; guarded by mu
@@ -53,8 +54,8 @@ type StatsSummary struct {
 	Invalid    uint64     `json:"invalid"`
 	Expired    uint64     `json:"expired"`
 	Hashes     uint64     `json:"hashes_total"`
-	AvgTime    uint32     `json:"avg_time"`  // seconds per accepted share
-	AvgLatency uint32     `json:"latency"`   // median pool response latency in ms
-	Hashrate   [6]float64 `json:"hashrate"`  // H/s per window (index = HashrateWindow* constants)
+	AvgTime    uint32     `json:"avg_time"` // seconds per accepted share
+	AvgLatency uint32     `json:"latency"`  // median pool response latency in ms
+	Hashrate   [6]float64 `json:"hashrate"` // H/s per window (index = HashrateWindow* constants)
 	TopDiff    [10]uint64 `json:"best"`
 }
