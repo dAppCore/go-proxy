@@ -76,6 +76,22 @@ type ResultsResponse struct {
 	Best        [10]uint64 `json:"best"`
 }
 
+// WorkersResponse is the /1/workers JSON body.
+//
+//	{"mode":"rig-id","workers":[["rig-alpha","10.0.0.1",1,10,0,0,100000,1712232000,1.0,1.0,1.0,1.0,1.0]]}
+type WorkersResponse struct {
+	Mode    string            `json:"mode"`
+	Workers []proxy.WorkerRow `json:"workers"`
+}
+
+// MinersResponse is the /1/miners JSON body.
+//
+//	{"format":["id","ip","tx","rx","state","diff","user","password","rig_id","agent"],"miners":[[1,"10.0.0.1:49152",4096,512,2,100000,"WALLET","********","rig-alpha","XMRig/6.21.0"]]}
+type MinersResponse struct {
+	Format []string         `json:"format"`
+	Miners []proxy.MinerRow `json:"miners"`
+}
+
 // RegisterRoutes wires the monitoring endpoints onto the supplied router.
 //
 //	proxyapi.RegisterRoutes(mux, p)
@@ -131,11 +147,11 @@ func summaryResponse(p *proxy.Proxy) SummaryResponse {
 	}
 }
 
-func workersResponse(p *proxy.Proxy) any {
+func workersResponse(p *proxy.Proxy) WorkersResponse {
 	records := p.WorkerRecords()
-	rows := make([]any, 0, len(records))
+	rows := make([]proxy.WorkerRow, 0, len(records))
 	for _, record := range records {
-		rows = append(rows, []any{
+		rows = append(rows, proxy.WorkerRow{
 			record.Name,
 			record.LastIP,
 			record.Connections,
@@ -151,17 +167,17 @@ func workersResponse(p *proxy.Proxy) any {
 			record.Hashrate(86400),
 		})
 	}
-	return map[string]any{
-		"mode":    string(p.WorkersMode()),
-		"workers": rows,
+	return WorkersResponse{
+		Mode:    string(p.WorkersMode()),
+		Workers: rows,
 	}
 }
 
-func minersResponse(p *proxy.Proxy) any {
+func minersResponse(p *proxy.Proxy) MinersResponse {
 	records := p.MinerSnapshots()
-	rows := make([]any, 0, len(records))
+	rows := make([]proxy.MinerRow, 0, len(records))
 	for _, miner := range records {
-		rows = append(rows, []any{
+		rows = append(rows, proxy.MinerRow{
 			miner.ID,
 			miner.IP,
 			miner.TX,
@@ -174,9 +190,9 @@ func minersResponse(p *proxy.Proxy) any {
 			miner.Agent,
 		})
 	}
-	return map[string]any{
-		"format": []string{"id", "ip", "tx", "rx", "state", "diff", "user", "password", "rig_id", "agent"},
-		"miners": rows,
+	return MinersResponse{
+		Format: []string{"id", "ip", "tx", "rx", "state", "diff", "user", "password", "rig_id", "agent"},
+		Miners: rows,
 	}
 }
 

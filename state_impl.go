@@ -612,13 +612,13 @@ type summaryResultsPayload struct {
 }
 
 type workersDocumentPayload struct {
-	Mode    string  `json:"mode"`
-	Workers [][]any `json:"workers"`
+	Mode    string      `json:"mode"`
+	Workers []WorkerRow `json:"workers"`
 }
 
 type minersDocumentPayload struct {
-	Format []string `json:"format"`
-	Miners [][]any  `json:"miners"`
+	Format []string   `json:"format"`
+	Miners []MinerRow `json:"miners"`
 }
 
 func (p *Proxy) summaryDocument() summaryDocumentPayload {
@@ -653,9 +653,9 @@ func (p *Proxy) summaryDocument() summaryDocumentPayload {
 
 func (p *Proxy) workersDocument() workersDocumentPayload {
 	records := p.WorkerRecords()
-	rows := make([][]any, 0, len(records))
+	rows := make([]WorkerRow, 0, len(records))
 	for _, record := range records {
-		rows = append(rows, []any{
+		rows = append(rows, WorkerRow{
 			record.Name,
 			record.LastIP,
 			record.Connections,
@@ -679,9 +679,9 @@ func (p *Proxy) workersDocument() workersDocumentPayload {
 
 func (p *Proxy) minersDocument() minersDocumentPayload {
 	records := p.MinerSnapshots()
-	rows := make([][]any, 0, len(records))
+	rows := make([]MinerRow, 0, len(records))
 	for _, miner := range records {
-		rows = append(rows, []any{
+		rows = append(rows, MinerRow{
 			miner.ID,
 			miner.IP,
 			miner.TX,
