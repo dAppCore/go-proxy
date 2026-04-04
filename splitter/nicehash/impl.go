@@ -300,7 +300,7 @@ func (m *NonceMapper) OnResultAccepted(sequence int64, accepted bool, errorMessa
 	prevJob := m.storage.prevJob
 	m.storage.mu.Unlock()
 	_ = m.storage.IsValidJobID(ctx.JobID)
-	expired := ctx.JobID != "" && ctx.JobID == prevJob.JobID && ctx.JobID != job.JobID
+	job, expired := resolveSubmissionJob(ctx.JobID, job, prevJob)
 	m.mu.Unlock()
 	if !ok || miner == nil {
 		return
@@ -325,6 +325,13 @@ func (m *NonceMapper) OnResultAccepted(sequence int64, accepted bool, errorMessa
 	if m.events != nil {
 		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Job: &job, Diff: job.DifficultyFromTarget(), Error: errorMessage, Latency: latency})
 	}
+}
+
+func resolveSubmissionJob(jobID string, currentJob, previousJob proxy.Job) (proxy.Job, bool) {
+	if jobID != "" && jobID == previousJob.JobID && jobID != currentJob.JobID {
+		return previousJob, true
+	}
+	return currentJob, false
 }
 
 func (m *NonceMapper) OnDisconnect() {
