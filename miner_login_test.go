@@ -226,6 +226,43 @@ func TestMiner_HandleLogin_CustomDiffCap_Good(t *testing.T) {
 	}
 }
 
+func TestMiner_HandleKeepalived_Good(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := NewMiner(minerConn, 3333, nil)
+
+	done := make(chan struct{})
+	go func() {
+		miner.handleKeepalived(stratumRequest{ID: 9, Method: "keepalived"})
+		close(done)
+	}()
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read keepalived response: %v", err)
+	}
+	<-done
+
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("unmarshal keepalived response: %v", err)
+	}
+	if _, ok := payload["error"]; ok {
+		t.Fatalf("expected keepalived response to omit error field, got %s", string(line))
+	}
+	var result struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(payload["result"], &result); err != nil {
+		t.Fatalf("unmarshal keepalived result: %v", err)
+	}
+	if result.Status != "KEEPALIVED" {
+		t.Fatalf("expected KEEPALIVED status, got %q", result.Status)
+	}
+}
+
 func TestMiner_ReadLoop_RFCLineLimit_Good(t *testing.T) {
 	minerConn, clientConn := net.Pipe()
 	defer minerConn.Close()
