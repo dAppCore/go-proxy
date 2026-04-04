@@ -373,11 +373,18 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner.globalDiff = p.config.CustomDiff
 	miner.extNH = strings.EqualFold(p.config.Mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
-		if p.events != nil {
-			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
-		}
 		if p.splitter != nil {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
+		}
+		if m.extNH {
+			if m.MapperID() < 0 {
+				return
+			}
+		} else if m.RouteID() < 0 {
+			return
+		}
+		if p.events != nil {
+			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
 		}
 	}
 	miner.onSubmit = func(m *Miner, event *SubmitEvent) {
@@ -914,6 +921,22 @@ func (m *Miner) handleLogin(req stratumRequest) {
 	m.state = MinerStateWaitReady
 	if m.onLogin != nil {
 		m.onLogin(m)
+	}
+	if m.state == MinerStateClosing {
+		return
+	}
+	if m.extNH {
+		if m.MapperID() < 0 {
+			m.state = MinerStateWaitLogin
+			m.rpcID = ""
+			m.ReplyWithError(requestID(req.ID), "Proxy is full, try again later")
+			return
+		}
+	} else if m.RouteID() < 0 {
+		m.state = MinerStateWaitLogin
+		m.rpcID = ""
+		m.ReplyWithError(requestID(req.ID), "Proxy is unavailable, try again later")
+		return
 	}
 	m.replyLoginSuccess(requestID(req.ID))
 }

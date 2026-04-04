@@ -17,6 +17,9 @@ func TestMiner_HandleLogin_Good(t *testing.T) {
 	miner.algoEnabled = true
 	miner.extNH = true
 	miner.fixedByte = 0x2a
+	miner.onLogin = func(m *Miner) {
+		m.SetMapperID(1)
+	}
 	miner.currentJob = Job{
 		Blob:     strings.Repeat("0", 160),
 		JobID:    "job-1",
@@ -104,5 +107,65 @@ func TestProxy_New_Watch_Good(t *testing.T) {
 	}
 	if proxyInstance.watcher == nil {
 		t.Fatalf("expected config watcher when watch is enabled and source path is known")
+	}
+}
+
+func TestMiner_HandleLogin_Ugly(t *testing.T) {
+	for i := 0; i < 256; i++ {
+		miner := &Miner{}
+		miner.SetID(int64(i + 1))
+		miner.SetMapperID(int64(i + 1))
+	}
+
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	miner := NewMiner(serverConn, 3333, nil)
+	miner.extNH = true
+	miner.onLogin = func(*Miner) {}
+
+	params, err := json.Marshal(loginParams{
+		Login: "wallet",
+		Pass:  "x",
+	})
+	if err != nil {
+		t.Fatalf("marshal login params: %v", err)
+	}
+
+	done := make(chan []byte, 1)
+	go func() {
+		line, readErr := bufio.NewReader(clientConn).ReadBytes('\n')
+		if readErr != nil {
+			done <- nil
+			return
+		}
+		done <- line
+	}()
+
+	miner.handleLogin(stratumRequest{ID: 2, Method: "login", Params: params})
+
+	line := <-done
+	if line == nil {
+		t.Fatal("expected login rejection response")
+	}
+
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+		Result map[string]any `json:"result"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("unmarshal login response: %v", err)
+	}
+	if payload.Error.Message != "Proxy is full, try again later" {
+		t.Fatalf("expected full-table error, got %q", payload.Error.Message)
+	}
+	if payload.Result != nil {
+		t.Fatalf("expected no login success payload, got %#v", payload.Result)
+	}
+	if miner.MapperID() != -1 {
+		t.Fatalf("expected rejected miner to remain unassigned, got mapper %d", miner.MapperID())
 	}
 }
