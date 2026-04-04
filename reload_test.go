@@ -83,3 +83,65 @@ func TestProxy_Reload_UpdatesServers(t *testing.T) {
 		t.Fatalf("expected rate limiter instance to be replaced")
 	}
 }
+
+func TestProxy_Reload_WatchEnabled_Good(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			Mode:       "nicehash",
+			Workers:    WorkersByRigID,
+			Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			configPath: "/tmp/proxy.json",
+		},
+	}
+
+	p.Reload(&Config{
+		Mode:       "nicehash",
+		Workers:    WorkersByRigID,
+		Bind:       []BindAddr{{Host: "127.0.0.1", Port: 4444}},
+		Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		Watch:      true,
+		configPath: "/tmp/ignored.json",
+	})
+
+	if p.watcher == nil {
+		t.Fatalf("expected reload to create a watcher when watch is enabled")
+	}
+	if got := p.watcher.path; got != "/tmp/proxy.json" {
+		t.Fatalf("expected watcher to keep the original config path, got %q", got)
+	}
+	p.watcher.Stop()
+}
+
+func TestProxy_Reload_WatchDisabled_Bad(t *testing.T) {
+	watcher := NewConfigWatcher("/tmp/proxy.json", func(*Config) {})
+	p := &Proxy{
+		config: &Config{
+			Mode:       "nicehash",
+			Workers:    WorkersByRigID,
+			Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			configPath: "/tmp/proxy.json",
+			Watch:      true,
+		},
+		watcher: watcher,
+	}
+
+	p.Reload(&Config{
+		Mode:       "nicehash",
+		Workers:    WorkersByRigID,
+		Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		Watch:      false,
+		configPath: "/tmp/ignored.json",
+	})
+
+	if p.watcher != nil {
+		t.Fatalf("expected reload to stop and clear the watcher when watch is disabled")
+	}
+	select {
+	case <-watcher.done:
+	default:
+		t.Fatalf("expected existing watcher to be stopped")
+	}
+}

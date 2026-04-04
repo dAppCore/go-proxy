@@ -316,6 +316,9 @@ func (p *Proxy) Reload(config *Config) {
 	if p == nil || config == nil {
 		return
 	}
+	if result := config.Validate(); !result.OK {
+		return
+	}
 	if p.config == nil {
 		p.config = config
 	} else {
@@ -347,6 +350,26 @@ func (p *Proxy) Reload(config *Config) {
 	if p.shareLog != nil {
 		p.shareLog.SetPath(config.ShareLogFile)
 	}
+	p.reloadWatcher(config.Watch)
+}
+
+func (p *Proxy) reloadWatcher(enabled bool) {
+	if p == nil || p.config == nil || p.config.configPath == "" {
+		return
+	}
+	if enabled {
+		if p.watcher != nil {
+			return
+		}
+		p.watcher = NewConfigWatcher(p.config.configPath, p.Reload)
+		p.watcher.Start()
+		return
+	}
+	if p.watcher == nil {
+		return
+	}
+	p.watcher.Stop()
+	p.watcher = nil
 }
 
 func (p *Proxy) onShareSettled(Event) {
