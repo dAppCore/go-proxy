@@ -340,6 +340,16 @@ type Miner struct {
     buf        [16384]byte // per-miner send buffer; avoids per-write allocations
 }
 
+// SetID assigns the miner's internal ID. Used by NonceStorage tests.
+//
+//   m.SetID(42)
+func (m *Miner) SetID(id int64) {}
+
+// FixedByte returns the NiceHash slot index assigned to this miner.
+//
+//   slot := m.FixedByte() // 0x2A
+func (m *Miner) FixedByte() uint8 {}
+
 // NewMiner creates a Miner for an accepted net.Conn. Does not start reading yet.
 //
 //   m := proxy.NewMiner(conn, 3333, nil)
@@ -490,6 +500,21 @@ func (s *NonceSplitter) OnClose(event *proxy.CloseEvent) {}
 //
 //   s.GC()  // called by Proxy tick loop every 60 ticks
 func (s *NonceSplitter) GC() {}
+
+// Connect establishes the first pool upstream connection via the strategy factory.
+//
+//   s.Connect()
+func (s *NonceSplitter) Connect() {}
+
+// Tick is called every second by the proxy tick loop. Runs keepalive on idle mappers.
+//
+//   s.Tick(ticks)
+func (s *NonceSplitter) Tick(ticks uint64) {}
+
+// Upstreams returns current upstream pool connection counts.
+//
+//   stats := s.Upstreams()
+func (s *NonceSplitter) Upstreams() proxy.UpstreamStats {}
 ```
 
 ### 8.2 NonceMapper
@@ -639,6 +664,21 @@ func (s *SimpleSplitter) OnClose(event *proxy.CloseEvent) {}
 //
 //   s.GC()
 func (s *SimpleSplitter) GC() {}
+
+// Connect establishes pool connections for any pre-existing idle mappers.
+//
+//   s.Connect()
+func (s *SimpleSplitter) Connect() {}
+
+// Tick is called every second. Runs idle mapper timeout checks.
+//
+//   s.Tick(ticks)
+func (s *SimpleSplitter) Tick(ticks uint64) {}
+
+// Upstreams returns current upstream connection counts (active + idle).
+//
+//   stats := s.Upstreams()
+func (s *SimpleSplitter) Upstreams() proxy.UpstreamStats {}
 ```
 
 ```go
@@ -669,7 +709,7 @@ type SimpleMapper struct {
 //   client := pool.NewStratumClient(poolCfg, listener)
 //   client.Connect()
 type StratumClient struct {
-    cfg      PoolConfig
+    cfg      proxy.PoolConfig
     listener StratumListener
     conn     net.Conn
     tlsConn  *tls.Conn   // nil if plain TCP
@@ -690,7 +730,7 @@ type StratumListener interface {
     OnDisconnect()
 }
 
-func NewStratumClient(cfg PoolConfig, listener StratumListener) *StratumClient {}
+func NewStratumClient(cfg proxy.PoolConfig, listener StratumListener) *StratumClient {}
 
 // Connect dials the pool. Applies TLS if cfg.TLS is true.
 // If cfg.TLSFingerprint is non-empty, pins the server certificate by SHA-256 of DER bytes.
@@ -726,7 +766,7 @@ func (c *StratumClient) Disconnect() {}
 //   strategy := pool.NewFailoverStrategy(cfg.Pools, listener, cfg)
 //   strategy.Connect()
 type FailoverStrategy struct {
-    pools    []PoolConfig
+    pools    []proxy.PoolConfig
     current  int
     client   *StratumClient
     listener StratumListener
@@ -749,7 +789,7 @@ type Strategy interface {
     IsActive() bool
 }
 
-func NewFailoverStrategy(pools []PoolConfig, listener StratumListener, cfg *proxy.Config) *FailoverStrategy {}
+func NewFailoverStrategy(pools []proxy.PoolConfig, listener StratumListener, cfg *proxy.Config) *FailoverStrategy {}
 
 // Connect dials the current pool. On failure, advances to the next pool (modulo len),
 // respecting cfg.Retries and cfg.RetryPause between attempts.
