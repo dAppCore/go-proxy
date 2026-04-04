@@ -1,5 +1,5 @@
 ---
-module: forge.lthn.ai/core/go-proxy
+module: dappco.re/go/core/proxy
 repo: core/go-proxy
 lang: go
 tier: lib
@@ -18,7 +18,7 @@ tags:
 
 > An agent should be able to implement this library from this document alone.
 
-**Module:** `forge.lthn.ai/core/go-proxy`
+**Module:** `dappco.re/go/core/proxy`
 **Repository:** `core/go-proxy`
 **Files:** 18
 
