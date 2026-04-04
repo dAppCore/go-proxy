@@ -1,0 +1,58 @@
+package proxy
+
+import "testing"
+
+func TestProxy_Reload_Good(t *testing.T) {
+	original := &Config{
+		Mode:    "nicehash",
+		Workers: WorkersByRigID,
+		Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []PoolConfig{{URL: "pool-a.example:3333", Enabled: true}},
+	}
+	p := &Proxy{
+		config:     original,
+		customDiff: NewCustomDiff(1),
+		rateLimit:  NewRateLimiter(RateLimit{}),
+	}
+
+	updated := &Config{
+		Mode:            "simple",
+		Workers:         WorkersByUser,
+		Bind:            []BindAddr{{Host: "0.0.0.0", Port: 4444}},
+		Pools:           []PoolConfig{{URL: "pool-b.example:4444", Enabled: true}},
+		CustomDiff:      50000,
+		AccessPassword:  "secret",
+		CustomDiffStats: true,
+		AlgoExtension:   true,
+		AccessLogFile:   "/tmp/access.log",
+		ReuseTimeout:    30,
+		Retries:         5,
+		RetryPause:      2,
+		Watch:           true,
+		RateLimit:       RateLimit{MaxConnectionsPerMinute: 10, BanDurationSeconds: 60},
+	}
+
+	p.Reload(updated)
+
+	if p.config != original {
+		t.Fatalf("expected reload to preserve the existing config pointer")
+	}
+	if got := p.config.Bind[0]; got.Host != "127.0.0.1" || got.Port != 3333 {
+		t.Fatalf("expected bind addresses to remain unchanged, got %+v", got)
+	}
+	if p.config.Mode != "nicehash" {
+		t.Fatalf("expected mode to remain unchanged, got %q", p.config.Mode)
+	}
+	if p.config.Workers != WorkersByRigID {
+		t.Fatalf("expected workers mode to remain unchanged, got %q", p.config.Workers)
+	}
+	if got := p.config.Pools[0].URL; got != "pool-b.example:4444" {
+		t.Fatalf("expected pools to reload, got %q", got)
+	}
+	if got := p.customDiff.globalDiff; got != 50000 {
+		t.Fatalf("expected custom diff to reload, got %d", got)
+	}
+	if !p.rateLimit.IsActive() {
+		t.Fatalf("expected rate limiter to be replaced with active configuration")
+	}
+}

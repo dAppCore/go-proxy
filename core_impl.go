@@ -59,10 +59,6 @@ func LoadConfig(path string) (*Config, Result) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return nil, errorResult(err)
 	}
-
-	if cfg.Mode == "" {
-		cfg.Mode = "nicehash"
-	}
 	return cfg, cfg.Validate()
 }
 
@@ -70,6 +66,12 @@ func LoadConfig(path string) (*Config, Result) {
 func (c *Config) Validate() Result {
 	if c == nil {
 		return errorResult(errors.New("config is nil"))
+	}
+	if !isValidMode(c.Mode) {
+		return errorResult(errors.New("mode must be \"nicehash\" or \"simple\""))
+	}
+	if !isValidWorkersMode(c.Workers) {
+		return errorResult(errors.New("workers must be one of \"rig-id\", \"user\", \"password\", \"agent\", \"ip\", or \"false\""))
 	}
 	if len(c.Bind) == 0 {
 		return errorResult(errors.New("bind list is empty"))
@@ -83,6 +85,24 @@ func (c *Config) Validate() Result {
 		}
 	}
 	return successResult()
+}
+
+func isValidMode(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "nicehash", "simple":
+		return true
+	default:
+		return false
+	}
+}
+
+func isValidWorkersMode(mode WorkersMode) bool {
+	switch mode {
+	case WorkersByRigID, WorkersByUser, WorkersByPass, WorkersByAgent, WorkersByIP, WorkersDisabled:
+		return true
+	default:
+		return false
+	}
 }
 
 // NewEventBus creates an empty synchronous event dispatcher.

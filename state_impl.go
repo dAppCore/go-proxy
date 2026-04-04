@@ -35,9 +35,6 @@ func New(cfg *Config) (*Proxy, Result) {
 	if cfg == nil {
 		return nil, errorResult(errors.New("config is nil"))
 	}
-	if cfg.Mode == "" {
-		cfg.Mode = "nicehash"
-	}
 	if result := cfg.Validate(); !result.OK {
 		return nil, result
 	}
@@ -227,7 +224,17 @@ func (p *Proxy) Reload(cfg *Config) {
 	if p == nil || cfg == nil {
 		return
 	}
-	p.config = cfg
+	if p.config == nil {
+		p.config = cfg
+	} else {
+		preservedBind := append([]BindAddr(nil), p.config.Bind...)
+		preservedMode := p.config.Mode
+		preservedWorkers := p.config.Workers
+		*p.config = *cfg
+		p.config.Bind = preservedBind
+		p.config.Mode = preservedMode
+		p.config.Workers = preservedWorkers
+	}
 	if p.customDiff != nil {
 		p.customDiff.globalDiff = cfg.CustomDiff
 	}

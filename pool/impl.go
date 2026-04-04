@@ -338,7 +338,7 @@ func (s *FailoverStrategy) Connect() {
 }
 
 func (s *FailoverStrategy) connectLocked(start int) {
-	enabled := enabledPools(s.pools)
+	enabled := enabledPools(s.currentPools())
 	if len(enabled) == 0 {
 		return
 	}
@@ -366,6 +366,16 @@ func (s *FailoverStrategy) connectLocked(start int) {
 		}
 		time.Sleep(retryPause)
 	}
+}
+
+func (s *FailoverStrategy) currentPools() []proxy.PoolConfig {
+	if s == nil {
+		return nil
+	}
+	if s.cfg != nil && len(s.cfg.Pools) > 0 {
+		return s.cfg.Pools
+	}
+	return s.pools
 }
 
 // Submit sends the share through the active client.
