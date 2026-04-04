@@ -53,7 +53,7 @@ type StatsSummary struct {
 	Rejected        uint64                           `json:"rejected"`
 	Invalid         uint64                           `json:"invalid"`
 	Expired         uint64                           `json:"expired"`
-	HashesTotal     uint64                           `json:"hashes_total"`
+	Hashes          uint64                           `json:"hashes_total"`
 	AvgTime         uint32                           `json:"avg_time"` // seconds per accepted share
 	AvgLatency      uint32                           `json:"latency"`  // median pool response latency in ms
 	Hashrate        [6]float64                       `json:"hashrate"` // H/s per window (index = HashrateWindow* constants)

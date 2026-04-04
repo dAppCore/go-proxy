@@ -28,7 +28,7 @@ type WorkerRecord struct {
 	Accepted    uint64
 	Rejected    uint64
 	Invalid     uint64
-	HashesTotal uint64 // sum of accepted share difficulties
+	Hashes      uint64 // sum of accepted share difficulties
 	LastHashAt  time.Time
 	windows     [5]tickWindow // 60s, 600s, 3600s, 12h, 24h
 }

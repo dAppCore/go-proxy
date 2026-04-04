@@ -641,7 +641,7 @@ func (p *Proxy) summaryDocument() summaryDocumentPayload {
 			Expired:     summary.Expired,
 			AvgTime:     summary.AvgTime,
 			Latency:     summary.AvgLatency,
-			HashesTotal: summary.HashesTotal,
+			HashesTotal: summary.Hashes,
 			Best:        summary.TopDiff,
 		},
 	}
@@ -658,7 +658,7 @@ func (p *Proxy) workersDocument() workersDocumentPayload {
 			record.Accepted,
 			record.Rejected,
 			record.Invalid,
-			record.HashesTotal,
+			record.Hashes,
 			unixOrZero(record.LastHashAt),
 			record.Hashrate(60),
 			record.Hashrate(600),
@@ -1284,11 +1284,11 @@ func (s *Stats) Summary() StatsSummary {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	summary := StatsSummary{
-		Accepted:    s.accepted.Load(),
-		Rejected:    s.rejected.Load(),
-		Invalid:     s.invalid.Load(),
-		Expired:     s.expired.Load(),
-		HashesTotal: s.hashes.Load(),
+		Accepted: s.accepted.Load(),
+		Rejected: s.rejected.Load(),
+		Invalid:  s.invalid.Load(),
+		Expired:  s.expired.Load(),
+		Hashes:   s.hashes.Load(),
 	}
 	if summary.Accepted > 0 {
 		uptime := uint64(time.Since(s.startTime).Seconds())
@@ -1307,7 +1307,7 @@ func (s *Stats) Summary() StatsSummary {
 		if i == HashrateWindowAll {
 			uptime := time.Since(s.startTime).Seconds()
 			if uptime > 0 {
-				summary.Hashrate[i] = float64(summary.HashesTotal) / uptime
+				summary.Hashrate[i] = float64(summary.Hashes) / uptime
 			}
 			continue
 		}
@@ -1445,7 +1445,7 @@ func (w *Workers) OnAccept(e Event) {
 	}
 	record := &w.entries[index]
 	record.Accepted++
-	record.HashesTotal += e.Diff
+	record.Hashes += e.Diff
 	record.LastHashAt = time.Now().UTC()
 	record.LastIP = e.Miner.ip
 	for i := range record.windows {
