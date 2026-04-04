@@ -299,7 +299,6 @@ func (m *NonceMapper) OnResultAccepted(sequence int64, accepted bool, errorMessa
 	job := m.storage.job
 	prevJob := m.storage.prevJob
 	m.storage.mu.Unlock()
-	_ = m.storage.IsValidJobID(ctx.JobID)
 	job, expired := resolveSubmissionJob(ctx.JobID, job, prevJob)
 	m.mu.Unlock()
 	if !ok || miner == nil {

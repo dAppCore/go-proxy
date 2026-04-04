@@ -137,6 +137,9 @@ func TestMapper_OnResultAccepted_ExpiredUsesPreviousJob(t *testing.T) {
 	mapper.storage.job = proxy.Job{JobID: "job-new", Blob: "blob-new", Target: "b88d0600"}
 	mapper.storage.prevJob = proxy.Job{JobID: "job-old", Blob: "blob-old", Target: "b88d0600"}
 	mapper.storage.miners[miner.ID()] = miner
+	if !mapper.storage.IsValidJobID("job-old") {
+		t.Fatal("expected previous job to validate before result handling")
+	}
 	mapper.pending[9] = SubmitContext{
 		RequestID: 42,
 		MinerID:   miner.ID(),
@@ -145,6 +148,10 @@ func TestMapper_OnResultAccepted_ExpiredUsesPreviousJob(t *testing.T) {
 	}
 
 	mapper.OnResultAccepted(9, true, "")
+
+	if got := mapper.storage.expired; got != 1 {
+		t.Fatalf("expected one expired validation, got %d", got)
+	}
 
 	select {
 	case event := <-events:
