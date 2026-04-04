@@ -1086,6 +1086,7 @@ func (m *Miner) replyLoginSuccess(id int64) {
 	payload := map[string]any{
 		"id":      id,
 		"jsonrpc": "2.0",
+		"error":   nil,
 		"result":  result,
 	}
 	_ = m.writeJSON(payload)
@@ -1133,6 +1134,7 @@ func (m *Miner) Success(id int64, status string) {
 	payload := map[string]any{
 		"id":      id,
 		"jsonrpc": "2.0",
+		"error":   nil,
 		"result": map[string]any{
 			"status": status,
 		},

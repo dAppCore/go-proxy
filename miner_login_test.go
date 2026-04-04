@@ -54,6 +54,7 @@ func TestMiner_HandleLogin_Good(t *testing.T) {
 	<-done
 
 	var payload struct {
+		Error  json.RawMessage `json:"error"`
 		Result struct {
 			ID         string         `json:"id"`
 			Status     string         `json:"status"`
@@ -65,6 +66,9 @@ func TestMiner_HandleLogin_Good(t *testing.T) {
 		t.Fatalf("unmarshal login response: %v", err)
 	}
 
+	if string(payload.Error) != "null" {
+		t.Fatalf("expected login response error to be null, got %s", string(payload.Error))
+	}
 	if payload.Result.Status != "OK" {
 		t.Fatalf("expected login success, got %q", payload.Result.Status)
 	}
@@ -293,8 +297,11 @@ func TestMiner_HandleKeepalived_Good(t *testing.T) {
 	if err := json.Unmarshal(line, &payload); err != nil {
 		t.Fatalf("unmarshal keepalived response: %v", err)
 	}
-	if _, ok := payload["error"]; ok {
-		t.Fatalf("expected keepalived response to omit error field, got %s", string(line))
+	if _, ok := payload["error"]; !ok {
+		t.Fatalf("expected keepalived response to include error field, got %s", string(line))
+	}
+	if string(payload["error"]) != "null" {
+		t.Fatalf("expected keepalived response error to be null, got %s", string(payload["error"]))
 	}
 	var result struct {
 		Status string `json:"status"`
