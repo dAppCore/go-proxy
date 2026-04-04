@@ -166,10 +166,23 @@ func (p *Proxy) Start() {
 	}
 	for _, bind := range p.config.Bind {
 		var tlsCfg *tls.Config
-		if bind.TLS && p.config.TLS.Enabled {
-			tlsCfg = buildTLSConfig(p.config.TLS)
+		if bind.TLS {
+			if !p.config.TLS.Enabled {
+				p.Stop()
+				return
+			}
+			var result Result
+			tlsCfg, result = buildTLSConfig(p.config.TLS)
+			if !result.OK {
+				p.Stop()
+				return
+			}
 		}
-		server, _ := NewServer(bind, tlsCfg, p.rateLimit, p.acceptMiner)
+		server, result := NewServer(bind, tlsCfg, p.rateLimit, p.acceptMiner)
+		if !result.OK {
+			p.Stop()
+			return
+		}
 		p.servers = append(p.servers, server)
 		server.Start()
 	}
@@ -234,6 +247,10 @@ func (p *Proxy) Stop() {
 			defer cancel()
 			_ = p.httpServer.Shutdown(ctx)
 		}
+		deadline := time.Now().Add(5 * time.Second)
+		for p.submitCount.Load() > 0 && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
 		if p.accessLog != nil {
 			p.accessLog.Close()
 		}
@@ -262,6 +279,11 @@ func (p *Proxy) Reload(cfg *Config) {
 		p.customDiff.globalDiff = cfg.CustomDiff
 	}
 	p.rateLimit = NewRateLimiter(cfg.RateLimit)
+	for _, server := range p.servers {
+		if server != nil {
+			server.limiter = p.rateLimit
+		}
+	}
 	if p.accessLog != nil {
 		p.accessLog.SetPath(cfg.AccessLogFile)
 	}
@@ -289,6 +311,8 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 		}
 	}
 	miner.onSubmit = func(m *Miner, event *SubmitEvent) {
+		p.submitCount.Add(1)
+		defer p.submitCount.Add(-1)
 		if p.splitter != nil {
 			p.splitter.OnSubmit(event)
 		}
@@ -310,18 +334,21 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner.Start()
 }
 
-func buildTLSConfig(cfg TLSConfig) *tls.Config {
-	if !cfg.Enabled || cfg.CertFile == "" || cfg.KeyFile == "" {
-		return nil
+func buildTLSConfig(cfg TLSConfig) (*tls.Config, Result) {
+	if !cfg.Enabled {
+		return nil, successResult()
+	}
+	if cfg.CertFile == "" || cfg.KeyFile == "" {
+		return nil, errorResult(errors.New("tls certificate or key path is empty"))
 	}
 	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
-		return nil
+		return nil, errorResult(err)
 	}
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
 	applyTLSProtocols(tlsConfig, cfg.Protocols)
 	applyTLSCiphers(tlsConfig, cfg.Ciphers)
-	return tlsConfig
+	return tlsConfig, successResult()
 }
 
 func applyTLSProtocols(tlsConfig *tls.Config, protocols string) {
@@ -1344,13 +1371,17 @@ func NewServer(bind BindAddr, tlsCfg *tls.Config, limiter *RateLimiter, onAccept
 	if onAccept == nil {
 		onAccept = func(net.Conn, uint16) {}
 	}
-	return &Server{
+	server := &Server{
 		addr:     bind,
 		tlsCfg:   tlsCfg,
 		limiter:  limiter,
 		onAccept: onAccept,
 		done:     make(chan struct{}),
-	}, successResult()
+	}
+	if result := server.listen(); !result.OK {
+		return nil, result
+	}
+	return server, successResult()
 }
 
 // Start begins accepting connections in a goroutine.
@@ -1358,19 +1389,12 @@ func (s *Server) Start() {
 	if s == nil {
 		return
 	}
+	if result := s.listen(); !result.OK {
+		return
+	}
 	go func() {
-		ln, err := net.Listen("tcp", net.JoinHostPort(s.addr.Host, strconv.Itoa(int(s.addr.Port))))
-		if err != nil {
-			return
-		}
-		if s.tlsCfg != nil || s.addr.TLS {
-			if s.tlsCfg != nil {
-				ln = tls.NewListener(ln, s.tlsCfg)
-			}
-		}
-		s.listener = ln
 		for {
-			conn, err := ln.Accept()
+			conn, err := s.listener.Accept()
 			if err != nil {
 				select {
 				case <-s.done:
@@ -1403,6 +1427,27 @@ func (s *Server) Stop() {
 	if s.listener != nil {
 		_ = s.listener.Close()
 	}
+}
+
+func (s *Server) listen() Result {
+	if s == nil {
+		return errorResult(errors.New("server is nil"))
+	}
+	if s.listener != nil {
+		return successResult()
+	}
+	if s.addr.TLS && s.tlsCfg == nil {
+		return errorResult(errors.New("tls listener requires a tls config"))
+	}
+	ln, err := net.Listen("tcp", net.JoinHostPort(s.addr.Host, strconv.Itoa(int(s.addr.Port))))
+	if err != nil {
+		return errorResult(err)
+	}
+	if s.tlsCfg != nil {
+		ln = tls.NewListener(ln, s.tlsCfg)
+	}
+	s.listener = ln
+	return successResult()
 }
 
 // NewConfig returns a minimal config? not used.

@@ -56,3 +56,30 @@ func TestProxy_Reload_Good(t *testing.T) {
 		t.Fatalf("expected rate limiter to be replaced with active configuration")
 	}
 }
+
+func TestProxy_Reload_UpdatesServers(t *testing.T) {
+	originalLimiter := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1})
+	p := &Proxy{
+		config:    &Config{Mode: "nicehash", Workers: WorkersByRigID},
+		rateLimit: originalLimiter,
+		servers: []*Server{
+			{limiter: originalLimiter},
+		},
+	}
+
+	p.Reload(&Config{
+		Mode:          "nicehash",
+		Workers:       WorkersByRigID,
+		Bind:          []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:         []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		RateLimit:     RateLimit{MaxConnectionsPerMinute: 10},
+		AccessLogFile: "",
+	})
+
+	if got := p.servers[0].limiter; got != p.rateLimit {
+		t.Fatalf("expected server limiter to be updated")
+	}
+	if p.rateLimit == originalLimiter {
+		t.Fatalf("expected rate limiter instance to be replaced")
+	}
+}

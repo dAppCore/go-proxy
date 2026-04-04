@@ -332,9 +332,9 @@ func refillBucket(bucket *tokenBucket, limit int, now time.Time) {
 		}
 		return
 	}
-	interval := time.Duration(60/limit) * time.Second
+	interval := time.Duration(time.Minute) / time.Duration(limit)
 	if interval <= 0 {
-		interval = time.Second
+		interval = time.Nanosecond
 	}
 	elapsed := now.Sub(bucket.lastRefill)
 	if elapsed < interval {
