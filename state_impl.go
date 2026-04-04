@@ -134,9 +134,13 @@ func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 	defer p.minersMu.RUnlock()
 	rows := make([]MinerSnapshot, 0, len(p.miners))
 	for _, miner := range p.miners {
+		ip := miner.RemoteAddr()
+		if ip == "" {
+			ip = miner.IP()
+		}
 		rows = append(rows, MinerSnapshot{
 			ID:       miner.id,
-			IP:       miner.ip,
+			IP:       ip,
 			TX:       miner.tx,
 			RX:       miner.rx,
 			State:    miner.state,
@@ -721,7 +725,8 @@ func NewMiner(conn net.Conn, localPort uint16, tlsCfg *tls.Config) *Miner {
 		miner.tlsConn = tlsConn
 	}
 	if remote := conn.RemoteAddr(); remote != nil {
-		miner.ip = hostOnly(remote.String())
+		miner.remoteAddr = remote.String()
+		miner.ip = hostOnly(miner.remoteAddr)
 	}
 	return miner
 }
@@ -766,6 +771,12 @@ func (m *Miner) SetFixedByte(value uint8) {
 }
 func (m *Miner) IP() string {
 	return m.ip
+}
+func (m *Miner) RemoteAddr() string {
+	if m == nil {
+		return ""
+	}
+	return m.remoteAddr
 }
 func (m *Miner) User() string {
 	return m.user
