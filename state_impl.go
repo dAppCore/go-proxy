@@ -1331,7 +1331,9 @@ func (w *Workers) List() []WorkerRecord {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	out := make([]WorkerRecord, len(w.entries))
-	copy(out, w.entries)
+	for i := range w.entries {
+		out[i] = cloneWorkerRecord(w.entries[i])
+	}
 	return out
 }
 
@@ -1382,6 +1384,17 @@ func (r *WorkerRecord) Hashrate(seconds int) float64 {
 		return 0
 	}
 	return float64(total) / float64(seconds)
+}
+
+func cloneWorkerRecord(record WorkerRecord) WorkerRecord {
+	cloned := record
+	for i := range record.windows {
+		if len(record.windows[i].buckets) == 0 {
+			continue
+		}
+		cloned.windows[i].buckets = append([]uint64(nil), record.windows[i].buckets...)
+	}
+	return cloned
 }
 
 // Apply parses login suffixes and applies the configured global difficulty.
