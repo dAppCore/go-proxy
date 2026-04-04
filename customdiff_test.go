@@ -18,8 +18,8 @@ func TestCustomDiff_OnLogin(t *testing.T) {
 	if miner.User() != "WALLET+abc" {
 		t.Fatalf("expected invalid suffix to remain unchanged")
 	}
-	if miner.customDiff != 10000 {
-		t.Fatalf("expected global diff fallback for invalid suffix, got %d", miner.customDiff)
+	if miner.customDiff != 0 {
+		t.Fatalf("expected invalid suffix to disable custom diff, got %d", miner.customDiff)
 	}
 
 	miner = &Miner{user: "WALLET"}
