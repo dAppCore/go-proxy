@@ -2,6 +2,7 @@ package simple
 
 import (
 	"testing"
+	"time"
 
 	"dappco.re/go/proxy"
 	"dappco.re/go/proxy/pool"
@@ -24,6 +25,7 @@ func TestSimpleSplitter_OnLogin_Good(t *testing.T) {
 		id:         7,
 		strategy:   activeStrategy{},
 		currentJob: job,
+		idleAt:     time.Now(),
 	}
 	splitter.idle[mapper.id] = mapper
 
@@ -34,5 +36,33 @@ func TestSimpleSplitter_OnLogin_Good(t *testing.T) {
 	}
 	if got := miner.CurrentJob().JobID; got != job.JobID {
 		t.Fatalf("expected current job to be restored on reuse, got %q", got)
+	}
+}
+
+func TestSimpleSplitter_OnLogin_Ugly(t *testing.T) {
+	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, func(listener pool.StratumListener) pool.Strategy {
+		return activeStrategy{}
+	})
+	miner := &proxy.Miner{}
+	expired := &SimpleMapper{
+		id:       7,
+		strategy: activeStrategy{},
+		idleAt:   time.Now().Add(-time.Minute),
+	}
+	splitter.idle[expired.id] = expired
+
+	splitter.OnLogin(&proxy.LoginEvent{Miner: miner})
+
+	if miner.RouteID() == expired.id {
+		t.Fatalf("expected expired mapper not to be reclaimed")
+	}
+	if miner.RouteID() != 0 {
+		t.Fatalf("expected a new mapper to be allocated, got route id %d", miner.RouteID())
+	}
+	if len(splitter.active) != 1 {
+		t.Fatalf("expected one active mapper, got %d", len(splitter.active))
+	}
+	if len(splitter.idle) != 1 {
+		t.Fatalf("expected expired mapper to remain idle until GC, got %d idle mappers", len(splitter.idle))
 	}
 }

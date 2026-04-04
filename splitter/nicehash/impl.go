@@ -290,6 +290,7 @@ func (m *NonceMapper) OnResultAccepted(sequence int64, accepted bool, errorMessa
 	job := m.storage.job
 	prevJob := m.storage.prevJob
 	m.storage.mu.Unlock()
+	_ = m.storage.IsValidJobID(ctx.JobID)
 	expired := ctx.JobID != "" && ctx.JobID == prevJob.JobID && ctx.JobID != job.JobID
 	m.mu.Unlock()
 	if !ok || miner == nil {
@@ -400,7 +401,17 @@ func (s *NonceStorage) IsValidJobID(id string) bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return id != "" && (id == s.job.JobID || id == s.prevJob.JobID)
+	if id == "" {
+		return false
+	}
+	if id == s.job.JobID {
+		return true
+	}
+	if id == s.prevJob.JobID && s.prevJob.JobID != "" {
+		s.expired++
+		return true
+	}
+	return false
 }
 
 // SlotCount returns free, dead, and active counts.

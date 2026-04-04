@@ -20,6 +20,7 @@ type NonceStorage struct {
 	miners  map[int64]*proxy.Miner // minerID → Miner pointer for active miners
 	job     proxy.Job              // current job from pool
 	prevJob proxy.Job              // previous job (for stale submit validation)
-	cursor  int                    // search starts here (round-robin allocation)
+	expired uint64
+	cursor  int // search starts here (round-robin allocation)
 	mu      sync.Mutex
 }

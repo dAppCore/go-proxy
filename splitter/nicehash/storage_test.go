@@ -24,3 +24,22 @@ func TestNonceStorage_AddAndRemove(t *testing.T) {
 		t.Fatalf("unexpected slot counts: free=%d dead=%d active=%d", free, dead, active)
 	}
 }
+
+func TestNonceStorage_IsValidJobID_Ugly(t *testing.T) {
+	storage := NewNonceStorage()
+	storage.job = proxy.Job{JobID: "job-2"}
+	storage.prevJob = proxy.Job{JobID: "job-1"}
+
+	if !storage.IsValidJobID("job-2") {
+		t.Fatalf("expected current job to be valid")
+	}
+	if !storage.IsValidJobID("job-1") {
+		t.Fatalf("expected previous job to remain valid")
+	}
+	if storage.expired != 1 {
+		t.Fatalf("expected one expired job validation, got %d", storage.expired)
+	}
+	if storage.IsValidJobID("") {
+		t.Fatalf("expected empty job id to be invalid")
+	}
+}

@@ -53,10 +53,11 @@ func (s *SimpleSplitter) OnLogin(event *proxy.LoginEvent) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	now := time.Now()
 
 	if s.cfg.ReuseTimeout > 0 {
 		for id, mapper := range s.idle {
-			if mapper.strategy != nil && mapper.strategy.IsActive() {
+			if mapper.strategy != nil && mapper.strategy.IsActive() && !mapper.idleAt.IsZero() && now.Sub(mapper.idleAt) <= time.Duration(s.cfg.ReuseTimeout)*time.Second {
 				delete(s.idle, id)
 				mapper.miner = event.Miner
 				mapper.idleAt = time.Time{}
