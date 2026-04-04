@@ -963,17 +963,17 @@ type stratumRequest struct {
 }
 
 func (m *Miner) handleLine(line []byte) bool {
-	var req stratumRequest
-	if err := json.Unmarshal(line, &req); err != nil {
+	var request stratumRequest
+	if err := json.Unmarshal(line, &request); err != nil {
 		return false
 	}
-	switch req.Method {
+	switch request.Method {
 	case "login":
-		m.handleLogin(req)
+		m.handleLogin(request)
 	case "submit":
-		m.handleSubmit(req)
+		m.handleSubmit(request)
 	case "keepalived":
-		m.handleKeepalived(req)
+		m.handleKeepalived(request)
 	}
 	return true
 }
@@ -986,17 +986,17 @@ type loginParams struct {
 	RigID string   `json:"rigid"`
 }
 
-func (m *Miner) handleLogin(req stratumRequest) {
+func (m *Miner) handleLogin(request stratumRequest) {
 	if m.state != MinerStateWaitLogin {
 		return
 	}
 	var params loginParams
-	if err := json.Unmarshal(req.Params, &params); err != nil || strings.TrimSpace(params.Login) == "" {
-		m.ReplyWithError(requestID(req.ID), "Invalid payment address provided")
+	if err := json.Unmarshal(request.Params, &params); err != nil || strings.TrimSpace(params.Login) == "" {
+		m.ReplyWithError(requestID(request.ID), "Invalid payment address provided")
 		return
 	}
 	if m.accessPassword != "" && params.Pass != m.accessPassword {
-		m.ReplyWithError(requestID(req.ID), "Invalid password")
+		m.ReplyWithError(requestID(request.ID), "Invalid password")
 		return
 	}
 	m.user, m.customDiff = parseLoginUser(params.Login, m.globalDiff)
@@ -1018,16 +1018,16 @@ func (m *Miner) handleLogin(req stratumRequest) {
 		if m.MapperID() < 0 {
 			m.state = MinerStateWaitLogin
 			m.rpcID = ""
-			m.ReplyWithError(requestID(req.ID), "Proxy is full, try again later")
+			m.ReplyWithError(requestID(request.ID), "Proxy is full, try again later")
 			return
 		}
 	} else if m.RouteID() < 0 {
 		m.state = MinerStateWaitLogin
 		m.rpcID = ""
-		m.ReplyWithError(requestID(req.ID), "Proxy is unavailable, try again later")
+		m.ReplyWithError(requestID(request.ID), "Proxy is unavailable, try again later")
 		return
 	}
-	m.replyLoginSuccess(requestID(req.ID))
+	m.replyLoginSuccess(requestID(request.ID))
 }
 
 func parseLoginUser(login string, globalDiff uint64) (string, uint64) {
@@ -1044,9 +1044,9 @@ func parseLoginUser(login string, globalDiff uint64) (string, uint64) {
 	return login, 0
 }
 
-func (m *Miner) handleSubmit(req stratumRequest) {
+func (m *Miner) handleSubmit(request stratumRequest) {
 	if m.state != MinerStateReady {
-		m.ReplyWithError(requestID(req.ID), "Unauthenticated")
+		m.ReplyWithError(requestID(request.ID), "Unauthenticated")
 		return
 	}
 	var params struct {
@@ -1056,20 +1056,20 @@ func (m *Miner) handleSubmit(req stratumRequest) {
 		Result string `json:"result"`
 		Algo   string `json:"algo"`
 	}
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		m.ReplyWithError(requestID(req.ID), "Invalid nonce")
+	if err := json.Unmarshal(request.Params, &params); err != nil {
+		m.ReplyWithError(requestID(request.ID), "Invalid nonce")
 		return
 	}
 	if params.ID != m.rpcID {
-		m.ReplyWithError(requestID(req.ID), "Unauthenticated")
+		m.ReplyWithError(requestID(request.ID), "Unauthenticated")
 		return
 	}
 	if params.JobID == "" {
-		m.ReplyWithError(requestID(req.ID), "Missing job id")
+		m.ReplyWithError(requestID(request.ID), "Missing job id")
 		return
 	}
 	if !isLowerHex8(params.Nonce) {
-		m.ReplyWithError(requestID(req.ID), "Invalid nonce")
+		m.ReplyWithError(requestID(request.ID), "Invalid nonce")
 		return
 	}
 	if m.onSubmit != nil {
@@ -1079,15 +1079,15 @@ func (m *Miner) handleSubmit(req stratumRequest) {
 			Nonce:     params.Nonce,
 			Result:    params.Result,
 			Algo:      params.Algo,
-			RequestID: requestID(req.ID),
+			RequestID: requestID(request.ID),
 		})
 	}
 	m.touchActivity()
 }
 
-func (m *Miner) handleKeepalived(req stratumRequest) {
+func (m *Miner) handleKeepalived(request stratumRequest) {
 	m.touchActivity()
-	m.Success(requestID(req.ID), "KEEPALIVED")
+	m.Success(requestID(request.ID), "KEEPALIVED")
 }
 
 func requestID(id any) int64 {
@@ -1432,18 +1432,18 @@ func insertTopDiff(top *[10]uint64, diff uint64) {
 //
 //	workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
 //	workers.OnLogin(proxy.Event{Miner: miner})
-func NewWorkers(mode WorkersMode, bus *EventBus) *Workers {
+func NewWorkers(mode WorkersMode, eventBus *EventBus) *Workers {
 	workers := &Workers{
 		mode:      mode,
 		nameIndex: make(map[string]int),
 		idIndex:   make(map[int64]int),
 	}
-	workers.bindEvents(bus)
+	workers.bindEvents(eventBus)
 	return workers
 }
 
-func (w *Workers) bindEvents(bus *EventBus) {
-	if w == nil || bus == nil {
+func (w *Workers) bindEvents(eventBus *EventBus) {
+	if w == nil || eventBus == nil {
 		return
 	}
 	w.mu.Lock()
@@ -1451,10 +1451,10 @@ func (w *Workers) bindEvents(bus *EventBus) {
 	if w.subscribed {
 		return
 	}
-	bus.Subscribe(EventLogin, w.OnLogin)
-	bus.Subscribe(EventAccept, w.OnAccept)
-	bus.Subscribe(EventReject, w.OnReject)
-	bus.Subscribe(EventClose, w.OnClose)
+	eventBus.Subscribe(EventLogin, w.OnLogin)
+	eventBus.Subscribe(EventAccept, w.OnAccept)
+	eventBus.Subscribe(EventReject, w.OnReject)
+	eventBus.Subscribe(EventClose, w.OnClose)
 	w.subscribed = true
 }
 

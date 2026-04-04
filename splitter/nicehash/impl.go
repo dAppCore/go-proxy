@@ -8,20 +8,20 @@ import (
 )
 
 func init() {
-	proxy.RegisterSplitterFactory("nicehash", func(cfg *proxy.Config, events *proxy.EventBus) proxy.Splitter {
-		return NewNonceSplitter(cfg, events, pool.NewStrategyFactory(cfg))
+	proxy.RegisterSplitterFactory("nicehash", func(config *proxy.Config, eventBus *proxy.EventBus) proxy.Splitter {
+		return NewNonceSplitter(config, eventBus, pool.NewStrategyFactory(config))
 	})
 }
 
 // NewNonceSplitter creates a NiceHash splitter.
-func NewNonceSplitter(config *proxy.Config, events *proxy.EventBus, factory pool.StrategyFactory) *NonceSplitter {
+func NewNonceSplitter(config *proxy.Config, eventBus *proxy.EventBus, factory pool.StrategyFactory) *NonceSplitter {
 	if factory == nil {
 		factory = pool.NewStrategyFactory(config)
 	}
 	return &NonceSplitter{
 		byID:            make(map[int64]*NonceMapper),
 		config:          config,
-		events:          events,
+		events:          eventBus,
 		strategyFactory: factory,
 	}
 }
@@ -212,13 +212,13 @@ func (s *NonceSplitter) addMapperLocked() *NonceMapper {
 }
 
 // NewNonceMapper creates a mapper for one upstream connection.
-func NewNonceMapper(id int64, cfg *proxy.Config, strategy pool.Strategy) *NonceMapper {
+func NewNonceMapper(id int64, config *proxy.Config, strategy pool.Strategy) *NonceMapper {
 	return &NonceMapper{
 		id:       id,
 		storage:  NewNonceStorage(),
 		strategy: strategy,
 		pending:  make(map[int64]SubmitContext),
-		config:   cfg,
+		config:   config,
 	}
 }
 

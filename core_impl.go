@@ -56,12 +56,12 @@ func LoadConfig(path string) (*Config, Result) {
 		return nil, errorResult(err)
 	}
 
-	cfg := &Config{}
-	if err := json.Unmarshal(data, cfg); err != nil {
+	config := &Config{}
+	if err := json.Unmarshal(data, config); err != nil {
 		return nil, errorResult(err)
 	}
-	cfg.configPath = path
-	return cfg, cfg.Validate()
+	config.configPath = path
+	return config, config.Validate()
 }
 
 // Validate checks that mandatory bind and pool settings are present.
@@ -324,9 +324,9 @@ func (w *ConfigWatcher) Start() {
 				mod := info.ModTime()
 				if mod.After(w.lastMod) {
 					w.lastMod = mod
-					cfg, result := LoadConfig(w.path)
-					if result.OK && cfg != nil {
-						w.onChange(cfg)
+					config, result := LoadConfig(w.path)
+					if result.OK && config != nil {
+						w.onChange(config)
 					}
 				}
 			case <-w.done:

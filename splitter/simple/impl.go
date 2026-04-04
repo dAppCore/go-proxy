@@ -8,13 +8,13 @@ import (
 )
 
 func init() {
-	proxy.RegisterSplitterFactory("simple", func(cfg *proxy.Config, events *proxy.EventBus) proxy.Splitter {
-		return NewSimpleSplitter(cfg, events, pool.NewStrategyFactory(cfg))
+	proxy.RegisterSplitterFactory("simple", func(config *proxy.Config, eventBus *proxy.EventBus) proxy.Splitter {
+		return NewSimpleSplitter(config, eventBus, pool.NewStrategyFactory(config))
 	})
 }
 
 // NewSimpleSplitter creates the passthrough splitter.
-func NewSimpleSplitter(config *proxy.Config, events *proxy.EventBus, factory pool.StrategyFactory) *SimpleSplitter {
+func NewSimpleSplitter(config *proxy.Config, eventBus *proxy.EventBus, factory pool.StrategyFactory) *SimpleSplitter {
 	if factory == nil {
 		factory = pool.NewStrategyFactory(config)
 	}
@@ -22,7 +22,7 @@ func NewSimpleSplitter(config *proxy.Config, events *proxy.EventBus, factory poo
 		active:  make(map[int64]*SimpleMapper),
 		idle:    make(map[int64]*SimpleMapper),
 		config:  config,
-		events:  events,
+		events:  eventBus,
 		factory: factory,
 	}
 }
