@@ -171,9 +171,27 @@ func (s *SimpleSplitter) Upstreams() proxy.UpstreamStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var stats proxy.UpstreamStats
-	stats.Active = uint64(len(s.active))
-	stats.Sleep = uint64(len(s.idle))
-	stats.Total = stats.Active + stats.Sleep
+	for _, mapper := range s.active {
+		if mapper == nil {
+			continue
+		}
+		if mapper.stopped || mapper.strategy == nil || !mapper.strategy.IsActive() {
+			stats.Error++
+			continue
+		}
+		stats.Active++
+	}
+	for _, mapper := range s.idle {
+		if mapper == nil {
+			continue
+		}
+		if mapper.stopped || mapper.strategy == nil || !mapper.strategy.IsActive() {
+			stats.Error++
+			continue
+		}
+		stats.Sleep++
+	}
+	stats.Total = stats.Active + stats.Sleep + stats.Error
 	return stats
 }
 

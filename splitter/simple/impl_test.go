@@ -66,3 +66,49 @@ func TestSimpleSplitter_OnLogin_Ugly(t *testing.T) {
 		t.Fatalf("expected expired mapper to remain idle until GC, got %d idle mappers", len(splitter.idle))
 	}
 }
+
+func TestSimpleSplitter_Upstreams_Good(t *testing.T) {
+	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, func(listener pool.StratumListener) pool.Strategy {
+		return activeStrategy{}
+	})
+	splitter.active[1] = &SimpleMapper{id: 1, strategy: activeStrategy{}}
+	splitter.idle[2] = &SimpleMapper{id: 2, strategy: activeStrategy{}, idleAt: time.Now()}
+
+	stats := splitter.Upstreams()
+
+	if stats.Active != 1 {
+		t.Fatalf("expected one active upstream, got %d", stats.Active)
+	}
+	if stats.Sleep != 1 {
+		t.Fatalf("expected one sleeping upstream, got %d", stats.Sleep)
+	}
+	if stats.Error != 0 {
+		t.Fatalf("expected no error upstreams, got %d", stats.Error)
+	}
+	if stats.Total != 2 {
+		t.Fatalf("expected total upstreams to be 2, got %d", stats.Total)
+	}
+}
+
+func TestSimpleSplitter_Upstreams_Ugly(t *testing.T) {
+	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, func(listener pool.StratumListener) pool.Strategy {
+		return activeStrategy{}
+	})
+	splitter.active[1] = &SimpleMapper{id: 1, strategy: activeStrategy{}, stopped: true}
+	splitter.idle[2] = &SimpleMapper{id: 2, strategy: activeStrategy{}, stopped: true, idleAt: time.Now()}
+
+	stats := splitter.Upstreams()
+
+	if stats.Active != 0 {
+		t.Fatalf("expected no active upstreams, got %d", stats.Active)
+	}
+	if stats.Sleep != 0 {
+		t.Fatalf("expected no sleeping upstreams, got %d", stats.Sleep)
+	}
+	if stats.Error != 2 {
+		t.Fatalf("expected both upstreams to be counted as error, got %d", stats.Error)
+	}
+	if stats.Total != 2 {
+		t.Fatalf("expected total upstreams to be 2, got %d", stats.Total)
+	}
+}
