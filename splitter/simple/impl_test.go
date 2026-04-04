@@ -1,6 +1,8 @@
 package simple
 
 import (
+	"bufio"
+	"encoding/json"
 	"io"
 	"net"
 	"sync"
@@ -161,5 +163,57 @@ func TestSimpleMapper_OnResultAccepted_Expired(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatal("expected accept event")
+	}
+}
+
+func TestSimpleMapper_Submit_InvalidJob_Good(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := proxy.NewMiner(minerConn, 3333, nil)
+	mapper := &SimpleMapper{
+		miner:      miner,
+		currentJob: proxy.Job{JobID: "job-1", Blob: "blob", Target: "b88d0600"},
+		prevJob:    proxy.Job{JobID: "job-0", Blob: "blob", Target: "b88d0600"},
+		strategy:   activeStrategy{},
+		pending:    make(map[int64]submitContext),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		mapper.Submit(&proxy.SubmitEvent{
+			Miner:     miner,
+			JobID:     "job-missing",
+			Nonce:     "deadbeef",
+			Result:    "hash",
+			RequestID: 9,
+		})
+		close(done)
+	}()
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read error reply: %v", err)
+	}
+	<-done
+
+	var payload struct {
+		ID    float64 `json:"id"`
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("unmarshal error reply: %v", err)
+	}
+	if payload.ID != 9 {
+		t.Fatalf("expected request id 9, got %v", payload.ID)
+	}
+	if payload.Error.Message != "Invalid job id" {
+		t.Fatalf("expected invalid job error, got %q", payload.Error.Message)
+	}
+	if len(mapper.pending) != 0 {
+		t.Fatalf("expected invalid submit not to create a pending entry")
 	}
 }

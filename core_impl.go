@@ -181,19 +181,7 @@ func (cd *CustomDiff) OnLogin(e Event) {
 	if cd == nil || e.Miner == nil {
 		return
 	}
-	miner := e.Miner
-	user := miner.user
-	plus := strings.LastIndex(user, "+")
-	if plus >= 0 && plus < len(user)-1 {
-		if parsed, err := strconv.ParseUint(user[plus+1:], 10, 64); err == nil {
-			miner.user = user[:plus]
-			miner.customDiff = parsed
-		}
-		return
-	}
-	if cd.globalDiff > 0 {
-		miner.customDiff = cd.globalDiff
-	}
+	e.Miner.user, e.Miner.customDiff = parseLoginUser(e.Miner.user, cd.globalDiff)
 }
 
 // NewRateLimiter creates a per-IP token bucket limiter.

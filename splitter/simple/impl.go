@@ -221,8 +221,23 @@ func (m *SimpleMapper) Submit(event *proxy.SubmitEvent) {
 	if jobID == "" {
 		jobID = m.currentJob.JobID
 	}
+	if jobID == "" || (jobID != m.currentJob.JobID && jobID != m.prevJob.JobID) {
+		m.rejectInvalidJobLocked(event, m.currentJob)
+		return
+	}
 	seq := m.strategy.Submit(jobID, event.Nonce, event.Result, event.Algo)
 	m.pending[seq] = submitContext{RequestID: event.RequestID, StartedAt: time.Now(), JobID: jobID}
+}
+
+func (m *SimpleMapper) rejectInvalidJobLocked(event *proxy.SubmitEvent, job proxy.Job) {
+	if event == nil || event.Miner == nil {
+		return
+	}
+	event.Miner.ReplyWithError(event.RequestID, "Invalid job id")
+	if m.events != nil {
+		jobCopy := job
+		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: event.Miner, Job: &jobCopy, Error: "Invalid job id"})
+	}
 }
 
 // OnJob forwards the latest pool job to the active miner.

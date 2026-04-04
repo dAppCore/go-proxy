@@ -841,7 +841,6 @@ func parseLoginUser(login string, globalDiff uint64) (string, uint64) {
 		if parsed, err := strconv.ParseUint(login[plus+1:], 10, 64); err == nil {
 			return login[:plus], parsed
 		}
-		return login, 0
 	}
 	if globalDiff > 0 {
 		return login, globalDiff

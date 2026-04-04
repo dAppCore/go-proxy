@@ -234,12 +234,13 @@ func (m *NonceMapper) Submit(event *proxy.SubmitEvent) {
 	jobID := event.JobID
 	m.storage.mu.Lock()
 	job := m.storage.job
-	prevJob := m.storage.prevJob
 	m.storage.mu.Unlock()
 	if jobID == "" {
 		jobID = job.JobID
 	}
-	if jobID == "" || (jobID != job.JobID && jobID != prevJob.JobID) {
+	valid := m.storage.IsValidJobID(jobID)
+	if jobID == "" || !valid {
+		m.rejectInvalidJobLocked(event, job)
 		return
 	}
 	seq := m.strategy.Submit(jobID, event.Nonce, event.Result, event.Algo)
@@ -250,6 +251,14 @@ func (m *NonceMapper) Submit(event *proxy.SubmitEvent) {
 		StartedAt: time.Now(),
 	}
 	m.lastUsed = time.Now()
+}
+
+func (m *NonceMapper) rejectInvalidJobLocked(event *proxy.SubmitEvent, job proxy.Job) {
+	event.Miner.ReplyWithError(event.RequestID, "Invalid job id")
+	if m.events != nil {
+		jobCopy := job
+		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: event.Miner, Job: &jobCopy, Error: "Invalid job id"})
+	}
 }
 
 // IsActive reports whether the mapper has received a valid job.
