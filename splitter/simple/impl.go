@@ -136,8 +136,10 @@ func (s *SimpleSplitter) GC() {
 	}
 }
 
-// Tick is a no-op for simple mode.
-func (s *SimpleSplitter) Tick(ticks uint64) {}
+// Tick advances timeout checks in simple mode.
+func (s *SimpleSplitter) Tick(ticks uint64) {
+	s.GC()
+}
 
 // Upstreams returns active/idle/error counts.
 func (s *SimpleSplitter) Upstreams() proxy.UpstreamStats {
@@ -159,7 +161,7 @@ func (s *SimpleSplitter) newMapperLocked() *SimpleMapper {
 	mapper := &SimpleMapper{
 		id:      id,
 		events:  s.events,
-		pending: make(map[int64]*proxy.SubmitEvent),
+		pending: make(map[int64]submitContext),
 	}
 	mapper.strategy = s.factory(mapper)
 	if mapper.strategy == nil {
@@ -176,7 +178,7 @@ func (m *SimpleMapper) Submit(event *proxy.SubmitEvent) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	seq := m.strategy.Submit(event.JobID, event.Nonce, event.Result, event.Algo)
-	m.pending[seq] = event
+	m.pending[seq] = submitContext{RequestID: event.RequestID, StartedAt: time.Now()}
 }
 
 // OnJob forwards the latest pool job to the active miner.
@@ -200,25 +202,36 @@ func (m *SimpleMapper) OnResultAccepted(sequence int64, accepted bool, errorMess
 		return
 	}
 	m.mu.Lock()
-	ctx := m.pending[sequence]
-	delete(m.pending, sequence)
+	ctx, ok := m.pending[sequence]
+	if ok {
+		delete(m.pending, sequence)
+	}
 	miner := m.miner
 	m.mu.Unlock()
-	if ctx == nil || miner == nil {
+	if !ok || miner == nil {
 		return
+	}
+	latency := uint16(0)
+	if !ctx.StartedAt.IsZero() {
+		elapsed := time.Since(ctx.StartedAt).Milliseconds()
+		if elapsed > int64(^uint16(0)) {
+			latency = ^uint16(0)
+		} else {
+			latency = uint16(elapsed)
+		}
 	}
 	if accepted {
 		miner.Success(ctx.RequestID, "OK")
 		if m.events != nil {
 			job := miner.CurrentJob()
-			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job})
+			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job, Latency: latency})
 		}
 		return
 	}
 	miner.ReplyWithError(ctx.RequestID, errorMessage)
 	if m.events != nil {
 		job := miner.CurrentJob()
-		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job, Error: errorMessage})
+		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job, Error: errorMessage, Latency: latency})
 	}
 }
 

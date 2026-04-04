@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"errors"
-	"io"
 	"net"
 	"net/http"
 	"sort"
@@ -120,7 +119,7 @@ func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 			TX:       miner.tx,
 			RX:       miner.rx,
 			State:    miner.state,
-			Diff:     miner.customDiff,
+			Diff:     miner.diff,
 			User:     miner.user,
 			Password: "********",
 			RigID:    miner.rigID,
@@ -145,6 +144,14 @@ func (p *Proxy) Upstreams() UpstreamStats {
 		return UpstreamStats{}
 	}
 	return p.splitter.Upstreams()
+}
+
+// Events returns the proxy event bus for external composition.
+func (p *Proxy) Events() *EventBus {
+	if p == nil {
+		return nil
+	}
+	return p.events
 }
 
 // Start starts the TCP listeners, ticker loop, and optional HTTP API.
@@ -300,7 +307,100 @@ func buildTLSConfig(cfg TLSConfig) *tls.Config {
 	if err != nil {
 		return nil
 	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}}
+	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+	applyTLSProtocols(tlsConfig, cfg.Protocols)
+	applyTLSCiphers(tlsConfig, cfg.Ciphers)
+	return tlsConfig
+}
+
+func applyTLSProtocols(tlsConfig *tls.Config, protocols string) {
+	if tlsConfig == nil || strings.TrimSpace(protocols) == "" {
+		return
+	}
+	parts := splitTLSConfigList(protocols)
+	minVersion := uint16(0)
+	maxVersion := uint16(0)
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		if strings.Contains(part, "-") {
+			bounds := strings.SplitN(part, "-", 2)
+			low := parseTLSVersion(bounds[0])
+			high := parseTLSVersion(bounds[1])
+			if low == 0 || high == 0 {
+				continue
+			}
+			if minVersion == 0 || low < minVersion {
+				minVersion = low
+			}
+			if high > maxVersion {
+				maxVersion = high
+			}
+			continue
+		}
+		version := parseTLSVersion(part)
+		if version == 0 {
+			continue
+		}
+		if minVersion == 0 || version < minVersion {
+			minVersion = version
+		}
+		if version > maxVersion {
+			maxVersion = version
+		}
+	}
+	if minVersion != 0 {
+		tlsConfig.MinVersion = minVersion
+	}
+	if maxVersion != 0 {
+		tlsConfig.MaxVersion = maxVersion
+	}
+}
+
+func applyTLSCiphers(tlsConfig *tls.Config, ciphers string) {
+	if tlsConfig == nil || strings.TrimSpace(ciphers) == "" {
+		return
+	}
+	allowed := map[string]uint16{}
+	for _, suite := range tls.CipherSuites() {
+		allowed[strings.ToLower(suite.Name)] = suite.ID
+	}
+	for _, suite := range tls.InsecureCipherSuites() {
+		allowed[strings.ToLower(suite.Name)] = suite.ID
+	}
+	parts := splitTLSConfigList(ciphers)
+	for _, part := range parts {
+		if id, ok := allowed[strings.ToLower(part)]; ok {
+			tlsConfig.CipherSuites = append(tlsConfig.CipherSuites, id)
+		}
+	}
+}
+
+func splitTLSConfigList(value string) []string {
+	return strings.FieldsFunc(value, func(r rune) bool {
+		switch r {
+		case ',', ';', ':', '|', ' ':
+			return true
+		default:
+			return false
+		}
+	})
+}
+
+func parseTLSVersion(value string) uint16 {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "tls1.0", "tlsv1.0", "tls1", "tlsv1", "1.0", "1", "tls10", "tlsv10":
+		return tls.VersionTLS10
+	case "tls1.1", "tlsv1.1", "1.1", "tls11", "tlsv11":
+		return tls.VersionTLS11
+	case "tls1.2", "tlsv1.2", "1.2", "tls12", "tlsv12":
+		return tls.VersionTLS12
+	case "tls1.3", "tlsv1.3", "1.3", "tls13", "tlsv13":
+		return tls.VersionTLS13
+	default:
+		return 0
+	}
 }
 
 func (p *Proxy) startHTTP() {
@@ -551,12 +651,7 @@ func (m *Miner) readLoop() {
 		}
 		line, isPrefix, err := reader.ReadLine()
 		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				return
-			}
-			if err != io.EOF {
-				return
-			}
+			m.Close()
 			return
 		}
 		if isPrefix {
@@ -569,6 +664,7 @@ func (m *Miner) readLoop() {
 		m.rx += uint64(len(line) + 1)
 		m.lastActivityAt = time.Now().UTC()
 		if !m.handleLine(line) {
+			m.Close()
 			return
 		}
 	}
@@ -695,11 +791,11 @@ func (m *Miner) handleSubmit(req stratumRequest) {
 			RequestID: requestID(req.ID),
 		})
 	}
-	m.lastActivityAt = time.Now().UTC()
+	m.touchActivity()
 }
 
 func (m *Miner) handleKeepalived(req stratumRequest) {
-	m.lastActivityAt = time.Now().UTC()
+	m.touchActivity()
 	m.Success(requestID(req.ID), "KEEPALIVED")
 }
 
@@ -736,6 +832,7 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 		return
 	}
 	m.currentJob = job
+	m.diff = job.DifficultyFromTarget()
 	if algo == "" {
 		algo = job.Algo
 	}
@@ -759,6 +856,7 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 		payload["params"].(map[string]any)["algo"] = algo
 	}
 	_ = m.writeJSON(payload)
+	m.touchActivity()
 	if m.state == MinerStateWaitReady {
 		m.state = MinerStateReady
 	}
@@ -780,6 +878,7 @@ func (m *Miner) replyLoginSuccess(id int64) {
 		if m.extNH {
 			blob = job.BlobWithFixedByte(m.fixedByte)
 		}
+		m.diff = job.DifficultyFromTarget()
 		jobPayload := map[string]any{
 			"blob":      blob,
 			"job_id":    job.JobID,
@@ -792,6 +891,7 @@ func (m *Miner) replyLoginSuccess(id int64) {
 			jobPayload["algo"] = job.Algo
 		}
 		result["job"] = jobPayload
+		m.touchActivity()
 		m.state = MinerStateReady
 	}
 	payload := map[string]any{
@@ -831,6 +931,16 @@ func (m *Miner) Success(id int64, status string) {
 		},
 	}
 	_ = m.writeJSON(payload)
+}
+
+func (m *Miner) touchActivity() {
+	if m == nil {
+		return
+	}
+	m.lastActivityAt = time.Now().UTC()
+	if m.conn != nil {
+		_ = m.conn.SetReadDeadline(time.Now().Add(600 * time.Second))
+	}
 }
 
 func (m *Miner) writeJSON(payload any) error {

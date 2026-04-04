@@ -21,6 +21,11 @@ type SimpleMapper struct {
 	idleAt     time.Time // zero when active
 	stopped    bool
 	events     *proxy.EventBus
-	pending    map[int64]*proxy.SubmitEvent
+	pending    map[int64]submitContext
 	mu         sync.Mutex
+}
+
+type submitContext struct {
+	RequestID int64
+	StartedAt time.Time
 }

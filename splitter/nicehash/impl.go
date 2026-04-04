@@ -216,7 +216,12 @@ func (m *NonceMapper) Submit(event *proxy.SubmitEvent) {
 		return
 	}
 	seq := m.strategy.Submit(jobID, event.Nonce, event.Result, event.Algo)
-	m.pending[seq] = SubmitContext{RequestID: event.RequestID, MinerID: event.Miner.ID(), JobID: jobID}
+	m.pending[seq] = SubmitContext{
+		RequestID: event.RequestID,
+		MinerID:   event.Miner.ID(),
+		JobID:     jobID,
+		StartedAt: time.Now(),
+	}
 	m.lastUsed = time.Now()
 }
 
@@ -263,16 +268,25 @@ func (m *NonceMapper) OnResultAccepted(sequence int64, accepted bool, errorMessa
 	if !ok || miner == nil {
 		return
 	}
+	latency := uint16(0)
+	if !ctx.StartedAt.IsZero() {
+		elapsed := time.Since(ctx.StartedAt).Milliseconds()
+		if elapsed > int64(^uint16(0)) {
+			latency = ^uint16(0)
+		} else {
+			latency = uint16(elapsed)
+		}
+	}
 	if accepted {
 		miner.Success(ctx.RequestID, "OK")
 		if m.events != nil {
-			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Job: &job, Diff: job.DifficultyFromTarget(), Latency: 0, Expired: expired})
+			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Job: &job, Diff: job.DifficultyFromTarget(), Latency: latency, Expired: expired})
 		}
 		return
 	}
 	miner.ReplyWithError(ctx.RequestID, errorMessage)
 	if m.events != nil {
-		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Job: &job, Diff: job.DifficultyFromTarget(), Error: errorMessage})
+		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Job: &job, Diff: job.DifficultyFromTarget(), Error: errorMessage, Latency: latency})
 	}
 }
 
