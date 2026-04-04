@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"encoding/binary"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -169,6 +170,23 @@ func (j Job) DifficultyFromTarget() uint64 {
 		return 0
 	}
 	return uint64(math.MaxUint32 / uint64(target))
+}
+
+func targetFromDifficulty(diff uint64) string {
+	if diff <= 1 {
+		return "ffffffff"
+	}
+	maxTarget := uint64(math.MaxUint32)
+	target := (maxTarget + diff - 1) / diff
+	if target == 0 {
+		target = 1
+	}
+	if target > maxTarget {
+		target = maxTarget
+	}
+	var raw [4]byte
+	binary.LittleEndian.PutUint32(raw[:], uint32(target))
+	return hex.EncodeToString(raw[:])
 }
 
 // NewCustomDiff creates a login-time custom difficulty resolver.

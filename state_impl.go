@@ -15,6 +15,8 @@ import (
 	"time"
 )
 
+const maxStratumLineLength = 16384
+
 // MinerSnapshot is a serialisable view of one miner connection.
 type MinerSnapshot struct {
 	ID       int64
@@ -826,7 +828,7 @@ func (m *Miner) readLoop() {
 		}
 	}()
 
-	reader := bufio.NewReader(m.conn)
+	reader := bufio.NewReaderSize(m.conn, maxStratumLineLength+1)
 	for {
 		if m.state == MinerStateClosing {
 			return
@@ -839,7 +841,7 @@ func (m *Miner) readLoop() {
 			m.Close()
 			return
 		}
-		if isPrefix {
+		if isPrefix || len(line) > maxStratumLineLength {
 			m.Close()
 			return
 		}
@@ -1034,28 +1036,21 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 		return
 	}
 	m.currentJob = job
-	m.diff = job.DifficultyFromTarget()
-	if algo == "" {
-		algo = job.Algo
-	}
-	blob := job.Blob
-	if m.extNH {
-		blob = job.BlobWithFixedByte(m.fixedByte)
-	}
+	renderedJob, effectiveAlgo := m.renderJob(job, algo)
 	payload := map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "job",
 		"params": map[string]any{
-			"blob":      blob,
-			"job_id":    job.JobID,
-			"target":    job.Target,
+			"blob":      renderedJob.Blob,
+			"job_id":    renderedJob.JobID,
+			"target":    renderedJob.Target,
 			"id":        m.rpcID,
-			"height":    job.Height,
-			"seed_hash": job.SeedHash,
+			"height":    renderedJob.Height,
+			"seed_hash": renderedJob.SeedHash,
 		},
 	}
-	if m.supportsAlgoExtension() && algo != "" {
-		payload["params"].(map[string]any)["algo"] = algo
+	if m.supportsAlgoExtension() && effectiveAlgo != "" {
+		payload["params"].(map[string]any)["algo"] = effectiveAlgo
 	}
 	_ = m.writeJSON(payload)
 	m.touchActivity()
@@ -1076,21 +1071,17 @@ func (m *Miner) replyLoginSuccess(id int64) {
 		result["extensions"] = []string{"algo"}
 	}
 	if job := m.CurrentJob(); job.IsValid() {
-		blob := job.Blob
-		if m.extNH {
-			blob = job.BlobWithFixedByte(m.fixedByte)
-		}
-		m.diff = job.DifficultyFromTarget()
+		renderedJob, effectiveAlgo := m.renderJob(job, job.Algo)
 		jobPayload := map[string]any{
-			"blob":      blob,
-			"job_id":    job.JobID,
-			"target":    job.Target,
+			"blob":      renderedJob.Blob,
+			"job_id":    renderedJob.JobID,
+			"target":    renderedJob.Target,
 			"id":        m.rpcID,
-			"height":    job.Height,
-			"seed_hash": job.SeedHash,
+			"height":    renderedJob.Height,
+			"seed_hash": renderedJob.SeedHash,
 		}
-		if m.supportsAlgoExtension() && job.Algo != "" {
-			jobPayload["algo"] = job.Algo
+		if m.supportsAlgoExtension() && effectiveAlgo != "" {
+			jobPayload["algo"] = effectiveAlgo
 		}
 		result["job"] = jobPayload
 		m.touchActivity()
@@ -1103,6 +1094,26 @@ func (m *Miner) replyLoginSuccess(id int64) {
 		"result":  result,
 	}
 	_ = m.writeJSON(payload)
+}
+
+func (m *Miner) renderJob(job Job, algo string) (Job, string) {
+	if m == nil {
+		return job, algo
+	}
+	rendered := job
+	if algo == "" {
+		algo = job.Algo
+	}
+	if m.extNH {
+		rendered.Blob = job.BlobWithFixedByte(m.fixedByte)
+	}
+	effectiveDiff := job.DifficultyFromTarget()
+	if m.customDiff > 0 && effectiveDiff > 0 && effectiveDiff > m.customDiff {
+		rendered.Target = targetFromDifficulty(m.customDiff)
+		effectiveDiff = rendered.DifficultyFromTarget()
+	}
+	m.diff = effectiveDiff
+	return rendered, algo
 }
 
 func (m *Miner) ReplyWithError(id int64, message string) {

@@ -6,6 +6,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestMiner_HandleLogin_Good(t *testing.T) {
@@ -167,5 +168,150 @@ func TestMiner_HandleLogin_Ugly(t *testing.T) {
 	}
 	if miner.MapperID() != -1 {
 		t.Fatalf("expected rejected miner to remain unassigned, got mapper %d", miner.MapperID())
+	}
+}
+
+func TestMiner_HandleLogin_CustomDiffCap_Good(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := NewMiner(minerConn, 3333, nil)
+	miner.onLogin = func(m *Miner) {
+		m.SetRouteID(1)
+		m.customDiff = 50000
+	}
+	miner.currentJob = Job{
+		Blob:   strings.Repeat("0", 160),
+		JobID:  "job-1",
+		Target: targetFromDifficulty(100000),
+	}
+
+	params, err := json.Marshal(loginParams{
+		Login: "wallet",
+		Pass:  "x",
+	})
+	if err != nil {
+		t.Fatalf("marshal login params: %v", err)
+	}
+
+	go miner.handleLogin(stratumRequest{ID: 3, Method: "login", Params: params})
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read login response: %v", err)
+	}
+
+	var payload struct {
+		Result struct {
+			Job struct {
+				Target string `json:"target"`
+			} `json:"job"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("unmarshal login response: %v", err)
+	}
+
+	originalDiff := miner.currentJob.DifficultyFromTarget()
+	cappedDiff := Job{Target: payload.Result.Job.Target}.DifficultyFromTarget()
+	if cappedDiff == 0 || cappedDiff > 50000 {
+		t.Fatalf("expected capped difficulty at or below 50000, got %d", cappedDiff)
+	}
+	if cappedDiff >= originalDiff {
+		t.Fatalf("expected lowered target difficulty below %d, got %d", originalDiff, cappedDiff)
+	}
+	if miner.diff != cappedDiff {
+		t.Fatalf("expected miner diff %d, got %d", cappedDiff, miner.diff)
+	}
+}
+
+func TestMiner_ReadLoop_RFCLineLimit_Good(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := NewMiner(minerConn, 3333, nil)
+	miner.onLogin = func(m *Miner) {
+		m.SetRouteID(1)
+	}
+	miner.Start()
+
+	params, err := json.Marshal(loginParams{
+		Login: "wallet",
+		Pass:  "x",
+		Agent: strings.Repeat("a", 5000),
+	})
+	if err != nil {
+		t.Fatalf("marshal login params: %v", err)
+	}
+	request, err := json.Marshal(stratumRequest{ID: 4, Method: "login", Params: params})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	if len(request) >= maxStratumLineLength {
+		t.Fatalf("expected test request below RFC limit, got %d bytes", len(request))
+	}
+
+	if _, err := clientConn.Write(append(request, '\n')); err != nil {
+		t.Fatalf("write login request: %v", err)
+	}
+	_ = clientConn.SetReadDeadline(time.Now().Add(time.Second))
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read login response: %v", err)
+	}
+	if len(line) == 0 {
+		t.Fatal("expected login response for request under RFC limit")
+	}
+}
+
+func TestMiner_ReadLoop_RFCLineLimit_Ugly(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := NewMiner(minerConn, 3333, nil)
+	miner.Start()
+
+	params, err := json.Marshal(loginParams{
+		Login: "wallet",
+		Pass:  "x",
+		Agent: strings.Repeat("b", maxStratumLineLength),
+	})
+	if err != nil {
+		t.Fatalf("marshal login params: %v", err)
+	}
+	request, err := json.Marshal(stratumRequest{ID: 5, Method: "login", Params: params})
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	if len(request) <= maxStratumLineLength {
+		t.Fatalf("expected test request above RFC limit, got %d bytes", len(request))
+	}
+
+	writeDone := make(chan error, 1)
+	go func() {
+		_, writeErr := clientConn.Write(append(request, '\n'))
+		writeDone <- writeErr
+	}()
+
+	var writeErr error
+	select {
+	case writeErr = <-writeDone:
+	case <-time.After(time.Second):
+		t.Fatal("timed out writing oversized request")
+	}
+	if writeErr == nil {
+		_ = clientConn.SetReadDeadline(time.Now().Add(time.Second))
+		line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+		if err == nil || len(line) > 0 {
+			t.Fatalf("expected oversized request to close the connection, got line=%q err=%v", string(line), err)
+		}
+		return
+	}
+
+	if !strings.Contains(writeErr.Error(), "closed pipe") {
+		t.Fatalf("expected oversized request to close the connection, got write error %v", writeErr)
 	}
 }
