@@ -49,6 +49,22 @@ func TestProxy_allowHTTP_Bad(t *testing.T) {
 	}
 }
 
+func TestProxy_allowHTTP_MethodRestricted_Bad(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{},
+		},
+	}
+
+	status, ok := p.allowHTTP(&http.Request{Method: http.MethodPost})
+	if ok {
+		t.Fatal("expected non-GET request to be rejected")
+	}
+	if status != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, status)
+	}
+}
+
 func TestProxy_allowHTTP_Ugly(t *testing.T) {
 	p := &Proxy{
 		config: &Config{
