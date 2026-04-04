@@ -28,7 +28,8 @@ type Miner struct {
 	id             int64  // monotonically increasing per-process; atomic assignment
 	rpcID          string // UUID v4 sent to miner as session id
 	state          MinerState
-	extAlgo        bool   // miner sent algo list in login params
+	extAlgo        bool // miner sent algo list in login params
+	loginAlgos     []string
 	extNH          bool   // NiceHash mode active (fixed byte splitting)
 	algoEnabled    bool   // proxy is configured to negotiate the algo extension
 	ip             string // remote IP (without port, for logging)

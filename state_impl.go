@@ -638,6 +638,12 @@ func (m *Miner) SetCurrentJob(job Job) {
 func (m *Miner) CurrentJob() Job {
 	return m.currentJob
 }
+func (m *Miner) LoginAlgos() []string {
+	if m == nil || len(m.loginAlgos) == 0 {
+		return nil
+	}
+	return append([]string(nil), m.loginAlgos...)
+}
 func (m *Miner) FixedByte() uint8 {
 	return m.fixedByte
 }
@@ -777,7 +783,8 @@ func (m *Miner) handleLogin(req stratumRequest) {
 	m.password = params.Pass
 	m.agent = params.Agent
 	m.rigID = params.RigID
-	m.extAlgo = len(params.Algo) > 0
+	m.loginAlgos = append([]string(nil), params.Algo...)
+	m.extAlgo = len(m.loginAlgos) > 0
 	m.rpcID = generateUUID()
 	m.state = MinerStateWaitReady
 	if m.onLogin != nil {

@@ -70,6 +70,9 @@ func TestMiner_HandleLogin_Good(t *testing.T) {
 	if len(payload.Result.Extensions) != 1 || payload.Result.Extensions[0] != "algo" {
 		t.Fatalf("expected algo extension, got %#v", payload.Result.Extensions)
 	}
+	if got := miner.LoginAlgos(); len(got) != 1 || got[0] != "cn/r" {
+		t.Fatalf("expected login algo list to be stored, got %#v", got)
+	}
 	if got := payload.Result.Job["job_id"]; got != "job-1" {
 		t.Fatalf("expected embedded job, got %#v", got)
 	}
