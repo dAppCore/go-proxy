@@ -2,8 +2,10 @@ package proxy
 
 // Config is the top-level proxy configuration, loaded from JSON and hot-reloaded on change.
 //
-//	cfg, result := proxy.LoadConfig("config.json")
-//	if !result.OK { log.Fatal(result.Error) }
+//	cfg, result := proxy.LoadConfig("/etc/proxy.json")
+//	if !result.OK {
+//	    return result.Error
+//	}
 type Config struct {
 	Mode            string       `json:"mode"`              // "nicehash" or "simple"
 	Bind            []BindAddr   `json:"bind"`              // listen addresses

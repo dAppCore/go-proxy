@@ -23,6 +23,7 @@ type Router interface {
 
 // RegisterRoutes wires the monitoring endpoints onto the supplied router.
 //
+//	mux := http.NewServeMux()
 //	proxyapi.RegisterRoutes(mux, p)
 //	// GET /1/summary, /1/workers, and /1/miners are now live.
 func RegisterRoutes(router Router, p *proxy.Proxy) {

@@ -51,9 +51,9 @@ func getSplitterFactory(mode string) (func(*Config, *EventBus) Splitter, bool) {
 
 // LoadConfig reads and unmarshals a JSON config file.
 //
-//	cfg, result := LoadConfig("config.json")
+//	cfg, result := LoadConfig("/etc/proxy.json")
 //	if !result.OK {
-//	    return
+//	    return result.Error
 //	}
 func LoadConfig(path string) (*Config, Result) {
 	data, err := os.ReadFile(path)

@@ -34,9 +34,10 @@ type MinerSnapshot struct {
 
 // New creates the proxy and wires the default event handlers.
 //
+//	cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}}
 //	p, result := proxy.New(cfg)
 //	if !result.OK {
-//		return
+//	    return result.Error
 //	}
 func New(config *Config) (*Proxy, Result) {
 	if config == nil {
@@ -315,7 +316,7 @@ func (p *Proxy) closeAllMiners() {
 
 // Reload swaps the live configuration and updates dependent state.
 //
-//	p.Reload(updatedCfg)
+//	p.Reload(&proxy.Config{Mode: "simple", Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
 func (p *Proxy) Reload(config *Config) {
 	if p == nil || config == nil {
 		return
