@@ -268,6 +268,9 @@ func (p *Proxy) Stop() {
 			server.Stop()
 		}
 		p.closeAllMiners()
+		if splitter, ok := p.splitter.(interface{ Disconnect() }); ok {
+			splitter.Disconnect()
+		}
 		if p.watcher != nil {
 			p.watcher.Stop()
 		}

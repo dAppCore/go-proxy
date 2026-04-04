@@ -195,6 +195,27 @@ func (s *SimpleSplitter) Upstreams() proxy.UpstreamStats {
 	return stats
 }
 
+// Disconnect closes every active or idle upstream connection and clears the mapper tables.
+func (s *SimpleSplitter) Disconnect() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, mapper := range s.active {
+		if mapper != nil && mapper.strategy != nil {
+			mapper.strategy.Disconnect()
+		}
+	}
+	for _, mapper := range s.idle {
+		if mapper != nil && mapper.strategy != nil {
+			mapper.strategy.Disconnect()
+		}
+	}
+	s.active = make(map[int64]*SimpleMapper)
+	s.idle = make(map[int64]*SimpleMapper)
+}
+
 func (s *SimpleSplitter) newMapperLocked() *SimpleMapper {
 	id := s.seq
 	s.seq++

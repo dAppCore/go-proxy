@@ -152,6 +152,22 @@ func (s *NonceSplitter) Upstreams() proxy.UpstreamStats {
 	return stats
 }
 
+// Disconnect closes all upstream pool connections and forgets the current mapper set.
+func (s *NonceSplitter) Disconnect() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, mapper := range s.mappers {
+		if mapper != nil && mapper.strategy != nil {
+			mapper.strategy.Disconnect()
+		}
+	}
+	s.mappers = nil
+	s.byID = make(map[int64]*NonceMapper)
+}
+
 func (s *NonceSplitter) addMapperLocked() *NonceMapper {
 	id := s.seq
 	s.seq++

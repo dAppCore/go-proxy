@@ -11,9 +11,11 @@ func TestProxy_Stop_Good(t *testing.T) {
 	defer serverConn.Close()
 
 	miner := NewMiner(clientConn, 3333, nil)
+	splitter := &stubSplitter{}
 	proxyInstance := &Proxy{
-		done:   make(chan struct{}),
-		miners: map[int64]*Miner{miner.ID(): miner},
+		done:     make(chan struct{}),
+		miners:   map[int64]*Miner{miner.ID(): miner},
+		splitter: splitter,
 	}
 
 	done := make(chan error, 1)
@@ -33,6 +35,9 @@ func TestProxy_Stop_Good(t *testing.T) {
 		}
 	case <-time.After(time.Second):
 		t.Fatalf("expected miner connection to close during Stop")
+	}
+	if !splitter.disconnected {
+		t.Fatalf("expected splitter to be disconnected during Stop")
 	}
 }
 
@@ -60,3 +65,16 @@ func TestProxy_Stop_Ugly(t *testing.T) {
 		t.Fatalf("expected closed connection after repeated Stop calls")
 	}
 }
+
+type stubSplitter struct {
+	disconnected bool
+}
+
+func (s *stubSplitter) Connect()                    {}
+func (s *stubSplitter) OnLogin(event *LoginEvent)   {}
+func (s *stubSplitter) OnSubmit(event *SubmitEvent) {}
+func (s *stubSplitter) OnClose(event *CloseEvent)   {}
+func (s *stubSplitter) Tick(ticks uint64)           {}
+func (s *stubSplitter) GC()                         {}
+func (s *stubSplitter) Upstreams() UpstreamStats    { return UpstreamStats{} }
+func (s *stubSplitter) Disconnect()                 { s.disconnected = true }
