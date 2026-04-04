@@ -588,22 +588,31 @@ func parseTLSVersion(value string) uint16 {
 func (p *Proxy) startHTTP() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/1/summary", func(w http.ResponseWriter, r *http.Request) {
-		if !p.allowHTTP(r) {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		if status, ok := p.allowHTTP(r); !ok {
+			if status == http.StatusUnauthorized {
+				w.Header().Set("WWW-Authenticate", "Bearer")
+			}
+			w.WriteHeader(status)
 			return
 		}
 		p.writeJSON(w, p.summaryDocument())
 	})
 	mux.HandleFunc("/1/workers", func(w http.ResponseWriter, r *http.Request) {
-		if !p.allowHTTP(r) {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		if status, ok := p.allowHTTP(r); !ok {
+			if status == http.StatusUnauthorized {
+				w.Header().Set("WWW-Authenticate", "Bearer")
+			}
+			w.WriteHeader(status)
 			return
 		}
 		p.writeJSON(w, p.workersDocument())
 	})
 	mux.HandleFunc("/1/miners", func(w http.ResponseWriter, r *http.Request) {
-		if !p.allowHTTP(r) {
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		if status, ok := p.allowHTTP(r); !ok {
+			if status == http.StatusUnauthorized {
+				w.Header().Set("WWW-Authenticate", "Bearer")
+			}
+			w.WriteHeader(status)
 			return
 		}
 		p.writeJSON(w, p.minersDocument())
@@ -615,20 +624,20 @@ func (p *Proxy) startHTTP() {
 	}()
 }
 
-func (p *Proxy) allowHTTP(r *http.Request) bool {
+func (p *Proxy) allowHTTP(r *http.Request) (int, bool) {
 	if p == nil {
-		return false
+		return http.StatusServiceUnavailable, false
 	}
 	if p.config.HTTP.Restricted && r.Method != http.MethodGet {
-		return false
+		return http.StatusMethodNotAllowed, false
 	}
 	if token := p.config.HTTP.AccessToken; token != "" {
 		parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
 		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") || parts[1] != token {
-			return false
+			return http.StatusUnauthorized, false
 		}
 	}
-	return true
+	return http.StatusOK, true
 }
 
 func (p *Proxy) writeJSON(w http.ResponseWriter, payload any) {
