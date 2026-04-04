@@ -1654,10 +1654,6 @@ func (s *Server) listen() Result {
 	return successResult()
 }
 
-// NewConfig returns a minimal config? not used.
-
-// NewRateLimiter, Allow, Tick are defined in core_impl.go.
-
 // IsActive reports whether the limiter has enabled rate limiting.
 func (rl *RateLimiter) IsActive() bool {
 	return rl != nil && rl.cfg.MaxConnectionsPerMinute > 0
@@ -1676,5 +1672,3 @@ func (n *noopSplitter) OnClose(event *CloseEvent)   {}
 func (n *noopSplitter) Tick(ticks uint64)           {}
 func (n *noopSplitter) GC()                         {}
 func (n *noopSplitter) Upstreams() UpstreamStats    { return UpstreamStats{} }
-
-// Difficulty helper for the HTTP summary.
