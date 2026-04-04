@@ -77,6 +77,9 @@ type ResultsResponse struct {
 }
 
 // RegisterRoutes wires the monitoring endpoints onto the supplied router.
+//
+//	proxyapi.RegisterRoutes(mux, p)
+//	// GET /1/summary, /1/workers, and /1/miners are now live.
 func RegisterRoutes(r Router, p *proxy.Proxy) {
 	if r == nil || p == nil {
 		return

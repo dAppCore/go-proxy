@@ -95,7 +95,7 @@ func TestProxy_New_Watch_Good(t *testing.T) {
 		Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
 		Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
 		Watch:      true,
-		sourcePath: "/tmp/proxy.json",
+		configPath: "/tmp/proxy.json",
 	}
 
 	proxyInstance, result := New(cfg)

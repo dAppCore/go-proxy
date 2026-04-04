@@ -77,8 +77,8 @@ func New(cfg *Config) (*Proxy, Result) {
 	}
 	p.events.Subscribe(EventAccept, p.onShareSettled)
 	p.events.Subscribe(EventReject, p.onShareSettled)
-	if cfg.Watch && cfg.sourcePath != "" {
-		p.watcher = NewConfigWatcher(cfg.sourcePath, p.Reload)
+	if cfg.Watch && cfg.configPath != "" {
+		p.watcher = NewConfigWatcher(cfg.configPath, p.Reload)
 	}
 
 	if factory, ok := getSplitterFactory(cfg.Mode); ok {
@@ -314,12 +314,12 @@ func (p *Proxy) Reload(cfg *Config) {
 		preservedBind := append([]BindAddr(nil), p.config.Bind...)
 		preservedMode := p.config.Mode
 		preservedWorkers := p.config.Workers
-		preservedSourcePath := p.config.sourcePath
+		preservedConfigPath := p.config.configPath
 		*p.config = *cfg
 		p.config.Bind = preservedBind
 		p.config.Mode = preservedMode
 		p.config.Workers = preservedWorkers
-		p.config.sourcePath = preservedSourcePath
+		p.config.configPath = preservedConfigPath
 	}
 	if p.customDiff != nil {
 		p.customDiff.globalDiff = cfg.CustomDiff

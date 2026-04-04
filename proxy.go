@@ -91,11 +91,8 @@ type CloseEvent struct {
 }
 
 // ConfigWatcher polls a config file for mtime changes and calls onChange on modification.
-// Uses 1-second polling; does not require fsnotify.
 //
-//	w := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
-//	    p.Reload(cfg)
-//	})
+//	w := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) { p.Reload(cfg) })
 //	w.Start()
 type ConfigWatcher struct {
 	path     string
@@ -105,12 +102,9 @@ type ConfigWatcher struct {
 }
 
 // RateLimiter implements per-IP token bucket connection rate limiting.
-// Each unique IP has a bucket initialised to MaxConnectionsPerMinute tokens.
-// Each connection attempt consumes one token. Tokens refill at 1 per (60/max) seconds.
-// An IP that empties its bucket is added to a ban list for BanDurationSeconds.
 //
-//	rl := proxy.NewRateLimiter(cfg.RateLimit)
-//	if !rl.Allow("1.2.3.4") { conn.Close(); return }
+//	rl := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+//	if rl.Allow("1.2.3.4:3333") { proceed() }
 type RateLimiter struct {
 	cfg     RateLimit
 	buckets map[string]*tokenBucket

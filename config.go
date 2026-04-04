@@ -22,7 +22,7 @@ type Config struct {
 	RetryPause      int          `json:"retry-pause"`       // seconds between retries
 	Watch           bool         `json:"watch"`             // hot-reload on file change
 	RateLimit       RateLimit    `json:"rate-limit"`        // per-IP connection rate limit
-	sourcePath      string
+	configPath      string
 }
 
 // BindAddr is one TCP listen endpoint.
