@@ -200,7 +200,9 @@ func NewCustomDiff(globalDiff uint64) *CustomDiff {
 	return &CustomDiff{globalDiff: globalDiff}
 }
 
-// OnLogin parses +N suffixes and applies global difficulty fallbacks.
+// OnLogin normalises the login user once during handshake.
+//
+//	cd.OnLogin(proxy.Event{Miner: &proxy.Miner{user: "WALLET+50000"}})
 func (cd *CustomDiff) OnLogin(e Event) {
 	if cd == nil || e.Miner == nil {
 		return
@@ -225,6 +227,10 @@ func NewRateLimiter(config RateLimit) *RateLimiter {
 }
 
 // Allow returns true if the IP address is permitted to open a new connection.
+//
+//	if rl.Allow("203.0.113.42:3333") {
+//	    // accept the socket
+//	}
 func (rl *RateLimiter) Allow(ip string) bool {
 	if rl == nil || rl.config.MaxConnectionsPerMinute <= 0 {
 		return true

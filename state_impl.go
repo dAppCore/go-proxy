@@ -916,13 +916,13 @@ func (m *Miner) handleLogin(req stratumRequest) {
 	m.loginAlgos = append([]string(nil), params.Algo...)
 	m.extAlgo = len(m.loginAlgos) > 0
 	m.rpcID = generateUUID()
-	m.state = MinerStateWaitReady
 	if m.onLogin != nil {
 		m.onLogin(m)
 	}
 	if m.state == MinerStateClosing {
 		return
 	}
+	m.state = MinerStateWaitReady
 	if m.extNH {
 		if m.MapperID() < 0 {
 			m.state = MinerStateWaitLogin
@@ -1556,16 +1556,14 @@ func cloneWorkerRecord(record WorkerRecord) WorkerRecord {
 	return cloned
 }
 
-// Apply parses login suffixes and applies the configured global difficulty.
+// Apply normalises one miner login at the same point the handshake does.
+//
+//	cd.Apply(&proxy.Miner{user: "WALLET+50000"})
 func (cd *CustomDiff) Apply(miner *Miner) {
 	if cd == nil || miner == nil {
 		return
 	}
-	if miner.customDiffResolved {
-		return
-	}
-	miner.user, miner.customDiff = parseLoginUser(miner.user, cd.globalDiff)
-	miner.customDiffResolved = true
+	cd.OnLogin(Event{Miner: miner})
 }
 
 // NewServer constructs a server instance.
