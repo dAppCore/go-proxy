@@ -37,10 +37,7 @@ func (s *NonceSplitter) Connect() {
 		s.addMapperLocked()
 	}
 	for _, mapper := range s.mappers {
-		if mapper.strategy != nil {
-			mapper.strategy.Connect()
-			return
-		}
+		mapper.Start()
 	}
 }
 
@@ -149,6 +146,7 @@ func (s *NonceSplitter) addMapperLocked() *NonceMapper {
 		s.byID = make(map[int64]*NonceMapper)
 	}
 	s.byID[mapper.id] = mapper
+	mapper.Start()
 	return mapper
 }
 
@@ -161,6 +159,17 @@ func NewNonceMapper(id int64, cfg *proxy.Config, strategy pool.Strategy) *NonceM
 		pending:  make(map[int64]SubmitContext),
 		cfg:      cfg,
 	}
+}
+
+// Start connects the mapper's upstream strategy once.
+func (m *NonceMapper) Start() {
+	if m == nil || m.strategy == nil {
+		return
+	}
+	m.startOnce.Do(func() {
+		m.lastUsed = time.Now()
+		m.strategy.Connect()
+	})
 }
 
 // Add assigns a miner to a free slot.

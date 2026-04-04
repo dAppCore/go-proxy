@@ -57,13 +57,9 @@ func New(cfg *Config) (*Proxy, Result) {
 		p.events.Subscribe(EventClose, p.accessLog.OnClose)
 	}
 	p.events.Subscribe(EventLogin, p.stats.OnLogin)
-	p.events.Subscribe(EventLogin, p.workers.OnLogin)
 	p.events.Subscribe(EventClose, p.stats.OnClose)
-	p.events.Subscribe(EventClose, p.workers.OnClose)
 	p.events.Subscribe(EventAccept, p.stats.OnAccept)
-	p.events.Subscribe(EventAccept, p.workers.OnAccept)
 	p.events.Subscribe(EventReject, p.stats.OnReject)
-	p.events.Subscribe(EventReject, p.workers.OnReject)
 	if cfg.Watch && cfg.sourcePath != "" {
 		p.watcher = NewConfigWatcher(cfg.sourcePath, p.Reload)
 	}
@@ -1164,12 +1160,14 @@ func insertTopDiff(top *[10]uint64, diff uint64) {
 }
 
 // NewWorkers creates a worker aggregate tracker.
-func NewWorkers(mode WorkersMode, _ *EventBus) *Workers {
-	return &Workers{
+func NewWorkers(mode WorkersMode, bus *EventBus) *Workers {
+	workers := &Workers{
 		mode:      mode,
 		nameIndex: make(map[string]int),
 		idIndex:   make(map[int64]int),
 	}
+	workers.bindEvents(bus)
+	return workers
 }
 
 func (w *Workers) bindEvents(bus *EventBus) {
@@ -1178,6 +1176,14 @@ func (w *Workers) bindEvents(bus *EventBus) {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.subscribed {
+		return
+	}
+	bus.Subscribe(EventLogin, w.OnLogin)
+	bus.Subscribe(EventAccept, w.OnAccept)
+	bus.Subscribe(EventReject, w.OnReject)
+	bus.Subscribe(EventClose, w.OnClose)
+	w.subscribed = true
 }
 
 func workerNameFor(mode WorkersMode, miner *Miner) string {

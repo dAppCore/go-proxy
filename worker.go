@@ -10,11 +10,12 @@ import (
 //
 //	w := proxy.NewWorkers(proxy.WorkersByRigID, bus)
 type Workers struct {
-	mode      WorkersMode
-	entries   []WorkerRecord // ordered by first-seen (stable)
-	nameIndex map[string]int // workerName → entries index
-	idIndex   map[int64]int  // minerID → entries index
-	mu        sync.RWMutex
+	mode       WorkersMode
+	entries    []WorkerRecord // ordered by first-seen (stable)
+	nameIndex  map[string]int // workerName → entries index
+	idIndex    map[int64]int  // minerID → entries index
+	subscribed bool
+	mu         sync.RWMutex
 }
 
 // WorkerRecord is the per-identity aggregate.

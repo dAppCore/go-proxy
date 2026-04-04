@@ -23,6 +23,7 @@ type NonceMapper struct {
 	active    bool // true once pool has sent at least one job
 	suspended int  // > 0 when pool connection is in error/reconnecting
 	lastUsed  time.Time
+	startOnce sync.Once
 	mu        sync.Mutex
 }
 
