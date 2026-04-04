@@ -15,6 +15,9 @@ type CustomDiffBucketStats struct {
 }
 
 // CustomDiffBuckets records share totals grouped by miner custom difficulty.
+//
+//	buckets := NewCustomDiffBuckets(true)
+//	buckets.OnAccept(proxy.Event{Miner: &proxy.Miner{}})
 type CustomDiffBuckets struct {
 	enabled bool
 	buckets map[uint64]*CustomDiffBucketStats

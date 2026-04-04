@@ -6,7 +6,8 @@ type WorkerRow [13]any
 // MinerRow{1, "10.0.0.1:49152", 4096, 512, 2, 100000, "WALLET", "********", "rig-alpha", "XMRig/6.21.0"}
 type MinerRow [10]any
 
-// p.SummaryDocument()
+// doc := p.SummaryDocument()
+// doc.Results.Accepted == 4821
 type SummaryDocument struct {
 	Version         string                           `json:"version"`
 	Mode            string                           `json:"mode"`
@@ -50,13 +51,15 @@ type ResultsDocument struct {
 	Best        [10]uint64 `json:"best"`
 }
 
-// p.WorkersDocument()
+// doc := p.WorkersDocument()
+// doc.Workers[0][0] == "rig-alpha"
 type WorkersDocument struct {
 	Mode    string      `json:"mode"`
 	Workers []WorkerRow `json:"workers"`
 }
 
-// p.MinersDocument()
+// doc := p.MinersDocument()
+// doc.Miners[0][7] == "********"
 type MinersDocument struct {
 	Format []string   `json:"format"`
 	Miners []MinerRow `json:"miners"`

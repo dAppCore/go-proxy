@@ -234,6 +234,7 @@ func (cd *CustomDiff) OnLogin(e Event) {
 // NewRateLimiter creates a per-IP token bucket limiter.
 //
 //	limiter := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+//	limiter.Allow("203.0.113.42:3333")
 func NewRateLimiter(config RateLimit) *RateLimiter {
 	return &RateLimiter{
 		config:  config,
@@ -308,6 +309,7 @@ func (rl *RateLimiter) Tick() {
 // NewConfigWatcher creates a polling watcher for a config file.
 //
 //	watcher := NewConfigWatcher("config.json", func(cfg *Config) { _ = cfg })
+//	watcher.Start()
 func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher {
 	watcher := &ConfigWatcher{
 		path:     configPath,
