@@ -65,16 +65,12 @@ func (l *AccessLog) writeLine(kind, ip, user, agent string, rx, tx uint64) {
 	builder.WriteString(ip)
 	builder.WriteString("  ")
 	builder.WriteString(user)
-	if agent != "" {
-		builder.WriteString("  ")
-		builder.WriteString(agent)
-	}
-	if rx > 0 || tx > 0 {
-		builder.WriteString("  rx=")
-		builder.WriteString(strconv.FormatUint(rx, 10))
-		builder.WriteString("  tx=")
-		builder.WriteString(strconv.FormatUint(tx, 10))
-	}
+	builder.WriteString("  ")
+	builder.WriteString(agent)
+	builder.WriteString("  rx=")
+	builder.WriteString(strconv.FormatUint(rx, 10))
+	builder.WriteString("  tx=")
+	builder.WriteString(strconv.FormatUint(tx, 10))
 	builder.WriteByte('\n')
 	_, _ = l.f.WriteString(builder.String())
 }

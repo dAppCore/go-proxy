@@ -81,16 +81,12 @@ func (l *accessLogSink) writeLine(kind, ip, user, agent string, rx, tx uint64) {
 	builder.WriteString(ip)
 	builder.WriteString("  ")
 	builder.WriteString(user)
-	if agent != "" {
-		builder.WriteString("  ")
-		builder.WriteString(agent)
-	}
-	if rx > 0 || tx > 0 {
-		builder.WriteString("  rx=")
-		builder.WriteString(formatUint(rx))
-		builder.WriteString("  tx=")
-		builder.WriteString(formatUint(tx))
-	}
+	builder.WriteString("  ")
+	builder.WriteString(agent)
+	builder.WriteString("  rx=")
+	builder.WriteString(formatUint(rx))
+	builder.WriteString("  tx=")
+	builder.WriteString(formatUint(tx))
 	builder.WriteByte('\n')
 	_, _ = l.file.WriteString(builder.String())
 }
