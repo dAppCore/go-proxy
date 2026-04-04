@@ -585,7 +585,7 @@ func (p *Proxy) workersDocument() any {
 			record.Rejected,
 			record.Invalid,
 			record.Hashes,
-			record.LastHashAt.Unix(),
+			unixOrZero(record.LastHashAt),
 			record.Hashrate(60),
 			record.Hashrate(600),
 			record.Hashrate(3600),
@@ -627,6 +627,13 @@ func upstreamRatio(now uint64, upstreams UpstreamStats) float64 {
 		return 0
 	}
 	return float64(now) / float64(upstreams.Total)
+}
+
+func unixOrZero(value time.Time) int64 {
+	if value.IsZero() {
+		return 0
+	}
+	return value.Unix()
 }
 
 func NewMiner(conn net.Conn, localPort uint16, tlsCfg *tls.Config) *Miner {

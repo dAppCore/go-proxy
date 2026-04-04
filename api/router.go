@@ -12,6 +12,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"dappco.re/go/proxy"
 )
@@ -139,7 +140,7 @@ func workersResponse(p *proxy.Proxy) any {
 			record.Rejected,
 			record.Invalid,
 			record.Hashes,
-			record.LastHashAt.Unix(),
+			unixOrZero(record.LastHashAt),
 			record.Hashrate(60),
 			record.Hashrate(600),
 			record.Hashrate(3600),
@@ -186,4 +187,11 @@ func upstreamRatio(now, total uint64) float64 {
 		return 0
 	}
 	return float64(now) / float64(total)
+}
+
+func unixOrZero(value time.Time) int64 {
+	if value.IsZero() {
+		return 0
+	}
+	return value.Unix()
 }
