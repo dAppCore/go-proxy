@@ -51,10 +51,10 @@ func (l *ShareLog) OnReject(e proxy.Event) {
 	l.writeRejectLine(e.Miner.User(), e.Error)
 }
 
-func (l *AccessLog) writeLine(kind, ip, user, agent string, rx, tx uint64) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if err := l.ensureFile(); err != nil {
+func (accessLog *AccessLog) writeLine(kind, ip, user, agent string, rx, tx uint64) {
+	accessLog.mu.Lock()
+	defer accessLog.mu.Unlock()
+	if err := accessLog.ensureFile(); err != nil {
 		return
 	}
 	var builder strings.Builder
@@ -72,13 +72,13 @@ func (l *AccessLog) writeLine(kind, ip, user, agent string, rx, tx uint64) {
 	builder.WriteString("  tx=")
 	builder.WriteString(strconv.FormatUint(tx, 10))
 	builder.WriteByte('\n')
-	_, _ = l.f.WriteString(builder.String())
+	_, _ = accessLog.f.WriteString(builder.String())
 }
 
-func (l *ShareLog) writeAcceptLine(user string, diff uint64, latency uint64) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if err := l.ensureFile(); err != nil {
+func (shareLog *ShareLog) writeAcceptLine(user string, diff uint64, latency uint64) {
+	shareLog.mu.Lock()
+	defer shareLog.mu.Unlock()
+	if err := shareLog.ensureFile(); err != nil {
 		return
 	}
 	var builder strings.Builder
@@ -92,13 +92,13 @@ func (l *ShareLog) writeAcceptLine(user string, diff uint64, latency uint64) {
 	builder.WriteString(strconv.FormatUint(latency, 10))
 	builder.WriteString("ms")
 	builder.WriteByte('\n')
-	_, _ = l.f.WriteString(builder.String())
+	_, _ = shareLog.f.WriteString(builder.String())
 }
 
-func (l *ShareLog) writeRejectLine(user, reason string) {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if err := l.ensureFile(); err != nil {
+func (shareLog *ShareLog) writeRejectLine(user, reason string) {
+	shareLog.mu.Lock()
+	defer shareLog.mu.Unlock()
+	if err := shareLog.ensureFile(); err != nil {
 		return
 	}
 	var builder strings.Builder
@@ -108,29 +108,29 @@ func (l *ShareLog) writeRejectLine(user, reason string) {
 	builder.WriteString("  reason=\"")
 	builder.WriteString(reason)
 	builder.WriteString("\"\n")
-	_, _ = l.f.WriteString(builder.String())
+	_, _ = shareLog.f.WriteString(builder.String())
 }
 
-func (l *AccessLog) ensureFile() error {
-	if l.f != nil {
+func (accessLog *AccessLog) ensureFile() error {
+	if accessLog.f != nil {
 		return nil
 	}
-	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(accessLog.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
-	l.f = f
+	accessLog.f = f
 	return nil
 }
 
-func (l *ShareLog) ensureFile() error {
-	if l.f != nil {
+func (shareLog *ShareLog) ensureFile() error {
+	if shareLog.f != nil {
 		return nil
 	}
-	f, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+	f, err := os.OpenFile(shareLog.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
-	l.f = f
+	shareLog.f = f
 	return nil
 }

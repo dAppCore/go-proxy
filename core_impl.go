@@ -216,9 +216,9 @@ func (cd *CustomDiff) OnLogin(e Event) {
 //
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
 //	if limiter.Allow("203.0.113.42:3333") { /* accept */ }
-func NewRateLimiter(cfg RateLimit) *RateLimiter {
+func NewRateLimiter(config RateLimit) *RateLimiter {
 	return &RateLimiter{
-		config:  cfg,
+		config:  config,
 		buckets: make(map[string]*tokenBucket),
 		banned:  make(map[string]time.Time),
 	}
@@ -286,13 +286,13 @@ func (rl *RateLimiter) Tick() {
 //	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
 //		proxyInstance.Reload(cfg)
 //	})
-func NewConfigWatcher(path string, onChange func(*Config)) *ConfigWatcher {
+func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher {
 	watcher := &ConfigWatcher{
-		path:     path,
+		path:     configPath,
 		onChange: onChange,
 		done:     make(chan struct{}),
 	}
-	if info, err := os.Stat(path); err == nil {
+	if info, err := os.Stat(configPath); err == nil {
 		watcher.lastMod = info.ModTime()
 	}
 	return watcher

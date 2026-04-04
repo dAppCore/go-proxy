@@ -14,14 +14,14 @@ func init() {
 }
 
 // NewSimpleSplitter creates the passthrough splitter.
-func NewSimpleSplitter(cfg *proxy.Config, events *proxy.EventBus, factory pool.StrategyFactory) *SimpleSplitter {
+func NewSimpleSplitter(config *proxy.Config, events *proxy.EventBus, factory pool.StrategyFactory) *SimpleSplitter {
 	if factory == nil {
-		factory = pool.NewStrategyFactory(cfg)
+		factory = pool.NewStrategyFactory(config)
 	}
 	return &SimpleSplitter{
 		active:  make(map[int64]*SimpleMapper),
 		idle:    make(map[int64]*SimpleMapper),
-		config:  cfg,
+		config:  config,
 		events:  events,
 		factory: factory,
 	}

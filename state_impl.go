@@ -37,25 +37,25 @@ type MinerSnapshot struct {
 //	if !result.OK {
 //		return
 //	}
-func New(cfg *Config) (*Proxy, Result) {
-	if cfg == nil {
+func New(config *Config) (*Proxy, Result) {
+	if config == nil {
 		return nil, errorResult(errors.New("config is nil"))
 	}
-	if result := cfg.Validate(); !result.OK {
+	if result := config.Validate(); !result.OK {
 		return nil, result
 	}
 
 	p := &Proxy{
-		config:            cfg,
+		config:            config,
 		events:            NewEventBus(),
 		stats:             NewStats(),
-		workers:           NewWorkers(cfg.Workers, nil),
+		workers:           NewWorkers(config.Workers, nil),
 		miners:            make(map[int64]*Miner),
-		customDiff:        NewCustomDiff(cfg.CustomDiff),
-		customDiffBuckets: NewCustomDiffBuckets(cfg.CustomDiffStats),
-		rateLimit:         NewRateLimiter(cfg.RateLimit),
-		accessLog:         newAccessLogSink(cfg.AccessLogFile),
-		shareLog:          newShareLogSink(cfg.ShareLogFile),
+		customDiff:        NewCustomDiff(config.CustomDiff),
+		customDiffBuckets: NewCustomDiffBuckets(config.CustomDiffStats),
+		rateLimit:         NewRateLimiter(config.RateLimit),
+		accessLog:         newAccessLogSink(config.AccessLogFile),
+		shareLog:          newShareLogSink(config.ShareLogFile),
 		done:              make(chan struct{}),
 	}
 	p.events.Subscribe(EventLogin, p.customDiff.OnLogin)
@@ -78,12 +78,12 @@ func New(cfg *Config) (*Proxy, Result) {
 	}
 	p.events.Subscribe(EventAccept, p.onShareSettled)
 	p.events.Subscribe(EventReject, p.onShareSettled)
-	if cfg.Watch && cfg.configPath != "" {
-		p.watcher = NewConfigWatcher(cfg.configPath, p.Reload)
+	if config.Watch && config.configPath != "" {
+		p.watcher = NewConfigWatcher(config.configPath, p.Reload)
 	}
 
-	if factory, ok := getSplitterFactory(cfg.Mode); ok {
-		p.splitter = factory(cfg, p.events)
+	if factory, ok := getSplitterFactory(config.Mode); ok {
+		p.splitter = factory(config, p.events)
 	} else {
 		p.splitter = &noopSplitter{}
 	}
@@ -312,40 +312,40 @@ func (p *Proxy) closeAllMiners() {
 // Reload swaps the live configuration and updates dependent state.
 //
 //	p.Reload(updatedCfg)
-func (p *Proxy) Reload(cfg *Config) {
-	if p == nil || cfg == nil {
+func (p *Proxy) Reload(config *Config) {
+	if p == nil || config == nil {
 		return
 	}
 	if p.config == nil {
-		p.config = cfg
+		p.config = config
 	} else {
 		preservedBind := append([]BindAddr(nil), p.config.Bind...)
 		preservedMode := p.config.Mode
 		preservedWorkers := p.config.Workers
 		preservedConfigPath := p.config.configPath
-		*p.config = *cfg
+		*p.config = *config
 		p.config.Bind = preservedBind
 		p.config.Mode = preservedMode
 		p.config.Workers = preservedWorkers
 		p.config.configPath = preservedConfigPath
 	}
 	if p.customDiff != nil {
-		p.customDiff.globalDiff = cfg.CustomDiff
+		p.customDiff.globalDiff = config.CustomDiff
 	}
 	if p.customDiffBuckets != nil {
-		p.customDiffBuckets.SetEnabled(cfg.CustomDiffStats)
+		p.customDiffBuckets.SetEnabled(config.CustomDiffStats)
 	}
-	p.rateLimit = NewRateLimiter(cfg.RateLimit)
+	p.rateLimit = NewRateLimiter(config.RateLimit)
 	for _, server := range p.servers {
 		if server != nil {
 			server.limiter = p.rateLimit
 		}
 	}
 	if p.accessLog != nil {
-		p.accessLog.SetPath(cfg.AccessLogFile)
+		p.accessLog.SetPath(config.AccessLogFile)
 	}
 	if p.shareLog != nil {
-		p.shareLog.SetPath(cfg.ShareLogFile)
+		p.shareLog.SetPath(config.ShareLogFile)
 	}
 }
 

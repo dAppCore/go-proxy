@@ -14,13 +14,13 @@ func init() {
 }
 
 // NewNonceSplitter creates a NiceHash splitter.
-func NewNonceSplitter(cfg *proxy.Config, events *proxy.EventBus, factory pool.StrategyFactory) *NonceSplitter {
+func NewNonceSplitter(config *proxy.Config, events *proxy.EventBus, factory pool.StrategyFactory) *NonceSplitter {
 	if factory == nil {
-		factory = pool.NewStrategyFactory(cfg)
+		factory = pool.NewStrategyFactory(config)
 	}
 	return &NonceSplitter{
 		byID:            make(map[int64]*NonceMapper),
-		config:          cfg,
+		config:          config,
 		events:          events,
 		strategyFactory: factory,
 	}

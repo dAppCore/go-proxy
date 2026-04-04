@@ -18,16 +18,16 @@ import (
 )
 
 // NewStrategyFactory creates a StrategyFactory for the supplied config.
-func NewStrategyFactory(cfg *proxy.Config) StrategyFactory {
+func NewStrategyFactory(config *proxy.Config) StrategyFactory {
 	return func(listener StratumListener) Strategy {
-		return NewFailoverStrategy(cfg.Pools, listener, cfg)
+		return NewFailoverStrategy(config.Pools, listener, config)
 	}
 }
 
 // NewStratumClient constructs a pool client.
-func NewStratumClient(cfg proxy.PoolConfig, listener StratumListener) *StratumClient {
+func NewStratumClient(poolConfig proxy.PoolConfig, listener StratumListener) *StratumClient {
 	return &StratumClient{
-		config:   cfg,
+		config:   poolConfig,
 		listener: listener,
 		pending:  make(map[int64]struct{}),
 	}
@@ -335,11 +335,11 @@ func (c *StratumClient) handleMessage(line []byte) {
 }
 
 // NewFailoverStrategy creates the ordered pool failover wrapper.
-func NewFailoverStrategy(pools []proxy.PoolConfig, listener StratumListener, cfg *proxy.Config) *FailoverStrategy {
+func NewFailoverStrategy(pools []proxy.PoolConfig, listener StratumListener, config *proxy.Config) *FailoverStrategy {
 	return &FailoverStrategy{
 		pools:    pools,
 		listener: listener,
-		config:   cfg,
+		config:   config,
 	}
 }
 
