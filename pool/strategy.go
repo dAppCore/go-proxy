@@ -36,3 +36,10 @@ type Strategy interface {
 	Disconnect()
 	IsActive() bool
 }
+
+// ReloadableStrategy re-establishes an upstream connection after config changes.
+//
+//	strategy.ReloadPools()
+type ReloadableStrategy interface {
+	ReloadPools()
+}

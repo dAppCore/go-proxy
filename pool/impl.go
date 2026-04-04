@@ -418,6 +418,20 @@ func (s *FailoverStrategy) Disconnect() {
 	}
 }
 
+// ReloadPools reconnects against the latest pool configuration.
+//
+//	strategy.ReloadPools()
+func (s *FailoverStrategy) ReloadPools() {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	s.current = 0
+	s.mu.Unlock()
+	s.Disconnect()
+	s.Connect()
+}
+
 // IsActive reports whether the current client has received a job.
 func (s *FailoverStrategy) IsActive() bool {
 	return s != nil && s.client != nil && s.client.IsActive()

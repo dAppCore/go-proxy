@@ -8,6 +8,7 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
@@ -319,6 +320,7 @@ func (p *Proxy) Reload(config *Config) {
 	if result := config.Validate(); !result.OK {
 		return
 	}
+	poolsChanged := p.config == nil || !reflect.DeepEqual(p.config.Pools, config.Pools)
 	if p.config == nil {
 		p.config = config
 	} else {
@@ -351,6 +353,11 @@ func (p *Proxy) Reload(config *Config) {
 		p.shareLog.SetPath(config.ShareLogFile)
 	}
 	p.reloadWatcher(config.Watch)
+	if poolsChanged {
+		if reloadable, ok := p.splitter.(interface{ ReloadPools() }); ok {
+			reloadable.ReloadPools()
+		}
+	}
 }
 
 func (p *Proxy) reloadWatcher(enabled bool) {

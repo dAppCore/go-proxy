@@ -172,6 +172,29 @@ func (s *NonceSplitter) Disconnect() {
 	s.byID = make(map[int64]*NonceMapper)
 }
 
+// ReloadPools reconnects each mapper strategy using the updated pool list.
+//
+//	s.ReloadPools()
+func (s *NonceSplitter) ReloadPools() {
+	if s == nil {
+		return
+	}
+	strategies := make([]pool.Strategy, 0, len(s.mappers))
+	s.mu.RLock()
+	for _, mapper := range s.mappers {
+		if mapper == nil || mapper.strategy == nil {
+			continue
+		}
+		strategies = append(strategies, mapper.strategy)
+	}
+	s.mu.RUnlock()
+	for _, strategy := range strategies {
+		if reloadable, ok := strategy.(pool.ReloadableStrategy); ok {
+			reloadable.ReloadPools()
+		}
+	}
+}
+
 func (s *NonceSplitter) addMapperLocked() *NonceMapper {
 	id := s.seq
 	s.seq++

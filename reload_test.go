@@ -2,6 +2,19 @@ package proxy
 
 import "testing"
 
+type reloadableSplitter struct {
+	reloads int
+}
+
+func (s *reloadableSplitter) Connect()                    {}
+func (s *reloadableSplitter) OnLogin(event *LoginEvent)   {}
+func (s *reloadableSplitter) OnSubmit(event *SubmitEvent) {}
+func (s *reloadableSplitter) OnClose(event *CloseEvent)   {}
+func (s *reloadableSplitter) Tick(ticks uint64)           {}
+func (s *reloadableSplitter) GC()                         {}
+func (s *reloadableSplitter) Upstreams() UpstreamStats    { return UpstreamStats{} }
+func (s *reloadableSplitter) ReloadPools()                { s.reloads++ }
+
 func TestProxy_Reload_Good(t *testing.T) {
 	original := &Config{
 		Mode:    "nicehash",
@@ -143,5 +156,53 @@ func TestProxy_Reload_WatchDisabled_Bad(t *testing.T) {
 	case <-watcher.done:
 	default:
 		t.Fatalf("expected existing watcher to be stopped")
+	}
+}
+
+func TestProxy_Reload_PoolsChanged_ReloadsSplitter_Good(t *testing.T) {
+	splitter := &reloadableSplitter{}
+	p := &Proxy{
+		config: &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool-a.example:3333", Enabled: true}},
+		},
+		splitter: splitter,
+	}
+
+	p.Reload(&Config{
+		Mode:    "nicehash",
+		Workers: WorkersByRigID,
+		Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []PoolConfig{{URL: "pool-b.example:3333", Enabled: true}},
+	})
+
+	if splitter.reloads != 1 {
+		t.Fatalf("expected pool reload to reconnect upstreams once, got %d", splitter.reloads)
+	}
+}
+
+func TestProxy_Reload_PoolsUnchanged_DoesNotReloadSplitter_Ugly(t *testing.T) {
+	splitter := &reloadableSplitter{}
+	p := &Proxy{
+		config: &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool-a.example:3333", Enabled: true}},
+		},
+		splitter: splitter,
+	}
+
+	p.Reload(&Config{
+		Mode:    "nicehash",
+		Workers: WorkersByRigID,
+		Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []PoolConfig{{URL: "pool-a.example:3333", Enabled: true}},
+	})
+
+	if splitter.reloads != 0 {
+		t.Fatalf("expected unchanged pool config to skip reconnect, got %d", splitter.reloads)
 	}
 }

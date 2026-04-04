@@ -216,6 +216,35 @@ func (s *SimpleSplitter) Disconnect() {
 	s.idle = make(map[int64]*SimpleMapper)
 }
 
+// ReloadPools reconnects each active or idle mapper using the updated pool list.
+//
+//	s.ReloadPools()
+func (s *SimpleSplitter) ReloadPools() {
+	if s == nil {
+		return
+	}
+	strategies := make([]pool.Strategy, 0, len(s.active)+len(s.idle))
+	s.mu.Lock()
+	for _, mapper := range s.active {
+		if mapper == nil || mapper.strategy == nil {
+			continue
+		}
+		strategies = append(strategies, mapper.strategy)
+	}
+	for _, mapper := range s.idle {
+		if mapper == nil || mapper.strategy == nil {
+			continue
+		}
+		strategies = append(strategies, mapper.strategy)
+	}
+	s.mu.Unlock()
+	for _, strategy := range strategies {
+		if reloadable, ok := strategy.(pool.ReloadableStrategy); ok {
+			reloadable.ReloadPools()
+		}
+	}
+}
+
 func (s *SimpleSplitter) newMapperLocked() *SimpleMapper {
 	id := s.seq
 	s.seq++
