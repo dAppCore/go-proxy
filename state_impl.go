@@ -220,7 +220,10 @@ func (p *Proxy) Start() {
 		p.watcher.Start()
 	}
 	if p.config.HTTP.Enabled {
-		p.startHTTP()
+		if !p.startHTTP() {
+			p.Stop()
+			return
+		}
 	}
 	p.ticker = time.NewTicker(time.Second)
 	go func() {
@@ -585,7 +588,10 @@ func parseTLSVersion(value string) uint16 {
 	}
 }
 
-func (p *Proxy) startHTTP() {
+func (p *Proxy) startHTTP() bool {
+	if p == nil || !p.config.HTTP.Enabled {
+		return true
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/1/summary", func(w http.ResponseWriter, r *http.Request) {
 		if status, ok := p.allowHTTP(r); !ok {
@@ -618,10 +624,18 @@ func (p *Proxy) startHTTP() {
 		p.writeJSON(w, p.minersDocument())
 	})
 	addr := net.JoinHostPort(p.config.HTTP.Host, strconv.Itoa(int(p.config.HTTP.Port)))
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return false
+	}
 	p.httpServer = &http.Server{Addr: addr, Handler: mux}
 	go func() {
-		_ = p.httpServer.ListenAndServe()
+		err := p.httpServer.Serve(listener)
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			p.Stop()
+		}
 	}()
+	return true
 }
 
 func (p *Proxy) allowHTTP(r *http.Request) (int, bool) {
