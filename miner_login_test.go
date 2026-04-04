@@ -226,6 +226,50 @@ func TestMiner_HandleLogin_CustomDiffCap_Good(t *testing.T) {
 	}
 }
 
+func TestMiner_HandleLogin_CustomDiffSuffix_Good(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := NewMiner(minerConn, 3333, nil)
+	miner.onLogin = func(m *Miner) {
+		m.SetRouteID(1)
+	}
+
+	params, err := json.Marshal(loginParams{
+		Login: "wallet+50000",
+		Pass:  "x",
+	})
+	if err != nil {
+		t.Fatalf("marshal login params: %v", err)
+	}
+
+	go miner.handleLogin(stratumRequest{ID: 4, Method: "login", Params: params})
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read login response: %v", err)
+	}
+
+	var payload struct {
+		Result struct {
+			Status string `json:"status"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("unmarshal login response: %v", err)
+	}
+	if payload.Result.Status != "OK" {
+		t.Fatalf("expected login success, got %q", payload.Result.Status)
+	}
+	if got := miner.User(); got != "wallet" {
+		t.Fatalf("expected stripped wallet name, got %q", got)
+	}
+	if got := miner.customDiff; got != 50000 {
+		t.Fatalf("expected custom diff 50000, got %d", got)
+	}
+}
+
 func TestMiner_HandleKeepalived_Good(t *testing.T) {
 	minerConn, clientConn := net.Pipe()
 	defer minerConn.Close()

@@ -1,9 +1,9 @@
 package proxy
 
 import (
-	"encoding/binary"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -199,7 +199,11 @@ func (cd *CustomDiff) OnLogin(e Event) {
 	if cd == nil || e.Miner == nil {
 		return
 	}
+	if e.Miner.customDiffResolved {
+		return
+	}
 	e.Miner.user, e.Miner.customDiff = parseLoginUser(e.Miner.user, cd.globalDiff)
+	e.Miner.customDiffResolved = true
 }
 
 // NewRateLimiter creates a per-IP token bucket limiter.

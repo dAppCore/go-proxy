@@ -912,8 +912,8 @@ func (m *Miner) handleLogin(req stratumRequest) {
 		m.ReplyWithError(requestID(req.ID), "Invalid password")
 		return
 	}
-	m.user = params.Login
-	m.customDiff = 0
+	m.user, m.customDiff = parseLoginUser(params.Login, m.globalDiff)
+	m.customDiffResolved = true
 	m.password = params.Pass
 	m.agent = params.Agent
 	m.rigID = params.RigID
@@ -1559,7 +1559,11 @@ func (cd *CustomDiff) Apply(miner *Miner) {
 	if cd == nil || miner == nil {
 		return
 	}
+	if miner.customDiffResolved {
+		return
+	}
 	miner.user, miner.customDiff = parseLoginUser(miner.user, cd.globalDiff)
+	miner.customDiffResolved = true
 }
 
 // NewServer constructs a server instance.
