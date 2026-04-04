@@ -44,10 +44,10 @@ func TestProxy_AccessLog_WritesLifecycleLines(t *testing.T) {
 		t.Fatalf("read access log: %v", err)
 	}
 	text := string(data)
-	if !strings.Contains(text, "CONNECT  10.0.0.1  WALLET  XMRig/6.21.0  rx=0  tx=0") {
+	if !strings.Contains(text, "CONNECT  10.0.0.1  WALLET  XMRig/6.21.0") {
 		t.Fatalf("expected CONNECT line, got %q", text)
 	}
-	if !strings.Contains(text, "CLOSE  10.0.0.1  WALLET    rx=512  tx=4096") {
+	if !strings.Contains(text, "CLOSE  10.0.0.1  WALLET  rx=512  tx=4096") {
 		t.Fatalf("expected CLOSE line, got %q", text)
 	}
 }
@@ -82,11 +82,11 @@ func TestProxy_AccessLog_WritesFixedColumns(t *testing.T) {
 		t.Fatalf("read access log: %v", err)
 	}
 	text := string(data)
-	if !strings.Contains(text, "CONNECT  10.0.0.1  WALLET    rx=0  tx=0") {
-		t.Fatalf("expected CONNECT line with zero counters, got %q", text)
+	if !strings.Contains(text, "CONNECT  10.0.0.1  WALLET") {
+		t.Fatalf("expected CONNECT line without counters, got %q", text)
 	}
-	if !strings.Contains(text, "CLOSE  10.0.0.1  WALLET    rx=0  tx=0") {
-		t.Fatalf("expected CLOSE line with zero counters, got %q", text)
+	if !strings.Contains(text, "CLOSE  10.0.0.1  WALLET  rx=0  tx=0") {
+		t.Fatalf("expected CLOSE line with counters only, got %q", text)
 	}
 }
 

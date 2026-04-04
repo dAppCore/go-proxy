@@ -50,17 +50,17 @@ func (l *accessLogSink) OnLogin(e Event) {
 	if l == nil || e.Miner == nil {
 		return
 	}
-	l.writeLine("CONNECT", e.Miner.IP(), e.Miner.User(), e.Miner.Agent(), 0, 0)
+	l.writeConnectLine(e.Miner.IP(), e.Miner.User(), e.Miner.Agent())
 }
 
 func (l *accessLogSink) OnClose(e Event) {
 	if l == nil || e.Miner == nil {
 		return
 	}
-	l.writeLine("CLOSE", e.Miner.IP(), e.Miner.User(), "", e.Miner.RX(), e.Miner.TX())
+	l.writeCloseLine(e.Miner.IP(), e.Miner.User(), e.Miner.RX(), e.Miner.TX())
 }
 
-func (l *accessLogSink) writeLine(kind, ip, user, agent string, rx, tx uint64) {
+func (l *accessLogSink) writeConnectLine(ip, user, agent string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if strings.TrimSpace(l.path) == "" {
@@ -76,13 +76,38 @@ func (l *accessLogSink) writeLine(kind, ip, user, agent string, rx, tx uint64) {
 	var builder strings.Builder
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteByte(' ')
-	builder.WriteString(kind)
+	builder.WriteString("CONNECT")
 	builder.WriteString("  ")
 	builder.WriteString(ip)
 	builder.WriteString("  ")
 	builder.WriteString(user)
 	builder.WriteString("  ")
 	builder.WriteString(agent)
+	builder.WriteByte('\n')
+	_, _ = l.file.WriteString(builder.String())
+}
+
+func (l *accessLogSink) writeCloseLine(ip, user string, rx, tx uint64) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if strings.TrimSpace(l.path) == "" {
+		return
+	}
+	if l.file == nil {
+		file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
+		if err != nil {
+			return
+		}
+		l.file = file
+	}
+	var builder strings.Builder
+	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
+	builder.WriteByte(' ')
+	builder.WriteString("CLOSE")
+	builder.WriteString("  ")
+	builder.WriteString(ip)
+	builder.WriteString("  ")
+	builder.WriteString(user)
 	builder.WriteString("  rx=")
 	builder.WriteString(formatUint(rx))
 	builder.WriteString("  tx=")
