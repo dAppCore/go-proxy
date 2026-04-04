@@ -5,10 +5,8 @@ import (
 	"time"
 )
 
-// Workers maintains per-worker aggregate stats. Workers are identified by name,
-// derived from the miner's login fields per WorkersMode.
-//
-//	workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
+// workers := NewWorkers(WorkersByRigID, bus)
+// records := workers.List()
 type Workers struct {
 	mode       WorkersMode
 	entries    []WorkerRecord // ordered by first-seen (stable)
@@ -18,9 +16,7 @@ type Workers struct {
 	mu         sync.RWMutex
 }
 
-// WorkerRecord is the per-identity aggregate.
-//
-//	hr60 := record.Hashrate(60)
+// record.Hashrate(60)
 type WorkerRecord struct {
 	Name        string
 	LastIP      string

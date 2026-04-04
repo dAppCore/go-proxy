@@ -16,16 +16,13 @@ import (
 	"dappco.re/go/proxy"
 )
 
-// Router matches the standard http.ServeMux registration shape.
+// http.NewServeMux()
 type Router interface {
 	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
 }
 
-// RegisterRoutes wires the monitoring endpoints onto the supplied router.
-//
-//	mux := http.NewServeMux()
-//	proxyapi.RegisterRoutes(mux, p)
-//	// GET /1/summary, /1/workers, and /1/miners are now live.
+// mux := http.NewServeMux()
+// RegisterRoutes(mux, p)
 func RegisterRoutes(router Router, p *proxy.Proxy) {
 	if router == nil || p == nil {
 		return

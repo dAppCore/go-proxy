@@ -12,12 +12,8 @@ import (
 	"dappco.re/go/proxy"
 )
 
-// StratumClient is one outbound stratum TCP (optionally TLS) connection to a pool.
-// The proxy presents itself to the pool as a standard stratum miner using the
-// wallet address and password from PoolConfig.
-//
-//	client := pool.NewStratumClient(poolCfg, listener)
-//	client.Connect()
+// client := NewStratumClient(poolCfg, listener)
+// client.Connect()
 type StratumClient struct {
 	config     proxy.PoolConfig
 	listener   StratumListener
@@ -32,7 +28,9 @@ type StratumClient struct {
 	sendMu     sync.Mutex
 }
 
-// StratumListener receives events from the pool connection.
+// type listener struct{}
+//
+// func (listener) OnJob(job proxy.Job) {}
 type StratumListener interface {
 	// OnJob is called when the pool pushes a new job notification or the login reply contains a job.
 	OnJob(job proxy.Job)

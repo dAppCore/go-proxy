@@ -1,18 +1,12 @@
 package proxy
 
-// WorkerRow is one row in the /1/workers table.
-//
-//	WorkerRow{"rig-alpha", "10.0.0.1", 1, 10, 0, 0, 100000, 1712232000, 1.0, 1.0, 1.0, 1.0, 1.0}
+// WorkerRow{"rig-alpha", "10.0.0.1", 1, 10, 0, 0, 100000, 1712232000, 1.0, 1.0, 1.0, 1.0, 1.0}
 type WorkerRow [13]any
 
-// MinerRow is one row in the /1/miners table.
-//
-//	MinerRow{1, "10.0.0.1:49152", 4096, 512, 2, 100000, "WALLET", "********", "rig-alpha", "XMRig/6.21.0"}
+// MinerRow{1, "10.0.0.1:49152", 4096, 512, 2, 100000, "WALLET", "********", "rig-alpha", "XMRig/6.21.0"}
 type MinerRow [10]any
 
-// SummaryDocument is the RFC-shaped /1/summary response body.
-//
-//	doc := p.SummaryDocument()
+// p.SummaryDocument()
 type SummaryDocument struct {
 	Version         string                           `json:"version"`
 	Mode            string                           `json:"mode"`
@@ -24,24 +18,18 @@ type SummaryDocument struct {
 	CustomDiffStats map[uint64]CustomDiffBucketStats `json:"custom_diff_stats,omitempty"`
 }
 
-// HashrateDocument carries the per-window hashrate array.
-//
-//	HashrateDocument{Total: [6]float64{12345.67, 11900.00, 12100.00, 11800.00, 12000.00, 12200.00}}
+// HashrateDocument{Total: [6]float64{12345.67, 11900.00, 12100.00, 11800.00, 12000.00, 12200.00}}
 type HashrateDocument struct {
 	Total [6]float64 `json:"total"`
 }
 
-// MinersCountDocument carries current and peak miner counts.
-//
-//	MinersCountDocument{Now: 142, Max: 200}
+// MinersCountDocument{Now: 142, Max: 200}
 type MinersCountDocument struct {
 	Now uint64 `json:"now"`
 	Max uint64 `json:"max"`
 }
 
-// UpstreamDocument carries pool connection state counts.
-//
-//	UpstreamDocument{Active: 1, Sleep: 0, Error: 0, Total: 1, Ratio: 142.0}
+// UpstreamDocument{Active: 1, Sleep: 0, Error: 0, Total: 1, Ratio: 142.0}
 type UpstreamDocument struct {
 	Active uint64  `json:"active"`
 	Sleep  uint64  `json:"sleep"`
@@ -50,9 +38,7 @@ type UpstreamDocument struct {
 	Ratio  float64 `json:"ratio"`
 }
 
-// ResultsDocument carries share acceptance statistics.
-//
-//	ResultsDocument{Accepted: 4821, Rejected: 3, Invalid: 0, Expired: 12}
+// ResultsDocument{Accepted: 4821, Rejected: 3, Invalid: 0, Expired: 12}
 type ResultsDocument struct {
 	Accepted    uint64     `json:"accepted"`
 	Rejected    uint64     `json:"rejected"`
@@ -64,17 +50,13 @@ type ResultsDocument struct {
 	Best        [10]uint64 `json:"best"`
 }
 
-// WorkersDocument is the RFC-shaped /1/workers response body.
-//
-//	doc := p.WorkersDocument()
+// p.WorkersDocument()
 type WorkersDocument struct {
 	Mode    string      `json:"mode"`
 	Workers []WorkerRow `json:"workers"`
 }
 
-// MinersDocument is the RFC-shaped /1/miners response body.
-//
-//	doc := p.MinersDocument()
+// p.MinersDocument()
 type MinersDocument struct {
 	Format []string   `json:"format"`
 	Miners []MinerRow `json:"miners"`
