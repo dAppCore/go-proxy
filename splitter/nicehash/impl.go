@@ -98,13 +98,17 @@ func (s *NonceSplitter) GC() {
 	now := time.Now()
 	next := s.mappers[:0]
 	for _, mapper := range s.mappers {
+		if mapper == nil || mapper.storage == nil {
+			continue
+		}
 		free, dead, active := mapper.storage.SlotCount()
-		if active == 0 && dead == 0 && now.Sub(mapper.lastUsed) > time.Minute {
+		if active == 0 && now.Sub(mapper.lastUsed) > time.Minute {
 			if mapper.strategy != nil {
 				mapper.strategy.Disconnect()
 			}
 			delete(s.byID, mapper.id)
 			_ = free
+			_ = dead
 			continue
 		}
 		next = append(next, mapper)
