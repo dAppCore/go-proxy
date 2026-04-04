@@ -112,7 +112,7 @@ func summaryResponse(p *proxy.Proxy) SummaryResponse {
 			Sleep:  upstreams.Sleep,
 			Error:  upstreams.Error,
 			Total:  upstreams.Total,
-			Ratio:  ratio(now, upstreams.Total),
+			Ratio:  upstreamRatio(now, upstreams.Total),
 		},
 		Results: ResultsResponse{
 			Accepted:    summary.Accepted,
@@ -181,7 +181,7 @@ func writeJSON(w http.ResponseWriter, payload any) {
 	_ = json.NewEncoder(w).Encode(payload)
 }
 
-func ratio(now, total uint64) float64 {
+func upstreamRatio(now, total uint64) float64 {
 	if total == 0 {
 		return 0
 	}

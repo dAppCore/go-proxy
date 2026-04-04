@@ -1493,6 +1493,3 @@ func (n *noopSplitter) GC()                         {}
 func (n *noopSplitter) Upstreams() UpstreamStats    { return UpstreamStats{} }
 
 // Difficulty helper for the HTTP summary.
-func workerSummaryNow(workers []WorkerRecord) uint64 {
-	return uint64(len(workers))
-}
