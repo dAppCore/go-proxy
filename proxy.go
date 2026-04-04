@@ -40,6 +40,7 @@ type Proxy struct {
 	rateLimit         *RateLimiter
 	httpServer        *http.Server
 	accessLog         *accessLogSink
+	shareLog          *shareLogSink
 	submitCount       atomic.Int64
 }
 

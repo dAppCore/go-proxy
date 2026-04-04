@@ -48,6 +48,7 @@ func New(cfg *Config) (*Proxy, Result) {
 		customDiffBuckets: NewCustomDiffBuckets(cfg.CustomDiffStats),
 		rateLimit:         NewRateLimiter(cfg.RateLimit),
 		accessLog:         newAccessLogSink(cfg.AccessLogFile),
+		shareLog:          newShareLogSink(cfg.ShareLogFile),
 		done:              make(chan struct{}),
 	}
 	p.workers.bindEvents(p.events)
@@ -61,6 +62,10 @@ func New(cfg *Config) (*Proxy, Result) {
 	p.events.Subscribe(EventClose, p.stats.OnClose)
 	p.events.Subscribe(EventAccept, p.stats.OnAccept)
 	p.events.Subscribe(EventReject, p.stats.OnReject)
+	if p.shareLog != nil {
+		p.events.Subscribe(EventAccept, p.shareLog.OnAccept)
+		p.events.Subscribe(EventReject, p.shareLog.OnReject)
+	}
 	if p.customDiffBuckets != nil {
 		p.events.Subscribe(EventAccept, p.customDiffBuckets.OnAccept)
 		p.events.Subscribe(EventReject, p.customDiffBuckets.OnReject)
@@ -260,6 +265,9 @@ func (p *Proxy) Stop() {
 		if p.accessLog != nil {
 			p.accessLog.Close()
 		}
+		if p.shareLog != nil {
+			p.shareLog.Close()
+		}
 	})
 }
 
@@ -312,6 +320,9 @@ func (p *Proxy) Reload(cfg *Config) {
 	}
 	if p.accessLog != nil {
 		p.accessLog.SetPath(cfg.AccessLogFile)
+	}
+	if p.shareLog != nil {
+		p.shareLog.SetPath(cfg.ShareLogFile)
 	}
 }
 

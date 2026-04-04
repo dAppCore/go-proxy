@@ -16,6 +16,7 @@ type Config struct {
 	AlgoExtension   bool         `json:"algo-ext"`          // forward algo field in jobs
 	Workers         WorkersMode  `json:"workers"`           // "rig-id", "user", "password", "agent", "ip", "false"
 	AccessLogFile   string       `json:"access-log-file"`   // "" = disabled
+	ShareLogFile    string       `json:"share-log-file"`    // "" = disabled
 	ReuseTimeout    int          `json:"reuse-timeout"`     // seconds; simple mode upstream reuse
 	Retries         int          `json:"retries"`           // pool reconnect attempts
 	RetryPause      int          `json:"retry-pause"`       // seconds between retries
