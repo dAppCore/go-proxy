@@ -13,7 +13,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"dappco.re/go/core/proxy"
+	"dappco.re/go/proxy"
 )
 
 // Router matches the standard http.ServeMux registration shape.

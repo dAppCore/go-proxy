@@ -9,7 +9,7 @@ import (
 	"net"
 	"sync"
 
-	"dappco.re/go/core/proxy"
+	"dappco.re/go/proxy"
 )
 
 // StratumClient is one outbound stratum TCP (optionally TLS) connection to a pool.

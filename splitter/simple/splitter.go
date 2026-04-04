@@ -10,8 +10,8 @@ package simple
 import (
 	"sync"
 
-	"dappco.re/go/core/proxy"
-	"dappco.re/go/core/proxy/pool"
+	"dappco.re/go/proxy"
+	"dappco.re/go/proxy/pool"
 )
 
 // SimpleSplitter is the Splitter implementation for simple (passthrough) mode.

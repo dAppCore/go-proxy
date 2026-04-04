@@ -3,7 +3,7 @@ package nicehash
 import (
 	"testing"
 
-	"dappco.re/go/core/proxy"
+	"dappco.re/go/proxy"
 )
 
 func TestNonceStorage_AddAndRemove(t *testing.T) {

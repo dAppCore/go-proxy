@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"dappco.re/go/core/proxy"
-	"dappco.re/go/core/proxy/pool"
+	"dappco.re/go/proxy"
+	"dappco.re/go/proxy/pool"
 )
 
 // SimpleMapper holds one outbound pool connection and serves at most one active miner

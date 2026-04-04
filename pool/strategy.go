@@ -3,7 +3,7 @@ package pool
 import (
 	"sync"
 
-	"dappco.re/go/core/proxy"
+	"dappco.re/go/proxy"
 )
 
 // FailoverStrategy wraps an ordered slice of PoolConfig entries.

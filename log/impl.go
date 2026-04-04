@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"dappco.re/go/core/proxy"
+	"dappco.re/go/proxy"
 )
 
 // NewAccessLog creates an append-only access log.

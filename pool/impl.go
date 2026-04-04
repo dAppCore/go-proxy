@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"dappco.re/go/core/proxy"
+	"dappco.re/go/proxy"
 )
 
 // NewStrategyFactory creates a StrategyFactory for the supplied config.

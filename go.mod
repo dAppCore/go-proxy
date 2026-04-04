@@ -1,3 +1,3 @@
-module dappco.re/go/core/proxy
+module dappco.re/go/proxy
 
 go 1.26.0
