@@ -9,9 +9,9 @@ import (
 // Stats tracks global proxy metrics. Hot-path counters are atomic. Hashrate windows
 // use a ring buffer per window size, advanced by Tick().
 //
-//	s := proxy.NewStats()
-//	bus.Subscribe(proxy.EventAccept, s.OnAccept)
-//	bus.Subscribe(proxy.EventReject, s.OnReject)
+//	stats := proxy.NewStats()
+//	bus.Subscribe(proxy.EventAccept, stats.OnAccept)
+//	bus.Subscribe(proxy.EventReject, stats.OnReject)
 type Stats struct {
 	accepted    atomic.Uint64
 	rejected    atomic.Uint64

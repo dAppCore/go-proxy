@@ -1189,6 +1189,9 @@ func (m *Miner) Close() {
 }
 
 // NewStats creates zeroed global metrics.
+//
+//	stats := proxy.NewStats()
+//	bus.Subscribe(proxy.EventAccept, stats.OnAccept)
 func NewStats() *Stats {
 	stats := &Stats{startTime: time.Now().UTC(), latency: make([]uint16, 0, 1024)}
 	stats.windows[HashrateWindow60s] = newTickWindow(60)
@@ -1340,6 +1343,9 @@ func insertTopDiff(top *[10]uint64, diff uint64) {
 }
 
 // NewWorkers creates a worker aggregate tracker.
+//
+//	workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
+//	workers.OnLogin(proxy.Event{Miner: miner})
 func NewWorkers(mode WorkersMode, bus *EventBus) *Workers {
 	workers := &Workers{
 		mode:      mode,
@@ -1571,7 +1577,10 @@ func (cd *CustomDiff) Apply(miner *Miner) {
 
 // NewServer constructs a server instance.
 //
-//	server, result := proxy.NewServer(bind, tlsCfg, limiter, onAccept)
+//	server, result := proxy.NewServer(bind, tlsCfg, limiter, func(conn net.Conn, port uint16) {
+//	    _ = conn
+//	    _ = port
+//	})
 func NewServer(bind BindAddr, tlsCfg *tls.Config, limiter *RateLimiter, onAccept func(net.Conn, uint16)) (*Server, Result) {
 	if onAccept == nil {
 		onAccept = func(net.Conn, uint16) {}

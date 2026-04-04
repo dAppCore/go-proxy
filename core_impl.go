@@ -108,6 +108,9 @@ func isValidWorkersMode(mode WorkersMode) bool {
 }
 
 // NewEventBus creates an empty synchronous event dispatcher.
+//
+//	bus := proxy.NewEventBus()
+//	bus.Subscribe(proxy.EventLogin, func(e proxy.Event) { _ = e.Miner })
 func NewEventBus() *EventBus {
 	return &EventBus{listeners: make(map[EventType][]EventHandler)}
 }
@@ -190,6 +193,9 @@ func targetFromDifficulty(diff uint64) string {
 }
 
 // NewCustomDiff creates a login-time custom difficulty resolver.
+//
+//	resolver := proxy.NewCustomDiff(50000)
+//	resolver.OnLogin(proxy.Event{Miner: miner})
 func NewCustomDiff(globalDiff uint64) *CustomDiff {
 	return &CustomDiff{globalDiff: globalDiff}
 }
@@ -207,6 +213,9 @@ func (cd *CustomDiff) OnLogin(e Event) {
 }
 
 // NewRateLimiter creates a per-IP token bucket limiter.
+//
+//	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+//	if limiter.Allow("203.0.113.42:3333") { /* accept */ }
 func NewRateLimiter(cfg RateLimit) *RateLimiter {
 	return &RateLimiter{
 		cfg:     cfg,

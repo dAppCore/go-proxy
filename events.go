@@ -6,7 +6,7 @@ import "sync"
 // Dispatch is synchronous on the calling goroutine. Listeners must not block.
 //
 //	bus := proxy.NewEventBus()
-//	bus.Subscribe(proxy.EventLogin, customDiff.OnLogin)
+//	bus.Subscribe(proxy.EventLogin, func(e proxy.Event) { fmt.Println(e.Miner.User()) })
 //	bus.Subscribe(proxy.EventAccept, stats.OnAccept)
 type EventBus struct {
 	listeners map[EventType][]EventHandler

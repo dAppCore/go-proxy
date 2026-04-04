@@ -8,7 +8,7 @@ import (
 // Workers maintains per-worker aggregate stats. Workers are identified by name,
 // derived from the miner's login fields per WorkersMode.
 //
-//	w := proxy.NewWorkers(proxy.WorkersByRigID, bus)
+//	workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
 type Workers struct {
 	mode       WorkersMode
 	entries    []WorkerRecord // ordered by first-seen (stable)
