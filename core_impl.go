@@ -263,6 +263,10 @@ func (rl *RateLimiter) Tick() {
 }
 
 // NewConfigWatcher creates a polling watcher for a config file.
+//
+//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
+//		proxyInstance.Reload(cfg)
+//	})
 func NewConfigWatcher(path string, onChange func(*Config)) *ConfigWatcher {
 	return &ConfigWatcher{
 		path:     path,
@@ -272,6 +276,8 @@ func NewConfigWatcher(path string, onChange func(*Config)) *ConfigWatcher {
 }
 
 // Start begins the 1-second polling loop.
+//
+//	watcher.Start()
 func (w *ConfigWatcher) Start() {
 	if w == nil || w.path == "" || w.onChange == nil {
 		return
@@ -302,6 +308,8 @@ func (w *ConfigWatcher) Start() {
 }
 
 // Stop ends the watcher goroutine.
+//
+//	watcher.Stop()
 func (w *ConfigWatcher) Stop() {
 	if w == nil {
 		return

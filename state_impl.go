@@ -30,6 +30,11 @@ type MinerSnapshot struct {
 }
 
 // New creates the proxy and wires the default event handlers.
+//
+//	p, result := proxy.New(cfg)
+//	if !result.OK {
+//		return
+//	}
 func New(cfg *Config) (*Proxy, Result) {
 	if cfg == nil {
 		return nil, errorResult(errors.New("config is nil"))
@@ -162,6 +167,8 @@ func (p *Proxy) Upstreams() UpstreamStats {
 }
 
 // Events returns the proxy event bus for external composition.
+//
+//	bus := p.Events()
 func (p *Proxy) Events() *EventBus {
 	if p == nil {
 		return nil
@@ -170,6 +177,8 @@ func (p *Proxy) Events() *EventBus {
 }
 
 // Start starts the TCP listeners, ticker loop, and optional HTTP API.
+//
+//	p.Start()
 func (p *Proxy) Start() {
 	if p == nil {
 		return
@@ -237,6 +246,8 @@ func (p *Proxy) Start() {
 }
 
 // Stop shuts down listeners, background tasks, and HTTP.
+//
+//	p.Stop()
 func (p *Proxy) Stop() {
 	if p == nil {
 		return
@@ -289,6 +300,8 @@ func (p *Proxy) closeAllMiners() {
 }
 
 // Reload swaps the live configuration and updates dependent state.
+//
+//	p.Reload(updatedCfg)
 func (p *Proxy) Reload(cfg *Config) {
 	if p == nil || cfg == nil {
 		return
@@ -1435,6 +1448,8 @@ func (cd *CustomDiff) Apply(miner *Miner) {
 }
 
 // NewServer constructs a server instance.
+//
+//	server, result := proxy.NewServer(bind, tlsCfg, limiter, onAccept)
 func NewServer(bind BindAddr, tlsCfg *tls.Config, limiter *RateLimiter, onAccept func(net.Conn, uint16)) (*Server, Result) {
 	if onAccept == nil {
 		onAccept = func(net.Conn, uint16) {}
@@ -1453,6 +1468,8 @@ func NewServer(bind BindAddr, tlsCfg *tls.Config, limiter *RateLimiter, onAccept
 }
 
 // Start begins accepting connections in a goroutine.
+//
+//	server.Start()
 func (s *Server) Start() {
 	if s == nil {
 		return
@@ -1483,6 +1500,8 @@ func (s *Server) Start() {
 }
 
 // Stop closes the listener.
+//
+//	server.Stop()
 func (s *Server) Stop() {
 	if s == nil {
 		return
