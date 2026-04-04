@@ -75,6 +75,8 @@ func New(cfg *Config) (*Proxy, Result) {
 		p.events.Subscribe(EventAccept, p.customDiffBuckets.OnAccept)
 		p.events.Subscribe(EventReject, p.customDiffBuckets.OnReject)
 	}
+	p.events.Subscribe(EventAccept, p.onShareSettled)
+	p.events.Subscribe(EventReject, p.onShareSettled)
 	if cfg.Watch && cfg.sourcePath != "" {
 		p.watcher = NewConfigWatcher(cfg.sourcePath, p.Reload)
 	}
@@ -339,6 +341,21 @@ func (p *Proxy) Reload(cfg *Config) {
 	}
 }
 
+func (p *Proxy) onShareSettled(Event) {
+	if p == nil {
+		return
+	}
+	for {
+		current := p.submitCount.Load()
+		if current == 0 {
+			return
+		}
+		if p.submitCount.CompareAndSwap(current, current-1) {
+			return
+		}
+	}
+}
+
 func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	if p == nil {
 		_ = conn.Close()
@@ -361,9 +378,10 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 		}
 	}
 	miner.onSubmit = func(m *Miner, event *SubmitEvent) {
-		p.submitCount.Add(1)
-		defer p.submitCount.Add(-1)
 		if p.splitter != nil {
+			if _, ok := p.splitter.(*noopSplitter); !ok {
+				p.submitCount.Add(1)
+			}
 			p.splitter.OnSubmit(event)
 		}
 	}
