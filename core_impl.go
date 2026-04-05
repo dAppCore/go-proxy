@@ -364,9 +364,6 @@ func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher 
 		onChange: onChange,
 		done:     make(chan struct{}),
 	}
-	if data, err := os.ReadFile(configPath); err == nil {
-		watcher.lastSum = sha256.Sum256(data)
-	}
 	if info, err := os.Stat(configPath); err == nil {
 		watcher.lastMod = info.ModTime()
 	}
@@ -392,28 +389,20 @@ func (w *ConfigWatcher) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				data, err := os.ReadFile(w.path)
-				if err != nil {
-					continue
-				}
-				sum := sha256.Sum256(data)
-				w.mu.Lock()
-				changed := sum != w.lastSum
-				if changed {
-					w.lastSum = sum
-				}
-				w.mu.Unlock()
-				if !changed {
-					continue
-				}
 				if info, err := os.Stat(w.path); err == nil {
 					w.mu.Lock()
-					w.lastMod = info.ModTime()
+					changed := info.ModTime() != w.lastMod
+					if changed {
+						w.lastMod = info.ModTime()
+					}
 					w.mu.Unlock()
-				}
-				config, result := LoadConfig(w.path)
-				if result.OK && config != nil {
-					w.onChange(config)
+					if !changed {
+						continue
+					}
+					config, result := LoadConfig(w.path)
+					if result.OK && config != nil {
+						w.onChange(config)
+					}
 				}
 			case <-w.done:
 				return

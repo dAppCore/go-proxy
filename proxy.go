@@ -110,16 +110,13 @@ type CloseEvent struct {
 	Miner *Miner
 }
 
-// ConfigWatcher polls a config file for changes.
+// ConfigWatcher polls a config file every second and reloads on modification.
 //
-//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
-//	    p.Reload(cfg)
-//	})
+//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) { p.Reload(cfg) })
 type ConfigWatcher struct {
 	path     string
 	onChange func(*Config)
 	lastMod  time.Time
-	lastSum  [32]byte
 	done     chan struct{}
 	mu       sync.Mutex
 	started  bool
