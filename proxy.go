@@ -25,6 +25,7 @@ type Proxy struct {
 	config            *Config
 	configMu          sync.RWMutex
 	splitter          Splitter
+	shareSink         ShareSink
 	stats             *Stats
 	workers           *Workers
 	events            *EventBus
@@ -64,6 +65,15 @@ type Splitter interface {
 	GC()
 	// Upstreams returns current upstream pool connection counts.
 	Upstreams() UpstreamStats
+}
+
+// ShareSink consumes share outcomes from the proxy event stream.
+//
+//	sink.OnAccept(proxy.Event{Miner: miner, Diff: 100000})
+//	sink.OnReject(proxy.Event{Miner: miner, Error: "Invalid nonce"})
+type ShareSink interface {
+	OnAccept(Event)
+	OnReject(Event)
 }
 
 // UpstreamStats reports pool connection counts.

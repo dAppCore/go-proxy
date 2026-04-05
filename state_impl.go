@@ -69,13 +69,17 @@ func New(config *Config) (*Proxy, Result) {
 	p.events.Subscribe(EventClose, p.stats.OnClose)
 	p.events.Subscribe(EventAccept, p.stats.OnAccept)
 	p.events.Subscribe(EventReject, p.stats.OnReject)
+	shareSinks := make([]ShareSink, 0, 2)
 	if p.shareLog != nil {
-		p.events.Subscribe(EventAccept, p.shareLog.OnAccept)
-		p.events.Subscribe(EventReject, p.shareLog.OnReject)
+		shareSinks = append(shareSinks, p.shareLog)
 	}
 	if p.customDiffBuckets != nil {
-		p.events.Subscribe(EventAccept, p.customDiffBuckets.OnAccept)
-		p.events.Subscribe(EventReject, p.customDiffBuckets.OnReject)
+		shareSinks = append(shareSinks, p.customDiffBuckets)
+	}
+	if len(shareSinks) > 0 {
+		p.shareSink = newShareSinkGroup(shareSinks...)
+		p.events.Subscribe(EventAccept, p.shareSink.OnAccept)
+		p.events.Subscribe(EventReject, p.shareSink.OnReject)
 	}
 	p.events.Subscribe(EventAccept, p.onShareSettled)
 	p.events.Subscribe(EventReject, p.onShareSettled)

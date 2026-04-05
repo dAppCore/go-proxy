@@ -149,6 +149,48 @@ func (b *EventBus) Dispatch(e Event) {
 	}
 }
 
+type shareSinkGroup struct {
+	sinks []ShareSink
+}
+
+func newShareSinkGroup(sinks ...ShareSink) *shareSinkGroup {
+	group := &shareSinkGroup{sinks: make([]ShareSink, 0, len(sinks))}
+	for _, sink := range sinks {
+		if sink != nil {
+			group.sinks = append(group.sinks, sink)
+		}
+	}
+	return group
+}
+
+func (g *shareSinkGroup) OnAccept(e Event) {
+	if g == nil {
+		return
+	}
+	for _, sink := range g.sinks {
+		func() {
+			defer func() {
+				_ = recover()
+			}()
+			sink.OnAccept(e)
+		}()
+	}
+}
+
+func (g *shareSinkGroup) OnReject(e Event) {
+	if g == nil {
+		return
+	}
+	for _, sink := range g.sinks {
+		func() {
+			defer func() {
+				_ = recover()
+			}()
+			sink.OnReject(e)
+		}()
+	}
+}
+
 // IsValid returns true when the job contains a blob and job id.
 //
 //	if !job.IsValid() {
