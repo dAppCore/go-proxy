@@ -49,7 +49,7 @@ func getSplitterFactory(mode string) (func(*Config, *EventBus) Splitter, bool) {
 	return factory, ok
 }
 
-// LoadConfig reads and unmarshals a JSON config file.
+// LoadConfig("/etc/proxy.json")
 //
 //	cfg, result := LoadConfig("/etc/proxy.json")
 //	if !result.OK {
@@ -69,7 +69,7 @@ func LoadConfig(path string) (*Config, Result) {
 	return config, config.Validate()
 }
 
-// Validate checks that mandatory bind and pool settings are present.
+// Validate(&Config{Mode: "nicehash", Bind: []BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
 //
 //	if result := cfg.Validate(); !result.OK {
 //	    return result
