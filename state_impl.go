@@ -24,6 +24,13 @@ const (
 )
 
 // MinerSnapshot is a serialisable view of one miner connection.
+//
+//	snapshots := p.MinerSnapshots()
+//	for _, s := range snapshots {
+//	    _ = s.ID   // 1
+//	    _ = s.IP   // "10.0.0.1:49152"
+//	    _ = s.Diff // 100000
+//	}
 type MinerSnapshot struct {
 	ID       int64
 	IP       string
@@ -102,6 +109,8 @@ func New(config *Config) (*Proxy, Result) {
 }
 
 // Mode returns the runtime mode, for example "nicehash" or "simple".
+//
+//	mode := p.Mode() // "nicehash"
 func (p *Proxy) Mode() string {
 	if p == nil || p.config == nil {
 		return ""
@@ -112,6 +121,8 @@ func (p *Proxy) Mode() string {
 }
 
 // WorkersMode returns the active worker identity strategy, for example proxy.WorkersByRigID.
+//
+//	mode := p.WorkersMode() // proxy.WorkersByRigID
 func (p *Proxy) WorkersMode() WorkersMode {
 	if p == nil || p.config == nil {
 		return WorkersDisabled
@@ -122,6 +133,9 @@ func (p *Proxy) WorkersMode() WorkersMode {
 }
 
 // Summary returns a snapshot of the current global metrics.
+//
+//	summary := p.Summary()
+//	_ = summary.Accepted
 func (p *Proxy) Summary() StatsSummary {
 	if p == nil || p.stats == nil {
 		return StatsSummary{}
@@ -134,6 +148,9 @@ func (p *Proxy) Summary() StatsSummary {
 }
 
 // WorkerRecords returns a snapshot of the current worker aggregates.
+//
+//	records := p.WorkerRecords()
+//	for _, r := range records { _ = r.Name }
 func (p *Proxy) WorkerRecords() []WorkerRecord {
 	if p == nil || p.workers == nil {
 		return nil
@@ -142,6 +159,9 @@ func (p *Proxy) WorkerRecords() []WorkerRecord {
 }
 
 // MinerSnapshots returns a snapshot of the live miner connections.
+//
+//	snapshots := p.MinerSnapshots()
+//	for _, s := range snapshots { _ = s.IP }
 func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 	if p == nil {
 		return nil
@@ -172,6 +192,8 @@ func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 }
 
 // MinerCount returns the current and peak miner counts.
+//
+//	now, max := p.MinerCount() // 142, 200
 func (p *Proxy) MinerCount() (now, max uint64) {
 	if p == nil || p.stats == nil {
 		return 0, 0
@@ -180,6 +202,9 @@ func (p *Proxy) MinerCount() (now, max uint64) {
 }
 
 // Upstreams returns the current upstream connection counts.
+//
+//	stats := p.Upstreams()
+//	_ = stats.Active // 1
 func (p *Proxy) Upstreams() UpstreamStats {
 	if p == nil || p.splitter == nil {
 		return UpstreamStats{}
@@ -188,6 +213,9 @@ func (p *Proxy) Upstreams() UpstreamStats {
 }
 
 // Events returns the proxy event bus for subscription.
+//
+//	bus := p.Events()
+//	bus.Subscribe(proxy.EventAccept, handler)
 func (p *Proxy) Events() *EventBus {
 	if p == nil {
 		return nil
@@ -862,71 +890,166 @@ func NewMiner(conn net.Conn, localPort uint16, tlsCfg *tls.Config) *Miner {
 	return miner
 }
 
+// SetID assigns the miner's internal ID. Used by NonceStorage tests.
+//
+//	m.SetID(42)
 func (m *Miner) SetID(id int64) { m.id = id }
-func (m *Miner) ID() int64      { return m.id }
+
+// ID returns the miner's monotonically increasing per-process identifier.
+//
+//	id := m.ID() // 42
+func (m *Miner) ID() int64 { return m.id }
+
+// SetMapperID assigns which NonceMapper owns this miner in NiceHash mode.
+//
+//	m.SetMapperID(0) // assigned to mapper 0
 func (m *Miner) SetMapperID(id int64) {
 	m.mapperID = id
 }
+
+// MapperID returns the owning NonceMapper's ID, or -1 if unassigned.
+//
+//	if m.MapperID() < 0 { /* miner not assigned to any mapper */ }
 func (m *Miner) MapperID() int64 {
 	return m.mapperID
 }
+
+// SetRouteID assigns the SimpleMapper ID in simple mode.
+//
+//	m.SetRouteID(3)
 func (m *Miner) SetRouteID(id int64) {
 	m.routeID = id
 }
+
+// RouteID returns the SimpleMapper ID, or -1 if unassigned.
+//
+//	if m.RouteID() < 0 { /* miner not routed */ }
 func (m *Miner) RouteID() int64 {
 	return m.routeID
 }
+
+// SetExtendedNiceHash enables or disables NiceHash nonce-splitting mode for this miner.
+//
+//	m.SetExtendedNiceHash(true)
 func (m *Miner) SetExtendedNiceHash(enabled bool) {
 	m.extNH = enabled
 }
+
+// ExtendedNiceHash reports whether this miner is in NiceHash nonce-splitting mode.
+//
+//	if m.ExtendedNiceHash() { /* blob byte 39 is patched */ }
 func (m *Miner) ExtendedNiceHash() bool {
 	return m.extNH
 }
+
+// SetCurrentJob assigns the current pool work unit to this miner.
+//
+//	m.SetCurrentJob(proxy.Job{Blob: "...", JobID: "job-1"})
 func (m *Miner) SetCurrentJob(job Job) {
 	m.currentJob = job
 }
+
+// CurrentJob returns the last job forwarded to this miner.
+//
+//	job := m.CurrentJob()
+//	if job.IsValid() { /* miner has a valid job */ }
 func (m *Miner) CurrentJob() Job {
 	return m.currentJob
 }
+
+// LoginAlgos returns the algorithm list sent by the miner during login, or nil if empty.
+//
+//	algos := m.LoginAlgos() // ["cn/r", "rx/0"]
 func (m *Miner) LoginAlgos() []string {
 	if m == nil || len(m.loginAlgos) == 0 {
 		return nil
 	}
 	return append([]string(nil), m.loginAlgos...)
 }
+
+// FixedByte returns the NiceHash slot index (0-255) assigned to this miner.
+//
+//	slot := m.FixedByte() // 0x2A
 func (m *Miner) FixedByte() uint8 {
 	return m.fixedByte
 }
+
+// SetFixedByte assigns the NiceHash slot index for this miner.
+//
+//	m.SetFixedByte(0x2A)
 func (m *Miner) SetFixedByte(value uint8) {
 	m.fixedByte = value
 }
+
+// IP returns the remote IP address (without port) for logging.
+//
+//	ip := m.IP() // "10.0.0.1"
 func (m *Miner) IP() string {
 	return m.ip
 }
+
+// RemoteAddr returns the full remote address including port.
+//
+//	addr := m.RemoteAddr() // "10.0.0.1:49152"
 func (m *Miner) RemoteAddr() string {
 	if m == nil {
 		return ""
 	}
 	return m.remoteAddr
 }
+
+// User returns the wallet address from login params, with any custom diff suffix stripped.
+//
+//	user := m.User() // "WALLET" (even if login was "WALLET+50000")
 func (m *Miner) User() string {
 	return m.user
 }
+
+// Password returns the login params.pass value.
+//
+//	pass := m.Password() // "x"
 func (m *Miner) Password() string {
 	return m.password
 }
+
+// Agent returns the mining software identifier from login params.
+//
+//	agent := m.Agent() // "XMRig/6.21.0"
 func (m *Miner) Agent() string {
 	return m.agent
 }
+
+// RigID returns the optional rigid extension field from login params.
+//
+//	rigid := m.RigID() // "rig-alpha"
 func (m *Miner) RigID() string {
 	return m.rigID
 }
+
+// RX returns the total bytes received from this miner.
+//
+//	rx := m.RX() // 4096
 func (m *Miner) RX() uint64 {
 	return m.rx
 }
+
+// TX returns the total bytes sent to this miner.
+//
+//	tx := m.TX() // 8192
 func (m *Miner) TX() uint64 {
 	return m.tx
 }
+
+// Diff returns the last difficulty sent to this miner from the pool.
+//
+//	diff := m.Diff() // 100000
+func (m *Miner) Diff() uint64 {
+	return m.diff
+}
+
+// State returns the current lifecycle state of this miner connection.
+//
+//	if m.State() == proxy.MinerStateReady { /* miner is active */ }
 func (m *Miner) State() MinerState {
 	return m.state
 }
@@ -1863,6 +1986,8 @@ func (s *Server) listen() Result {
 }
 
 // IsActive reports whether the limiter has enabled rate limiting.
+//
+//	if rl.IsActive() { /* rate limiting is enabled */ }
 func (rl *RateLimiter) IsActive() bool {
 	return rl != nil && rl.limit.MaxConnectionsPerMinute > 0
 }

@@ -251,6 +251,9 @@ func (j Job) DifficultyFromTarget() uint64 {
 	return uint64(math.MaxUint32) / uint64(target)
 }
 
+// targetFromDifficulty converts a difficulty into the 8-char little-endian hex target.
+//
+//	target := targetFromDifficulty(10000) // "b88d0600"
 func targetFromDifficulty(diff uint64) string {
 	if diff <= 1 {
 		return "ffffffff"
@@ -268,6 +271,10 @@ func targetFromDifficulty(diff uint64) string {
 	return hex.EncodeToString(raw[:])
 }
 
+// EffectiveShareDifficulty returns the share difficulty capped by the miner's custom diff.
+// If no custom diff is set or the pool diff is already lower, the pool diff is returned.
+//
+//	diff := proxy.EffectiveShareDifficulty(job, miner) // 25000 when customDiff < poolDiff
 func EffectiveShareDifficulty(job Job, miner *Miner) uint64 {
 	diff := job.DifficultyFromTarget()
 	if miner == nil || miner.customDiff == 0 || diff == 0 || diff <= miner.customDiff {
