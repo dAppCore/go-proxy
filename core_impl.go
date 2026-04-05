@@ -295,7 +295,9 @@ func (cd *CustomDiff) OnLogin(e Event) {
 }
 
 // limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
-// if limiter.Allow("203.0.113.42:3333") { /* accept the socket */ }
+// if limiter.Allow("203.0.113.42:3333") {
+//     // first 30 connection attempts per minute are allowed
+// }
 func NewRateLimiter(config RateLimit) *RateLimiter {
 	return &RateLimiter{
 		config:  config,
@@ -304,7 +306,9 @@ func NewRateLimiter(config RateLimit) *RateLimiter {
 	}
 }
 
-// if limiter.Allow("203.0.113.42:3333") { /* accept the socket */ }
+// if limiter.Allow("203.0.113.42:3333") {
+//     // hostOnly("203.0.113.42:3333") == "203.0.113.42"
+// }
 func (rl *RateLimiter) Allow(ip string) bool {
 	if rl == nil || rl.config.MaxConnectionsPerMinute <= 0 {
 		return true
@@ -363,8 +367,10 @@ func (rl *RateLimiter) Tick() {
 	}
 }
 
-// watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) { p.Reload(cfg) })
-// watcher.Start()
+// watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
+//     p.Reload(cfg)
+// })
+// watcher.Start() // polls once per second and reloads after the file mtime changes
 func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher {
 	watcher := &ConfigWatcher{
 		path:     configPath,
