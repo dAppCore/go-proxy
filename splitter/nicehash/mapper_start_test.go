@@ -166,6 +166,49 @@ func TestMapper_OnResultAccepted_ExpiredUsesPreviousJob(t *testing.T) {
 	}
 }
 
+func TestMapper_Submit_ExpiredJobUsesPreviousDifficulty(t *testing.T) {
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	miner.SetID(9)
+
+	strategy := &submitCaptureStrategy{}
+	mapper := NewNonceMapper(1, &proxy.Config{}, strategy)
+	mapper.storage.job = proxy.Job{JobID: "job-new", Blob: "blob-new", Target: "ffffffff"}
+	mapper.storage.prevJob = proxy.Job{JobID: "job-old", Blob: "blob-old", Target: "b88d0600"}
+	mapper.storage.miners[miner.ID()] = miner
+
+	mapper.Submit(&proxy.SubmitEvent{
+		Miner:     miner,
+		JobID:     "job-old",
+		Nonce:     "deadbeef",
+		Result:    "hash",
+		RequestID: 88,
+	})
+
+	ctx, ok := mapper.pending[strategy.seq]
+	if !ok {
+		t.Fatal("expected pending submit context for expired job")
+	}
+	want := mapper.storage.prevJob.DifficultyFromTarget()
+	if ctx.Diff != want {
+		t.Fatalf("expected previous-job difficulty %d, got %d", want, ctx.Diff)
+	}
+}
+
+type submitCaptureStrategy struct {
+	seq int64
+}
+
+func (s *submitCaptureStrategy) Connect() {}
+
+func (s *submitCaptureStrategy) Submit(jobID, nonce, result, algo string) int64 {
+	s.seq++
+	return s.seq
+}
+
+func (s *submitCaptureStrategy) Disconnect() {}
+
+func (s *submitCaptureStrategy) IsActive() bool { return true }
+
 func TestMapper_OnResultAccepted_CustomDiffUsesEffectiveDifficulty(t *testing.T) {
 	bus := proxy.NewEventBus()
 	events := make(chan proxy.Event, 1)

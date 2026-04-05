@@ -277,6 +277,7 @@ func (m *NonceMapper) Submit(event *proxy.SubmitEvent) {
 	jobID := event.JobID
 	m.storage.mu.Lock()
 	job := m.storage.job
+	prevJob := m.storage.prevJob
 	m.storage.mu.Unlock()
 	if jobID == "" {
 		jobID = job.JobID
@@ -286,12 +287,16 @@ func (m *NonceMapper) Submit(event *proxy.SubmitEvent) {
 		m.rejectInvalidJobLocked(event, job)
 		return
 	}
+	submissionJob := job
+	if jobID == prevJob.JobID && prevJob.JobID != "" {
+		submissionJob = prevJob
+	}
 	seq := m.strategy.Submit(jobID, event.Nonce, event.Result, event.Algo)
 	m.pending[seq] = SubmitContext{
 		RequestID: event.RequestID,
 		MinerID:   event.Miner.ID(),
 		JobID:     jobID,
-		Diff:      proxy.EffectiveShareDifficulty(job, event.Miner),
+		Diff:      proxy.EffectiveShareDifficulty(submissionJob, event.Miner),
 		StartedAt: time.Now(),
 	}
 	m.lastUsed = time.Now()

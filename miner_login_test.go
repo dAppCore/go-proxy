@@ -175,6 +175,68 @@ func TestMiner_HandleLogin_Ugly(t *testing.T) {
 	}
 }
 
+func TestMiner_HandleLogin_FailedAssignmentDoesNotDispatchLoginEvent(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	proxyInstance := &Proxy{
+		config: &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByUser,
+			Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		},
+		events:  NewEventBus(),
+		stats:   NewStats(),
+		workers: NewWorkers(WorkersByUser, nil),
+		miners:  make(map[int64]*Miner),
+	}
+	proxyInstance.events.Subscribe(EventLogin, proxyInstance.stats.OnLogin)
+	proxyInstance.workers.bindEvents(proxyInstance.events)
+
+	miner := NewMiner(minerConn, 3333, nil)
+	miner.extNH = true
+	miner.onLogin = func(*Miner) {}
+	miner.onLoginAccepted = func(m *Miner) {
+		proxyInstance.events.Dispatch(Event{Type: EventLogin, Miner: m})
+	}
+	proxyInstance.miners[miner.ID()] = miner
+
+	params, err := json.Marshal(loginParams{
+		Login: "wallet",
+		Pass:  "x",
+	})
+	if err != nil {
+		t.Fatalf("marshal login params: %v", err)
+	}
+
+	go miner.handleLogin(stratumRequest{ID: 12, Method: "login", Params: params})
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read login rejection: %v", err)
+	}
+
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("unmarshal login rejection: %v", err)
+	}
+	if payload.Error.Message != "Proxy is full, try again later" {
+		t.Fatalf("expected full-table rejection, got %q", payload.Error.Message)
+	}
+	if now, max := proxyInstance.MinerCount(); now != 0 || max != 0 {
+		t.Fatalf("expected failed login not to affect miner counts, got now=%d max=%d", now, max)
+	}
+	if records := proxyInstance.WorkerRecords(); len(records) != 0 {
+		t.Fatalf("expected failed login not to create worker records, got %d", len(records))
+	}
+}
+
 func TestMiner_HandleLogin_CustomDiffCap_Good(t *testing.T) {
 	minerConn, clientConn := net.Pipe()
 	defer minerConn.Close()

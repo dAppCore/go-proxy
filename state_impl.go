@@ -452,11 +452,13 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner.globalDiff = customDiff
 	miner.extNH = strings.EqualFold(mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
-		if p.events != nil {
-			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
-		}
 		if p.splitter != nil {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
+		}
+	}
+	miner.onLoginAccepted = func(m *Miner) {
+		if p.events != nil {
+			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
 		}
 	}
 	miner.onSubmit = func(m *Miner, event *SubmitEvent) {
@@ -1029,6 +1031,9 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		m.rpcID = ""
 		m.ReplyWithError(requestID(request.ID), "Proxy is unavailable, try again later")
 		return
+	}
+	if m.onLoginAccepted != nil {
+		m.onLoginAccepted(m)
 	}
 	m.replyLoginSuccess(requestID(request.ID))
 }
