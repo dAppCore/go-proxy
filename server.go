@@ -7,8 +7,8 @@ import (
 
 // Server listens on one BindAddr and creates a Miner for each accepted connection.
 //
-// srv, result := proxy.NewServer(bind, tlsCfg, rateLimiter, onAccept)
-// if result.OK { srv.Start() }
+//	srv, result := proxy.NewServer(bind, tlsCfg, rateLimiter, onAccept)
+//	if result.OK { srv.Start() }
 type Server struct {
 	addr     BindAddr
 	tlsCfg   *tls.Config // nil for plain TCP

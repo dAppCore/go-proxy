@@ -19,8 +19,8 @@ import (
 
 // Proxy owns the servers, splitters, stats, workers, and monitoring API.
 //
-// p, result := proxy.New(cfg)
-// if result.OK { p.Start() }
+//	p, result := proxy.New(cfg)
+//	if result.OK { p.Start() }
 type Proxy struct {
 	config            *Config
 	splitter          Splitter
@@ -45,9 +45,9 @@ type Proxy struct {
 
 // Splitter is the shared interface implemented by the NiceHash and simple modes.
 //
-// type stubSplitter struct{}
+//	type stubSplitter struct{}
 //
-// func (stubSplitter) Connect() {}
+//	func (stubSplitter) Connect() {}
 type Splitter interface {
 	// Connect establishes the first pool upstream connection.
 	Connect()
@@ -67,7 +67,7 @@ type Splitter interface {
 
 // UpstreamStats reports pool connection counts.
 //
-// stats := proxy.UpstreamStats{Active: 1, Sleep: 0, Error: 0, Total: 1}
+//	stats := proxy.UpstreamStats{Active: 1, Sleep: 0, Error: 0, Total: 1}
 type UpstreamStats struct {
 	Active uint64 // connections currently receiving jobs
 	Sleep  uint64 // idle connections (simple mode reuse pool)
@@ -77,14 +77,14 @@ type UpstreamStats struct {
 
 // LoginEvent is dispatched when a miner completes login.
 //
-// event := proxy.LoginEvent{Miner: miner}
+//	event := proxy.LoginEvent{Miner: miner}
 type LoginEvent struct {
 	Miner *Miner
 }
 
 // SubmitEvent carries one miner share submission.
 //
-// event := proxy.SubmitEvent{Miner: miner, JobID: "job-1", Nonce: "deadbeef", Result: "HASH", RequestID: 2}
+//	event := proxy.SubmitEvent{Miner: miner, JobID: "job-1", Nonce: "deadbeef", Result: "HASH", RequestID: 2}
 type SubmitEvent struct {
 	Miner     *Miner
 	JobID     string
@@ -96,14 +96,14 @@ type SubmitEvent struct {
 
 // CloseEvent is dispatched when a miner connection closes.
 //
-// event := proxy.CloseEvent{Miner: miner}
+//	event := proxy.CloseEvent{Miner: miner}
 type CloseEvent struct {
 	Miner *Miner
 }
 
 // ConfigWatcher polls a config file for changes.
 //
-// watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) { p.Reload(cfg) })
+//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) { p.Reload(cfg) })
 type ConfigWatcher struct {
 	path     string
 	onChange func(*Config)
@@ -113,8 +113,8 @@ type ConfigWatcher struct {
 
 // RateLimiter throttles new connections per source IP.
 //
-// limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
-// limiter.Allow("1.2.3.4:3333")
+//	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+//	limiter.Allow("1.2.3.4:3333")
 type RateLimiter struct {
 	config  RateLimit
 	buckets map[string]*tokenBucket
@@ -124,7 +124,7 @@ type RateLimiter struct {
 
 // tokenBucket is the per-IP refillable counter.
 //
-// bucket := tokenBucket{tokens: 30, lastRefill: time.Now()}
+//	bucket := tokenBucket{tokens: 30, lastRefill: time.Now()}
 type tokenBucket struct {
 	tokens     int
 	lastRefill time.Time
@@ -132,8 +132,8 @@ type tokenBucket struct {
 
 // CustomDiff applies a login-time difficulty override.
 //
-// resolver := proxy.NewCustomDiff(50000)
-// resolver.Apply(&Miner{user: "WALLET+75000"})
+//	resolver := proxy.NewCustomDiff(50000)
+//	resolver.Apply(&Miner{user: "WALLET+75000"})
 type CustomDiff struct {
 	globalDiff uint64
 }
