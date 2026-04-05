@@ -11,13 +11,17 @@ import (
 	"dappco.re/go/proxy"
 )
 
-type Router interface {
+// RouteRegistrar accepts HTTP handler registrations.
+//
+//	mux := http.NewServeMux()
+//	api.RegisterRoutes(mux, p)
+type RouteRegistrar interface {
 	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
 }
 
 // mux := http.NewServeMux()
 // api.RegisterRoutes(mux, p) // GET /1/summary, /1/workers, /1/miners
-func RegisterRoutes(router Router, p *proxy.Proxy) {
+func RegisterRoutes(router RouteRegistrar, p *proxy.Proxy) {
 	if router == nil || p == nil {
 		return
 	}
@@ -26,7 +30,7 @@ func RegisterRoutes(router Router, p *proxy.Proxy) {
 	registerJSONGetRoute(router, p, "/1/miners", func() any { return p.MinersDocument() })
 }
 
-func registerJSONGetRoute(router Router, authoriser *proxy.Proxy, pattern string, renderDocument func() any) {
+func registerJSONGetRoute(router RouteRegistrar, authoriser *proxy.Proxy, pattern string, renderDocument func() any) {
 	router.HandleFunc(pattern, func(w http.ResponseWriter, request *http.Request) {
 		if status, ok := allowMonitoringRequest(authoriser, request); !ok {
 			switch status {
