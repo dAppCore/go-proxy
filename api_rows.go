@@ -7,7 +7,8 @@ type WorkerRow [13]any
 type MinerRow [10]any
 
 // doc := p.SummaryDocument()
-// doc.Results.Accepted == 4821
+// _ = doc.Results.Accepted
+// _ = doc.Upstreams.Ratio
 type SummaryDocument struct {
 	Version         string                           `json:"version"`
 	Mode            string                           `json:"mode"`
@@ -52,14 +53,14 @@ type ResultsDocument struct {
 }
 
 // doc := p.WorkersDocument()
-// doc.Workers[0][0] == "rig-alpha"
+// _ = doc.Workers[0][0]
 type WorkersDocument struct {
 	Mode    string      `json:"mode"`
 	Workers []WorkerRow `json:"workers"`
 }
 
 // doc := p.MinersDocument()
-// doc.Miners[0][7] == "********"
+// _ = doc.Miners[0][7]
 type MinersDocument struct {
 	Format []string   `json:"format"`
 	Miners []MinerRow `json:"miners"`

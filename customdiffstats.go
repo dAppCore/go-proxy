@@ -17,7 +17,7 @@ type CustomDiffBucketStats struct {
 // CustomDiffBuckets records share totals grouped by miner custom difficulty.
 //
 //	buckets := NewCustomDiffBuckets(true)
-//	buckets.OnAccept(proxy.Event{Miner: &proxy.Miner{}})
+//	buckets.OnAccept(Event{Miner: &Miner{customDiff: 50000}, Diff: 25000})
 type CustomDiffBuckets struct {
 	enabled bool
 	buckets map[uint64]*CustomDiffBucketStats
@@ -74,6 +74,8 @@ func (b *CustomDiffBuckets) OnReject(e Event) {
 }
 
 // Snapshot returns a copy of the current bucket totals.
+//
+//	summary := buckets.Snapshot()
 func (b *CustomDiffBuckets) Snapshot() map[uint64]CustomDiffBucketStats {
 	if b == nil {
 		return nil
