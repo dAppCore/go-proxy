@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
-	"errors"
 	"net"
 	"net/http"
 	"reflect"
@@ -40,7 +39,7 @@ type MinerSnapshot struct {
 //	}
 func New(config *Config) (*Proxy, Result) {
 	if config == nil {
-		return nil, newErrorResult(errors.New("config is nil"))
+		return nil, newErrorResult(NewScopedError("proxy", "config is nil", nil))
 	}
 	if result := config.Validate(); !result.OK {
 		return nil, result
@@ -192,11 +191,11 @@ func (p *Proxy) Events() *EventBus {
 
 // p.Start()
 //
-//   go func() {
-//       time.Sleep(30 * time.Second)
-//       p.Stop()
-//   }()
-//   p.Start()
+//	go func() {
+//	    time.Sleep(30 * time.Second)
+//	    p.Stop()
+//	}()
+//	p.Start()
 func (p *Proxy) Start() {
 	if p == nil {
 		return
@@ -335,10 +334,10 @@ func (p *Proxy) activeMiners() []*Miner {
 
 // p.Reload(&proxy.Config{Mode: "simple", Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
 //
-//   p.Reload(&proxy.Config{
-//       Mode:  "simple",
-//       Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
-//   })
+//	p.Reload(&proxy.Config{
+//	    Mode:  "simple",
+//	    Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//	})
 func (p *Proxy) Reload(config *Config) {
 	if p == nil || config == nil {
 		return
@@ -490,11 +489,11 @@ func buildTLSConfig(cfg TLSConfig) (*tls.Config, Result) {
 		return nil, newSuccessResult()
 	}
 	if cfg.CertFile == "" || cfg.KeyFile == "" {
-		return nil, newErrorResult(errors.New("tls certificate or key path is empty"))
+		return nil, newErrorResult(NewScopedError("proxy.tls", "tls certificate or key path is empty", nil))
 	}
 	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
-		return nil, newErrorResult(err)
+		return nil, newErrorResult(NewScopedError("proxy.tls", "load certificate failed", err))
 	}
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
 	applyTLSProtocols(tlsConfig, cfg.Protocols)
@@ -646,7 +645,7 @@ func (p *Proxy) startMonitoringServer() bool {
 	p.httpServer = &http.Server{Addr: addr, Handler: mux}
 	go func() {
 		err := p.httpServer.Serve(listener)
-		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err != nil && err != http.ErrServerClosed {
 			p.Stop()
 		}
 	}()
@@ -690,7 +689,7 @@ func (p *Proxy) allowMonitoringRequest(r *http.Request) (int, bool) {
 
 // AllowMonitoringRequest applies the configured monitoring API access checks.
 //
-//   status, ok := p.AllowMonitoringRequest(request)
+//	status, ok := p.AllowMonitoringRequest(request)
 func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 	return p.allowMonitoringRequest(r)
 }
@@ -702,8 +701,8 @@ func (p *Proxy) writeJSONResponse(w http.ResponseWriter, payload any) {
 
 // SummaryDocument builds the RFC-shaped /1/summary response body.
 //
-//   doc := p.SummaryDocument()
-//   _ = doc.Results.Accepted
+//	doc := p.SummaryDocument()
+//	_ = doc.Results.Accepted
 func (p *Proxy) SummaryDocument() SummaryDocument {
 	summary := p.Summary()
 	now, max := p.MinerCount()
@@ -736,8 +735,8 @@ func (p *Proxy) SummaryDocument() SummaryDocument {
 
 // WorkersDocument builds the RFC-shaped /1/workers response body.
 //
-//   doc := p.WorkersDocument()
-//   _ = doc.Workers[0][0]
+//	doc := p.WorkersDocument()
+//	_ = doc.Workers[0][0]
 func (p *Proxy) WorkersDocument() WorkersDocument {
 	records := p.WorkerRecords()
 	rows := make([]WorkerRow, 0, len(records))
@@ -766,8 +765,8 @@ func (p *Proxy) WorkersDocument() WorkersDocument {
 
 // MinersDocument builds the RFC-shaped /1/miners response body.
 //
-//   doc := p.MinersDocument()
-//   _ = doc.Miners[0][7]
+//	doc := p.MinersDocument()
+//	_ = doc.Miners[0][7]
 func (p *Proxy) MinersDocument() MinersDocument {
 	records := p.MinerSnapshots()
 	rows := make([]MinerRow, 0, len(records))
@@ -1769,17 +1768,17 @@ func (s *Server) Stop() {
 
 func (s *Server) listen() Result {
 	if s == nil {
-		return newErrorResult(errors.New("server is nil"))
+		return newErrorResult(NewScopedError("proxy.server", "server is nil", nil))
 	}
 	if s.listener != nil {
 		return newSuccessResult()
 	}
 	if s.addr.TLS && s.tlsCfg == nil {
-		return newErrorResult(errors.New("tls listener requires a tls config"))
+		return newErrorResult(NewScopedError("proxy.server", "tls listener requires a tls config", nil))
 	}
 	ln, err := net.Listen("tcp", net.JoinHostPort(s.addr.Host, strconv.Itoa(int(s.addr.Port))))
 	if err != nil {
-		return newErrorResult(err)
+		return newErrorResult(NewScopedError("proxy.server", "listen failed", err))
 	}
 	if s.tlsCfg != nil {
 		ln = tls.NewListener(ln, s.tlsCfg)

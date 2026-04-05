@@ -6,7 +6,6 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"net"
 	"strconv"
@@ -53,15 +52,15 @@ func (c *StratumClient) IsActive() bool {
 // result := client.Connect()
 func (c *StratumClient) Connect() proxy.Result {
 	if c == nil {
-		return proxy.Result{OK: false, Error: errors.New("client is nil")}
+		return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.client", "client is nil", nil)}
 	}
 	addr := c.config.URL
 	if addr == "" {
-		return proxy.Result{OK: false, Error: errors.New("pool url is empty")}
+		return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.client", "pool url is empty", nil)}
 	}
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		return proxy.Result{OK: false, Error: err}
+		return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.client", "dial pool failed", err)}
 	}
 	if c.config.TLS {
 		host := addr
@@ -72,18 +71,18 @@ func (c *StratumClient) Connect() proxy.Result {
 		tlsConn := tls.Client(conn, tlsCfg)
 		if err := tlsConn.Handshake(); err != nil {
 			_ = conn.Close()
-			return proxy.Result{OK: false, Error: err}
+			return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.tls", "handshake failed", err)}
 		}
 		if fp := strings.TrimSpace(strings.ToLower(c.config.TLSFingerprint)); fp != "" {
 			cert := tlsConn.ConnectionState().PeerCertificates
 			if len(cert) == 0 {
 				_ = tlsConn.Close()
-				return proxy.Result{OK: false, Error: errors.New("missing certificate")}
+				return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.tls", "missing certificate", nil)}
 			}
 			sum := sha256.Sum256(cert[0].Raw)
 			if hex.EncodeToString(sum[:]) != fp {
 				_ = tlsConn.Close()
-				return proxy.Result{OK: false, Error: errors.New("tls fingerprint mismatch")}
+				return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.tls", "tls fingerprint mismatch", nil)}
 			}
 		}
 		c.conn = tlsConn
@@ -211,16 +210,17 @@ func (c *StratumClient) writeJSON(payload any) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
 	if c.conn == nil {
-		return errors.New("connection is nil")
+		return proxy.NewScopedError("proxy.pool.client", "connection is nil", nil)
 	}
 	data, err := json.Marshal(payload)
 	if err != nil {
-		return err
+		return proxy.NewScopedError("proxy.pool.client", "marshal request failed", err)
 	}
 	data = append(data, '\n')
 	_, err = c.conn.Write(data)
 	if err != nil {
 		c.notifyDisconnect()
+		return proxy.NewScopedError("proxy.pool.client", "write request failed", err)
 	}
 	return err
 }

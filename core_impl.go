@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"io"
 	"math"
 	"net"
@@ -62,12 +61,12 @@ func splitterFactoryForMode(mode string) (func(*Config, *EventBus) Splitter, boo
 func LoadConfig(path string) (*Config, Result) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, newErrorResult(err)
+		return nil, newErrorResult(NewScopedError("proxy.config", "read config failed", err))
 	}
 
 	config := &Config{}
 	if err := json.Unmarshal(data, config); err != nil {
-		return nil, newErrorResult(err)
+		return nil, newErrorResult(NewScopedError("proxy.config", "parse config failed", err))
 	}
 	config.configPath = path
 	return config, config.Validate()
@@ -77,31 +76,31 @@ func LoadConfig(path string) (*Config, Result) {
 // if result := cfg.Validate(); !result.OK { return result }
 func (c *Config) Validate() Result {
 	if c == nil {
-		return newErrorResult(errors.New("config is nil"))
+		return newErrorResult(NewScopedError("proxy.config", "config is nil", nil))
 	}
 	if !isValidMode(c.Mode) {
-		return newErrorResult(errors.New("mode must be \"nicehash\" or \"simple\""))
+		return newErrorResult(NewScopedError("proxy.config", "mode must be \"nicehash\" or \"simple\"", nil))
 	}
 	if !isValidWorkersMode(c.Workers) {
-		return newErrorResult(errors.New("workers must be one of \"rig-id\", \"user\", \"password\", \"agent\", \"ip\", or \"false\""))
+		return newErrorResult(NewScopedError("proxy.config", "workers must be one of \"rig-id\", \"user\", \"password\", \"agent\", \"ip\", or \"false\"", nil))
 	}
 	if len(c.Bind) == 0 {
-		return newErrorResult(errors.New("bind list is empty"))
+		return newErrorResult(NewScopedError("proxy.config", "bind list is empty", nil))
 	}
 	if len(c.Pools) == 0 {
-		return newErrorResult(errors.New("pool list is empty"))
+		return newErrorResult(NewScopedError("proxy.config", "pool list is empty", nil))
 	}
 	enabledPools := 0
 	for _, pool := range c.Pools {
 		if pool.Enabled && strings.TrimSpace(pool.URL) == "" {
-			return newErrorResult(errors.New("enabled pool url is empty"))
+			return newErrorResult(NewScopedError("proxy.config", "enabled pool url is empty", nil))
 		}
 		if pool.Enabled {
 			enabledPools++
 		}
 	}
 	if enabledPools == 0 {
-		return newErrorResult(errors.New("pool list has no enabled entries"))
+		return newErrorResult(NewScopedError("proxy.config", "pool list has no enabled entries", nil))
 	}
 	return newSuccessResult()
 }
@@ -295,9 +294,10 @@ func (cd *CustomDiff) OnLogin(e Event) {
 }
 
 // limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
-// if limiter.Allow("203.0.113.42:3333") {
-//     // first 30 connection attempts per minute are allowed
-// }
+//
+//	if limiter.Allow("203.0.113.42:3333") {
+//	    // first 30 connection attempts per minute are allowed
+//	}
 func NewRateLimiter(config RateLimit) *RateLimiter {
 	return &RateLimiter{
 		config:  config,
@@ -306,9 +306,9 @@ func NewRateLimiter(config RateLimit) *RateLimiter {
 	}
 }
 
-// if limiter.Allow("203.0.113.42:3333") {
-//     // hostOnly("203.0.113.42:3333") == "203.0.113.42"
-// }
+//	if limiter.Allow("203.0.113.42:3333") {
+//	    // hostOnly("203.0.113.42:3333") == "203.0.113.42"
+//	}
 func (rl *RateLimiter) Allow(ip string) bool {
 	if rl == nil || rl.config.MaxConnectionsPerMinute <= 0 {
 		return true
@@ -367,9 +367,10 @@ func (rl *RateLimiter) Tick() {
 	}
 }
 
-// watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
-//     p.Reload(cfg)
-// })
+//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
+//	    p.Reload(cfg)
+//	})
+//
 // watcher.Start() // polls once per second and reloads after the file mtime changes
 func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher {
 	watcher := &ConfigWatcher{
