@@ -16,7 +16,7 @@ type Router interface {
 }
 
 // mux := http.NewServeMux()
-// api.RegisterRoutes(mux, p)
+// api.RegisterRoutes(mux, p) // GET /1/summary, /1/workers, /1/miners
 func RegisterRoutes(router Router, p *proxy.Proxy) {
 	if router == nil || p == nil {
 		return

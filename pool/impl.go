@@ -24,7 +24,8 @@ func NewStrategyFactory(config *proxy.Config) StrategyFactory {
 	}
 }
 
-// NewStratumClient constructs a pool client.
+// client := pool.NewStratumClient(poolCfg, listener)
+// client.Connect()
 func NewStratumClient(poolConfig proxy.PoolConfig, listener StratumListener) *StratumClient {
 	return &StratumClient{
 		config:   poolConfig,
@@ -43,7 +44,7 @@ func (c *StratumClient) IsActive() bool {
 	return c.active
 }
 
-// Connect dials the pool.
+// client.Connect()
 func (c *StratumClient) Connect() proxy.Result {
 	if c == nil {
 		return proxy.Result{OK: false, Error: errors.New("client is nil")}
@@ -88,7 +89,7 @@ func (c *StratumClient) Connect() proxy.Result {
 	return proxy.Result{OK: true}
 }
 
-// Login sends the miner-style login request to the pool.
+// client.Login()
 func (c *StratumClient) Login() {
 	if c == nil || c.conn == nil {
 		return
@@ -112,7 +113,7 @@ func (c *StratumClient) Login() {
 	_ = c.writeJSON(req)
 }
 
-// Submit forwards a share to the pool.
+// seq := client.Submit(jobID, "deadbeef", "HASH64HEX", "cn/r")
 func (c *StratumClient) Submit(jobID, nonce, result, algo string) int64 {
 	if c == nil {
 		return 0
@@ -138,7 +139,7 @@ func (c *StratumClient) Submit(jobID, nonce, result, algo string) int64 {
 	return seq
 }
 
-// Keepalive sends a lightweight keepalived request to the pool when enabled.
+// client.Keepalive()
 func (c *StratumClient) Keepalive() {
 	if c == nil || c.conn == nil || !c.IsActive() {
 		return
@@ -154,7 +155,7 @@ func (c *StratumClient) Keepalive() {
 	_ = c.writeJSON(req)
 }
 
-// Disconnect closes the connection and notifies the listener.
+// client.Disconnect()
 func (c *StratumClient) Disconnect() {
 	if c == nil {
 		return
@@ -343,7 +344,7 @@ func NewFailoverStrategy(pools []proxy.PoolConfig, listener StratumListener, con
 	}
 }
 
-// Connect establishes the first reachable pool connection.
+// strategy.Connect()
 func (s *FailoverStrategy) Connect() {
 	if s == nil {
 		return
@@ -395,7 +396,7 @@ func (s *FailoverStrategy) currentPools() []proxy.PoolConfig {
 	return s.pools
 }
 
-// Submit sends the share through the active client.
+// seq := strategy.Submit(jobID, nonce, result, algo)
 func (s *FailoverStrategy) Submit(jobID, nonce, result, algo string) int64 {
 	if s == nil || s.client == nil {
 		return 0
@@ -403,7 +404,7 @@ func (s *FailoverStrategy) Submit(jobID, nonce, result, algo string) int64 {
 	return s.client.Submit(jobID, nonce, result, algo)
 }
 
-// Disconnect closes the active client.
+// strategy.Disconnect()
 func (s *FailoverStrategy) Disconnect() {
 	if s == nil {
 		return
@@ -418,9 +419,7 @@ func (s *FailoverStrategy) Disconnect() {
 	}
 }
 
-// ReloadPools reconnects against the latest pool configuration.
-//
-//	strategy.ReloadPools()
+// strategy.ReloadPools()
 func (s *FailoverStrategy) ReloadPools() {
 	if s == nil {
 		return
@@ -432,7 +431,7 @@ func (s *FailoverStrategy) ReloadPools() {
 	s.Connect()
 }
 
-// IsActive reports whether the current client has received a job.
+// active := strategy.IsActive()
 func (s *FailoverStrategy) IsActive() bool {
 	return s != nil && s.client != nil && s.client.IsActive()
 }
@@ -464,7 +463,7 @@ func (s *FailoverStrategy) OnResultAccepted(sequence int64, accepted bool, error
 	}
 }
 
-// OnDisconnect retries from the primary pool and forwards the disconnect.
+// strategy.OnDisconnect()
 func (s *FailoverStrategy) OnDisconnect() {
 	if s == nil {
 		return
