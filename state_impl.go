@@ -297,17 +297,24 @@ func (p *Proxy) closeAllMiners() {
 	if p == nil {
 		return
 	}
-	p.minersMu.RLock()
-	miners := make([]*Miner, 0, len(p.miners))
-	for _, miner := range p.miners {
-		miners = append(miners, miner)
-	}
-	p.minersMu.RUnlock()
-	for _, miner := range miners {
+	for _, miner := range p.activeMiners() {
 		if miner != nil {
 			miner.Close()
 		}
 	}
+}
+
+func (p *Proxy) activeMiners() []*Miner {
+	if p == nil {
+		return nil
+	}
+	p.minersMu.RLock()
+	defer p.minersMu.RUnlock()
+	miners := make([]*Miner, 0, len(p.miners))
+	for _, miner := range p.miners {
+		miners = append(miners, miner)
+	}
+	return miners
 }
 
 // p.Reload(&proxy.Config{Mode: "simple", Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
@@ -319,18 +326,20 @@ func (p *Proxy) Reload(config *Config) {
 		return
 	}
 	poolsChanged := p.config == nil || !reflect.DeepEqual(p.config.Pools, config.Pools)
+	workersChanged := p.config == nil || p.config.Workers != config.Workers
 	if p.config == nil {
 		p.config = config
 	} else {
 		preservedBind := append([]BindAddr(nil), p.config.Bind...)
 		preservedMode := p.config.Mode
-		preservedWorkers := p.config.Workers
 		preservedConfigPath := p.config.configPath
 		*p.config = *config
 		p.config.Bind = preservedBind
 		p.config.Mode = preservedMode
-		p.config.Workers = preservedWorkers
 		p.config.configPath = preservedConfigPath
+	}
+	if workersChanged && p.workers != nil {
+		p.workers.ResetMode(p.config.Workers, p.activeMiners())
 	}
 	if p.customDiff != nil {
 		p.customDiff.globalDiff = config.CustomDiff
@@ -1443,38 +1452,33 @@ func (w *Workers) OnLogin(e Event) {
 	if w == nil || e.Miner == nil {
 		return
 	}
-	if w.mode == WorkersDisabled {
-		return
-	}
-	name := workerNameFor(w.mode, e.Miner)
-	if name == "" {
-		return
-	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	index, ok := w.nameIndex[name]
-	if !ok {
-		index = len(w.entries)
-		record := WorkerRecord{Name: name}
-		record.windows[0] = newTickWindow(60)
-		record.windows[1] = newTickWindow(600)
-		record.windows[2] = newTickWindow(3600)
-		record.windows[3] = newTickWindow(43200)
-		record.windows[4] = newTickWindow(86400)
-		w.entries = append(w.entries, record)
-		w.nameIndex[name] = index
-	}
-	record := &w.entries[index]
-	record.Name = name
-	record.LastIP = e.Miner.ip
-	record.Connections++
-	w.idIndex[e.Miner.id] = index
+	w.recordLoginLocked(e.Miner)
 }
 
 func newTickWindow(size int) tickWindow {
 	return tickWindow{
 		buckets: make([]uint64, size),
 		size:    size,
+	}
+}
+
+// ResetMode switches the worker identity strategy and rebuilds the live worker index.
+//
+//	workers.ResetMode(proxy.WorkersByUser, activeMiners)
+func (w *Workers) ResetMode(mode WorkersMode, miners []*Miner) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.mode = mode
+	w.entries = nil
+	w.nameIndex = make(map[string]int)
+	w.idIndex = make(map[int64]int)
+	for _, miner := range miners {
+		w.recordLoginLocked(miner)
 	}
 }
 
@@ -1602,6 +1606,33 @@ func cloneWorkerRecord(record WorkerRecord) WorkerRecord {
 		cloned.windows[i].buckets = append([]uint64(nil), record.windows[i].buckets...)
 	}
 	return cloned
+}
+
+func (w *Workers) recordLoginLocked(miner *Miner) {
+	if w == nil || miner == nil || w.mode == WorkersDisabled {
+		return
+	}
+	name := workerNameFor(w.mode, miner)
+	if name == "" {
+		return
+	}
+	index, ok := w.nameIndex[name]
+	if !ok {
+		index = len(w.entries)
+		record := WorkerRecord{Name: name}
+		record.windows[0] = newTickWindow(60)
+		record.windows[1] = newTickWindow(600)
+		record.windows[2] = newTickWindow(3600)
+		record.windows[3] = newTickWindow(43200)
+		record.windows[4] = newTickWindow(86400)
+		w.entries = append(w.entries, record)
+		w.nameIndex[name] = index
+	}
+	record := &w.entries[index]
+	record.Name = name
+	record.LastIP = miner.ip
+	record.Connections++
+	w.idIndex[miner.id] = index
 }
 
 // Apply normalises one miner login at the same point the handshake does.

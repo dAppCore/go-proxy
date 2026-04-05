@@ -56,8 +56,8 @@ func TestProxy_Reload_Good(t *testing.T) {
 	if p.config.Mode != "nicehash" {
 		t.Fatalf("expected mode to remain unchanged, got %q", p.config.Mode)
 	}
-	if p.config.Workers != WorkersByRigID {
-		t.Fatalf("expected workers mode to remain unchanged, got %q", p.config.Workers)
+	if p.config.Workers != WorkersByUser {
+		t.Fatalf("expected workers mode to reload, got %q", p.config.Workers)
 	}
 	if got := p.config.Pools[0].URL; got != "pool-b.example:4444" {
 		t.Fatalf("expected pools to reload, got %q", got)
@@ -67,6 +67,41 @@ func TestProxy_Reload_Good(t *testing.T) {
 	}
 	if !p.rateLimit.IsActive() {
 		t.Fatalf("expected rate limiter to be replaced with active configuration")
+	}
+}
+
+func TestProxy_Reload_WorkersMode_Good(t *testing.T) {
+	miner := &Miner{id: 7, user: "wallet-a", rigID: "rig-a", ip: "10.0.0.7"}
+	workers := NewWorkers(WorkersByRigID, nil)
+	workers.OnLogin(Event{Miner: miner})
+
+	p := &Proxy{
+		config: &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool-a.example:3333", Enabled: true}},
+		},
+		workers: workers,
+		miners:  map[int64]*Miner{miner.id: miner},
+	}
+
+	p.Reload(&Config{
+		Mode:    "nicehash",
+		Workers: WorkersByUser,
+		Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []PoolConfig{{URL: "pool-a.example:3333", Enabled: true}},
+	})
+
+	if got := p.WorkersMode(); got != WorkersByUser {
+		t.Fatalf("expected proxy workers mode %q, got %q", WorkersByUser, got)
+	}
+	records := p.WorkerRecords()
+	if len(records) != 1 {
+		t.Fatalf("expected one rebuilt worker record, got %d", len(records))
+	}
+	if got := records[0].Name; got != "wallet-a" {
+		t.Fatalf("expected worker record to rebuild using user mode, got %q", got)
 	}
 }
 
