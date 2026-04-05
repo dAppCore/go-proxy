@@ -315,6 +315,9 @@ func (m *SimpleMapper) OnJob(job proxy.Job) {
 	}
 	m.mu.Lock()
 	m.prevJob = m.currentJob
+	if m.prevJob.ClientID != job.ClientID {
+		m.prevJob = proxy.Job{}
+	}
 	m.currentJob = job
 	m.stopped = false
 	m.idleAt = time.Time{}
