@@ -10,6 +10,9 @@ import (
 )
 
 // NewAccessLog creates an append-only access log.
+//
+//	al := log.NewAccessLog("/var/log/proxy-access.log")
+//	defer al.Close()
 func NewAccessLog(path string) *AccessLog {
 	return &AccessLog{path: path}
 }
@@ -24,9 +27,9 @@ func (l *AccessLog) Close() {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.f != nil {
-		_ = l.f.Close()
-		l.f = nil
+	if l.file != nil {
+		_ = l.file.Close()
+		l.file = nil
 	}
 }
 
@@ -47,6 +50,9 @@ func (l *AccessLog) OnClose(e proxy.Event) {
 }
 
 // NewShareLog creates an append-only share log.
+//
+//	sl := log.NewShareLog("/var/log/proxy-shares.log")
+//	defer sl.Close()
 func NewShareLog(path string) *ShareLog {
 	return &ShareLog{path: path}
 }
@@ -61,9 +67,9 @@ func (l *ShareLog) Close() {
 	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.f != nil {
-		_ = l.f.Close()
-		l.f = nil
+	if l.file != nil {
+		_ = l.file.Close()
+		l.file = nil
 	}
 }
 
@@ -100,7 +106,7 @@ func (accessLog *AccessLog) writeConnectLine(ip, user, agent string) {
 	builder.WriteString("  ")
 	builder.WriteString(agent)
 	builder.WriteByte('\n')
-	_, _ = accessLog.f.WriteString(builder.String())
+	_, _ = accessLog.file.WriteString(builder.String())
 }
 
 func (accessLog *AccessLog) writeCloseLine(ip, user string, rx, tx uint64) {
@@ -122,7 +128,7 @@ func (accessLog *AccessLog) writeCloseLine(ip, user string, rx, tx uint64) {
 	builder.WriteString("  tx=")
 	builder.WriteString(strconv.FormatUint(tx, 10))
 	builder.WriteByte('\n')
-	_, _ = accessLog.f.WriteString(builder.String())
+	_, _ = accessLog.file.WriteString(builder.String())
 }
 
 func (shareLog *ShareLog) writeAcceptLine(user string, diff uint64, latency uint64) {
@@ -142,7 +148,7 @@ func (shareLog *ShareLog) writeAcceptLine(user string, diff uint64, latency uint
 	builder.WriteString(strconv.FormatUint(latency, 10))
 	builder.WriteString("ms")
 	builder.WriteByte('\n')
-	_, _ = shareLog.f.WriteString(builder.String())
+	_, _ = shareLog.file.WriteString(builder.String())
 }
 
 func (shareLog *ShareLog) writeRejectLine(user, reason string) {
@@ -158,29 +164,29 @@ func (shareLog *ShareLog) writeRejectLine(user, reason string) {
 	builder.WriteString("  reason=\"")
 	builder.WriteString(reason)
 	builder.WriteString("\"\n")
-	_, _ = shareLog.f.WriteString(builder.String())
+	_, _ = shareLog.file.WriteString(builder.String())
 }
 
 func (accessLog *AccessLog) ensureFile() error {
-	if accessLog.f != nil {
+	if accessLog.file != nil {
 		return nil
 	}
 	f, err := os.OpenFile(accessLog.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
-	accessLog.f = f
+	accessLog.file = f
 	return nil
 }
 
 func (shareLog *ShareLog) ensureFile() error {
-	if shareLog.f != nil {
+	if shareLog.file != nil {
 		return nil
 	}
 	f, err := os.OpenFile(shareLog.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
-	shareLog.f = f
+	shareLog.file = f
 	return nil
 }

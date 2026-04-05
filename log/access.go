@@ -21,5 +21,5 @@ import (
 type AccessLog struct {
 	path string
 	mu   sync.Mutex
-	f    *os.File
+	file *os.File
 }
