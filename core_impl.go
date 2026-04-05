@@ -34,8 +34,11 @@ func errorResult(err error) Result {
 var splitterRegistryMu sync.RWMutex
 var splitterRegistry = map[string]func(*Config, *EventBus) Splitter{}
 
-// RegisterSplitterFactory registers a mode-specific splitter constructor.
-// Packages such as splitter/nicehash and splitter/simple call this from init.
+// Register a mode-specific splitter constructor.
+//
+//	proxy.RegisterSplitterFactory("simple", func(cfg *proxy.Config, bus *proxy.EventBus) proxy.Splitter {
+//	    return simple.NewSimpleSplitter(cfg, bus, nil)
+//	})
 func RegisterSplitterFactory(mode string, factory func(*Config, *EventBus) Splitter) {
 	splitterRegistryMu.Lock()
 	defer splitterRegistryMu.Unlock()
@@ -49,12 +52,8 @@ func getSplitterFactory(mode string) (func(*Config, *EventBus) Splitter, bool) {
 	return factory, ok
 }
 
-// LoadConfig("/etc/proxy.json")
-//
-//	cfg, result := LoadConfig("/etc/proxy.json")
-//	if !result.OK {
-//	    return result.Error
-//	}
+// cfg, result := proxy.LoadConfig("/etc/proxy.json")
+// if !result.OK { return result.Error }
 func LoadConfig(path string) (*Config, Result) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -69,11 +68,8 @@ func LoadConfig(path string) (*Config, Result) {
 	return config, config.Validate()
 }
 
-// Validate(&Config{Mode: "nicehash", Bind: []BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
-//
-//	if result := cfg.Validate(); !result.OK {
-//	    return result
-//	}
+// cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}, Workers: proxy.WorkersByRigID}
+// if result := cfg.Validate(); !result.OK { return result }
 func (c *Config) Validate() Result {
 	if c == nil {
 		return errorResult(errors.New("config is nil"))
@@ -229,8 +225,8 @@ func (cd *CustomDiff) OnLogin(e Event) {
 	e.Miner.customDiffResolved = true
 }
 
-// limiter := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
-// limiter.Allow("203.0.113.42:3333")
+// limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+// if limiter.Allow("203.0.113.42:3333") { /* accept the socket */ }
 func NewRateLimiter(config RateLimit) *RateLimiter {
 	return &RateLimiter{
 		config:  config,
@@ -239,11 +235,7 @@ func NewRateLimiter(config RateLimit) *RateLimiter {
 	}
 }
 
-// Allow returns true if the IP address is permitted to open a new connection.
-//
-//	if limiter.Allow("203.0.113.42:3333") {
-//	    // accept the socket
-//	}
+// if limiter.Allow("203.0.113.42:3333") { /* accept the socket */ }
 func (rl *RateLimiter) Allow(ip string) bool {
 	if rl == nil || rl.config.MaxConnectionsPerMinute <= 0 {
 		return true
@@ -302,7 +294,7 @@ func (rl *RateLimiter) Tick() {
 	}
 }
 
-// watcher := NewConfigWatcher("config.json", func(cfg *Config) { _ = cfg })
+// watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) { p.Reload(cfg) })
 // watcher.Start()
 func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher {
 	watcher := &ConfigWatcher{
@@ -316,9 +308,7 @@ func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher 
 	return watcher
 }
 
-// Start begins the 1-second polling loop.
-//
-//	watcher.Start()
+// watcher.Start()
 func (w *ConfigWatcher) Start() {
 	if w == nil || w.path == "" || w.onChange == nil {
 		return
@@ -348,9 +338,7 @@ func (w *ConfigWatcher) Start() {
 	}()
 }
 
-// Stop ends the watcher goroutine.
-//
-//	watcher.Stop()
+// watcher.Stop()
 func (w *ConfigWatcher) Stop() {
 	if w == nil {
 		return

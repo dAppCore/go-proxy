@@ -1,4 +1,4 @@
-// Package api implements the HTTP monitoring endpoints for the proxy.
+// Package api registers the monitoring routes on an HTTP mux.
 //
 //	mux := http.NewServeMux()
 //	api.RegisterRoutes(mux, p)
@@ -11,7 +11,6 @@ import (
 	"dappco.re/go/proxy"
 )
 
-// mux := http.NewServeMux()
 type Router interface {
 	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
 }
