@@ -1277,8 +1277,14 @@ func (m *Miner) writeJSON(payload any) error {
 		return err
 	}
 	data = append(data, '\n')
-	n, err := m.conn.Write(data)
-	m.tx += uint64(n)
+	var written int
+	if len(data) <= len(m.buf) {
+		copy(m.buf[:], data)
+		written, err = m.conn.Write(m.buf[:len(data)])
+	} else {
+		written, err = m.conn.Write(data)
+	}
+	m.tx += uint64(written)
 	if err != nil {
 		m.Close()
 	}
