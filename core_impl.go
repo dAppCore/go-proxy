@@ -46,13 +46,13 @@ var splitterFactoriesByMode = map[string]func(*Config, *EventBus) Splitter{}
 func RegisterSplitterFactory(mode string, factory func(*Config, *EventBus) Splitter) {
 	splitterFactoriesMu.Lock()
 	defer splitterFactoriesMu.Unlock()
-	splitterFactoriesByMode[strings.ToLower(mode)] = factory
+	splitterFactoriesByMode[strings.ToLower(strings.TrimSpace(mode))] = factory
 }
 
 func splitterFactoryForMode(mode string) (func(*Config, *EventBus) Splitter, bool) {
 	splitterFactoriesMu.RLock()
 	defer splitterFactoriesMu.RUnlock()
-	factory, ok := splitterFactoriesByMode[strings.ToLower(mode)]
+	factory, ok := splitterFactoriesByMode[strings.ToLower(strings.TrimSpace(mode))]
 	return factory, ok
 }
 
@@ -119,7 +119,7 @@ func isValidMode(mode string) bool {
 }
 
 func isValidWorkersMode(mode WorkersMode) bool {
-	switch mode {
+	switch WorkersMode(strings.TrimSpace(string(mode))) {
 	case WorkersByRigID, WorkersByUser, WorkersByPass, WorkersByAgent, WorkersByIP, WorkersDisabled:
 		return true
 	default:
