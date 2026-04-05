@@ -19,7 +19,7 @@ func NewNonceSplitter(config *proxy.Config, eventBus *proxy.EventBus, factory po
 		factory = pool.NewStrategyFactory(config)
 	}
 	return &NonceSplitter{
-		byID:            make(map[int64]*NonceMapper),
+		mapperByID:      make(map[int64]*NonceMapper),
 		config:          config,
 		events:          eventBus,
 		strategyFactory: factory,
@@ -51,14 +51,14 @@ func (s *NonceSplitter) OnLogin(event *proxy.LoginEvent) {
 	event.Miner.SetExtendedNiceHash(true)
 	for _, mapper := range s.mappers {
 		if mapper.Add(event.Miner) {
-			s.byID[mapper.id] = mapper
+			s.mapperByID[mapper.id] = mapper
 			return
 		}
 	}
 	mapper := s.addMapperLocked()
 	if mapper != nil {
 		_ = mapper.Add(event.Miner)
-		s.byID[mapper.id] = mapper
+		s.mapperByID[mapper.id] = mapper
 	}
 }
 
@@ -68,7 +68,7 @@ func (s *NonceSplitter) OnSubmit(event *proxy.SubmitEvent) {
 		return
 	}
 	s.mu.RLock()
-	mapper := s.byID[event.Miner.MapperID()]
+	mapper := s.mapperByID[event.Miner.MapperID()]
 	s.mu.RUnlock()
 	if mapper != nil {
 		mapper.Submit(event)
@@ -81,7 +81,7 @@ func (s *NonceSplitter) OnClose(event *proxy.CloseEvent) {
 		return
 	}
 	s.mu.RLock()
-	mapper := s.byID[event.Miner.MapperID()]
+	mapper := s.mapperByID[event.Miner.MapperID()]
 	s.mu.RUnlock()
 	if mapper != nil {
 		mapper.Remove(event.Miner)
@@ -106,7 +106,7 @@ func (s *NonceSplitter) GC() {
 			if mapper.strategy != nil {
 				mapper.strategy.Disconnect()
 			}
-			delete(s.byID, mapper.id)
+			delete(s.mapperByID, mapper.id)
 			_ = free
 			_ = dead
 			continue
@@ -169,7 +169,7 @@ func (s *NonceSplitter) Disconnect() {
 		}
 	}
 	s.mappers = nil
-	s.byID = make(map[int64]*NonceMapper)
+	s.mapperByID = make(map[int64]*NonceMapper)
 }
 
 // ReloadPools reconnects each mapper strategy using the updated pool list.
@@ -196,17 +196,17 @@ func (s *NonceSplitter) ReloadPools() {
 }
 
 func (s *NonceSplitter) addMapperLocked() *NonceMapper {
-	id := s.seq
-	s.seq++
+	id := s.nextMapperID
+	s.nextMapperID++
 	mapper := NewNonceMapper(id, s.config, nil)
 	mapper.events = s.events
 	mapper.lastUsed = time.Now()
 	mapper.strategy = s.strategyFactory(mapper)
 	s.mappers = append(s.mappers, mapper)
-	if s.byID == nil {
-		s.byID = make(map[int64]*NonceMapper)
+	if s.mapperByID == nil {
+		s.mapperByID = make(map[int64]*NonceMapper)
 	}
-	s.byID[mapper.id] = mapper
+	s.mapperByID[mapper.id] = mapper
 	mapper.Start()
 	return mapper
 }

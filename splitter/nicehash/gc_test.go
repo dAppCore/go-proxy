@@ -42,8 +42,8 @@ func TestNonceSplitter_GC_Good(t *testing.T) {
 	mapper.storage.slots[0] = -1
 
 	splitter := &NonceSplitter{
-		mappers: []*NonceMapper{mapper},
-		byID:    map[int64]*NonceMapper{mapper.id: mapper},
+		mappers:    []*NonceMapper{mapper},
+		mapperByID: map[int64]*NonceMapper{mapper.id: mapper},
 	}
 
 	splitter.GC()
@@ -51,7 +51,7 @@ func TestNonceSplitter_GC_Good(t *testing.T) {
 	if len(splitter.mappers) != 0 {
 		t.Fatalf("expected idle mapper to be reclaimed, got %d mapper(s)", len(splitter.mappers))
 	}
-	if _, ok := splitter.byID[mapper.id]; ok {
+	if _, ok := splitter.mapperByID[mapper.id]; ok {
 		t.Fatalf("expected reclaimed mapper to be removed from lookup table")
 	}
 	if !strategy.disconnected {
@@ -77,8 +77,8 @@ func TestNonceSplitter_GC_Ugly(t *testing.T) {
 	mapper.storage.slots[0] = 7
 
 	splitter := &NonceSplitter{
-		mappers: []*NonceMapper{mapper},
-		byID:    map[int64]*NonceMapper{mapper.id: mapper},
+		mappers:    []*NonceMapper{mapper},
+		mapperByID: map[int64]*NonceMapper{mapper.id: mapper},
 	}
 
 	splitter.GC()

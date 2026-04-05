@@ -246,8 +246,8 @@ func (s *SimpleSplitter) ReloadPools() {
 }
 
 func (s *SimpleSplitter) newMapperLocked() *SimpleMapper {
-	id := s.seq
-	s.seq++
+	id := s.nextMapperID
+	s.nextMapperID++
 	mapper := NewSimpleMapper(id, nil)
 	mapper.events = s.events
 	mapper.strategy = s.factory(mapper)
