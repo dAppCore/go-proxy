@@ -387,6 +387,18 @@ func (w *ConfigWatcher) Start() {
 		w.mu.Unlock()
 		return
 	}
+	if w.done == nil {
+		w.done = make(chan struct{})
+	} else {
+		select {
+		case <-w.done:
+			w.done = make(chan struct{})
+		default:
+		}
+	}
+	done := w.done
+	path := w.path
+	onChange := w.onChange
 	w.started = true
 	w.mu.Unlock()
 
@@ -396,7 +408,7 @@ func (w *ConfigWatcher) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				if info, err := os.Stat(w.path); err == nil {
+				if info, err := os.Stat(path); err == nil {
 					w.mu.Lock()
 					changed := info.ModTime() != w.lastMod
 					if changed {
@@ -406,12 +418,12 @@ func (w *ConfigWatcher) Start() {
 					if !changed {
 						continue
 					}
-					config, result := LoadConfig(w.path)
+					config, result := LoadConfig(path)
 					if result.OK && config != nil {
-						w.onChange(config)
+						onChange(config)
 					}
 				}
-			case <-w.done:
+			case <-done:
 				return
 			}
 		}
@@ -424,12 +436,16 @@ func (w *ConfigWatcher) Stop() {
 		return
 	}
 	w.mu.Lock()
+	done := w.done
 	w.started = false
 	w.mu.Unlock()
+	if done == nil {
+		return
+	}
 	select {
-	case <-w.done:
+	case <-done:
 	default:
-		close(w.done)
+		close(done)
 	}
 }
 
