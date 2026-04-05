@@ -11,10 +11,13 @@ import (
 	"math"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
 )
 
 // Result is the success/error carrier used by constructors and loaders.
@@ -375,23 +378,65 @@ func (w *ConfigWatcher) Start() {
 	if w == nil || w.path == "" || w.onChange == nil {
 		return
 	}
+	w.mu.Lock()
+	if w.watcher != nil {
+		w.mu.Unlock()
+		return
+	}
+	fsWatcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		w.mu.Unlock()
+		return
+	}
+	w.watcher = fsWatcher
+	w.mu.Unlock()
+
+	watchPath := filepath.Clean(w.path)
+	watchDir := filepath.Dir(watchPath)
+	if watchDir == "" {
+		watchDir = "."
+	}
+	if err := fsWatcher.Add(watchDir); err != nil {
+		_ = fsWatcher.Close()
+		w.mu.Lock()
+		if w.watcher == fsWatcher {
+			w.watcher = nil
+		}
+		w.mu.Unlock()
+		return
+	}
+
 	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
+		defer func() {
+			_ = fsWatcher.Close()
+			w.mu.Lock()
+			if w.watcher == fsWatcher {
+				w.watcher = nil
+			}
+			w.mu.Unlock()
+		}()
 		for {
 			select {
-			case <-ticker.C:
-				info, err := os.Stat(w.path)
-				if err != nil {
+			case event, ok := <-fsWatcher.Events:
+				if !ok {
+					return
+				}
+				if filepath.Clean(event.Name) != watchPath {
 					continue
 				}
-				mod := info.ModTime()
-				if mod.After(w.lastMod) {
-					w.lastMod = mod
-					config, result := LoadConfig(w.path)
-					if result.OK && config != nil {
-						w.onChange(config)
+				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename|fsnotify.Remove|fsnotify.Chmod) == 0 {
+					continue
+				}
+				config, result := LoadConfig(w.path)
+				if result.OK && config != nil {
+					if info, err := os.Stat(w.path); err == nil {
+						w.lastMod = info.ModTime()
 					}
+					w.onChange(config)
+				}
+			case _, ok := <-fsWatcher.Errors:
+				if !ok {
+					return
 				}
 			case <-w.done:
 				return
@@ -405,6 +450,12 @@ func (w *ConfigWatcher) Stop() {
 	if w == nil {
 		return
 	}
+	w.mu.Lock()
+	if w.watcher != nil {
+		_ = w.watcher.Close()
+		w.watcher = nil
+	}
+	w.mu.Unlock()
 	select {
 	case <-w.done:
 	default:
