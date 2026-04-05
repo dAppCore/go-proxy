@@ -72,7 +72,7 @@ func LoadConfig(path string) (*Config, Result) {
 		return nil, newErrorResult(NewScopedError("proxy.config", "parse config failed", err))
 	}
 	config.configPath = path
-	return config, config.Validate()
+	return config, newSuccessResult()
 }
 
 //	cfg := &proxy.Config{
