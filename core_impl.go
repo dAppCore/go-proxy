@@ -123,7 +123,7 @@ func NewEventBus() *EventBus {
 	return &EventBus{listeners: make(map[EventType][]EventHandler)}
 }
 
-// Subscribe registers a handler for the given event type.
+// bus.Subscribe(proxy.EventAccept, stats.OnAccept)
 func (b *EventBus) Subscribe(t EventType, h EventHandler) {
 	if b == nil || h == nil {
 		return
@@ -136,7 +136,7 @@ func (b *EventBus) Subscribe(t EventType, h EventHandler) {
 	b.listeners[t] = append(b.listeners[t], h)
 }
 
-// Dispatch calls all registered handlers for the event's type.
+// bus.Dispatch(proxy.Event{Type: proxy.EventLogin, Miner: miner})
 func (b *EventBus) Dispatch(e Event) {
 	if b == nil {
 		return
