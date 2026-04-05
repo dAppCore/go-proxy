@@ -18,7 +18,7 @@ func TestRateLimiter_Allow(t *testing.T) {
 func TestRateLimiter_Allow_ReplenishesHighLimits(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 120, BanDurationSeconds: 1})
 	rl.mu.Lock()
-	rl.buckets["1.2.3.4"] = &tokenBucket{
+	rl.bucketByHost["1.2.3.4"] = &tokenBucket{
 		tokens:     0,
 		lastRefill: time.Now().Add(-30 * time.Second),
 	}

@@ -123,12 +123,12 @@ type CloseEvent struct {
 //	})
 //	watcher.Start()
 type ConfigWatcher struct {
-	path     string
-	onChange func(*Config)
-	lastMod  time.Time
-	done     chan struct{}
-	mu       sync.Mutex
-	started  bool
+	configPath     string
+	onConfigChange func(*Config)
+	lastModifiedAt time.Time
+	stopCh         chan struct{}
+	mu             sync.Mutex
+	started        bool
 }
 
 // RateLimiter throttles new connections per source IP.
@@ -141,10 +141,10 @@ type ConfigWatcher struct {
 //	    // accept the socket
 //	}
 type RateLimiter struct {
-	config  RateLimit
-	buckets map[string]*tokenBucket
-	banned  map[string]time.Time
-	mu      sync.Mutex
+	limit          RateLimit
+	bucketByHost   map[string]*tokenBucket
+	banUntilByHost map[string]time.Time
+	mu             sync.Mutex
 }
 
 // tokenBucket is the per-IP refillable counter.

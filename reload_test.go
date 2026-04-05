@@ -155,7 +155,7 @@ func TestProxy_Reload_WatchEnabled_Good(t *testing.T) {
 	if p.watcher == nil {
 		t.Fatalf("expected reload to create a watcher when watch is enabled")
 	}
-	if got := p.watcher.path; got != "/tmp/proxy.json" {
+	if got := p.watcher.configPath; got != "/tmp/proxy.json" {
 		t.Fatalf("expected watcher to keep the original config path, got %q", got)
 	}
 	p.watcher.Stop()
@@ -188,7 +188,7 @@ func TestProxy_Reload_WatchDisabled_Bad(t *testing.T) {
 		t.Fatalf("expected reload to stop and clear the watcher when watch is disabled")
 	}
 	select {
-	case <-watcher.done:
+	case <-watcher.stopCh:
 	default:
 		t.Fatalf("expected existing watcher to be stopped")
 	}

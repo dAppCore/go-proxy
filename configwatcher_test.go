@@ -18,7 +18,7 @@ func TestConfigWatcher_New_Good(t *testing.T) {
 	if watcher == nil {
 		t.Fatal("expected watcher")
 	}
-	if watcher.lastMod.IsZero() {
+	if watcher.lastModifiedAt.IsZero() {
 		t.Fatal("expected last modification time to be initialised from the file")
 	}
 }

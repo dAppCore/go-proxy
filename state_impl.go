@@ -1829,7 +1829,7 @@ func (s *Server) listen() Result {
 
 // IsActive reports whether the limiter has enabled rate limiting.
 func (rl *RateLimiter) IsActive() bool {
-	return rl != nil && rl.config.MaxConnectionsPerMinute > 0
+	return rl != nil && rl.limit.MaxConnectionsPerMinute > 0
 }
 
 func nextMinerID() int64 { return atomic.AddInt64(&minerSeq, 1) }
