@@ -11,13 +11,10 @@ import (
 	"math"
 	"net"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/fsnotify/fsnotify"
 )
 
 // Result is the success/error carrier used by constructors and loaders.
@@ -367,6 +364,9 @@ func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher 
 		onChange: onChange,
 		done:     make(chan struct{}),
 	}
+	if data, err := os.ReadFile(configPath); err == nil {
+		watcher.lastSum = sha256.Sum256(data)
+	}
 	if info, err := os.Stat(configPath); err == nil {
 		watcher.lastMod = info.ModTime()
 	}
@@ -379,64 +379,41 @@ func (w *ConfigWatcher) Start() {
 		return
 	}
 	w.mu.Lock()
-	if w.watcher != nil {
+	if w.started {
 		w.mu.Unlock()
 		return
 	}
-	fsWatcher, err := fsnotify.NewWatcher()
-	if err != nil {
-		w.mu.Unlock()
-		return
-	}
-	w.watcher = fsWatcher
+	w.started = true
 	w.mu.Unlock()
 
-	watchPath := filepath.Clean(w.path)
-	watchDir := filepath.Dir(watchPath)
-	if watchDir == "" {
-		watchDir = "."
-	}
-	if err := fsWatcher.Add(watchDir); err != nil {
-		_ = fsWatcher.Close()
-		w.mu.Lock()
-		if w.watcher == fsWatcher {
-			w.watcher = nil
-		}
-		w.mu.Unlock()
-		return
-	}
-
 	go func() {
-		defer func() {
-			_ = fsWatcher.Close()
-			w.mu.Lock()
-			if w.watcher == fsWatcher {
-				w.watcher = nil
-			}
-			w.mu.Unlock()
-		}()
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
 		for {
 			select {
-			case event, ok := <-fsWatcher.Events:
-				if !ok {
-					return
-				}
-				if filepath.Clean(event.Name) != watchPath {
+			case <-ticker.C:
+				data, err := os.ReadFile(w.path)
+				if err != nil {
 					continue
 				}
-				if event.Op&(fsnotify.Write|fsnotify.Create|fsnotify.Rename|fsnotify.Remove|fsnotify.Chmod) == 0 {
+				sum := sha256.Sum256(data)
+				w.mu.Lock()
+				changed := sum != w.lastSum
+				if changed {
+					w.lastSum = sum
+				}
+				w.mu.Unlock()
+				if !changed {
 					continue
+				}
+				if info, err := os.Stat(w.path); err == nil {
+					w.mu.Lock()
+					w.lastMod = info.ModTime()
+					w.mu.Unlock()
 				}
 				config, result := LoadConfig(w.path)
 				if result.OK && config != nil {
-					if info, err := os.Stat(w.path); err == nil {
-						w.lastMod = info.ModTime()
-					}
 					w.onChange(config)
-				}
-			case _, ok := <-fsWatcher.Errors:
-				if !ok {
-					return
 				}
 			case <-w.done:
 				return
@@ -451,10 +428,7 @@ func (w *ConfigWatcher) Stop() {
 		return
 	}
 	w.mu.Lock()
-	if w.watcher != nil {
-		_ = w.watcher.Close()
-		w.watcher = nil
-	}
+	w.started = false
 	w.mu.Unlock()
 	select {
 	case <-w.done:

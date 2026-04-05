@@ -8,7 +8,6 @@
 package proxy
 
 import (
-	"github.com/fsnotify/fsnotify"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -120,9 +119,10 @@ type ConfigWatcher struct {
 	path     string
 	onChange func(*Config)
 	lastMod  time.Time
+	lastSum  [32]byte
 	done     chan struct{}
 	mu       sync.Mutex
-	watcher  *fsnotify.Watcher
+	started  bool
 }
 
 // RateLimiter throttles new connections per source IP.
