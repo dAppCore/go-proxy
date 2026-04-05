@@ -32,10 +32,9 @@ type MinerSnapshot struct {
 	Agent    string
 }
 
-// New creates the proxy and wires the default event handlers.
+// cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}}
+// p, result := proxy.New(cfg)
 //
-//	cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}}
-//	p, result := proxy.New(cfg)
 //	if !result.OK {
 //	    return result.Error
 //	}
@@ -93,7 +92,7 @@ func New(config *Config) (*Proxy, Result) {
 	return p, successResult()
 }
 
-// Mode returns the active proxy mode.
+// p.Mode()
 func (p *Proxy) Mode() string {
 	if p == nil || p.config == nil {
 		return ""
@@ -101,7 +100,7 @@ func (p *Proxy) Mode() string {
 	return p.config.Mode
 }
 
-// WorkersMode returns the worker naming strategy.
+// p.WorkersMode()
 func (p *Proxy) WorkersMode() WorkersMode {
 	if p == nil || p.config == nil {
 		return WorkersDisabled
@@ -109,7 +108,7 @@ func (p *Proxy) WorkersMode() WorkersMode {
 	return p.config.Workers
 }
 
-// Summary returns the current global stats snapshot.
+// summary := p.Summary()
 func (p *Proxy) Summary() StatsSummary {
 	if p == nil || p.stats == nil {
 		return StatsSummary{}
@@ -121,7 +120,7 @@ func (p *Proxy) Summary() StatsSummary {
 	return summary
 }
 
-// WorkerRecords returns a stable snapshot of worker rows.
+// workers := p.WorkerRecords()
 func (p *Proxy) WorkerRecords() []WorkerRecord {
 	if p == nil || p.workers == nil {
 		return nil
@@ -129,7 +128,7 @@ func (p *Proxy) WorkerRecords() []WorkerRecord {
 	return p.workers.List()
 }
 
-// MinerSnapshots returns a stable snapshot of connected miners.
+// miners := p.MinerSnapshots()
 func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 	if p == nil {
 		return nil
@@ -159,7 +158,7 @@ func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 	return rows
 }
 
-// MinerCount returns current and peak connected miner counts.
+// now, max := p.MinerCount()
 func (p *Proxy) MinerCount() (now, max uint64) {
 	if p == nil || p.stats == nil {
 		return 0, 0
@@ -167,7 +166,7 @@ func (p *Proxy) MinerCount() (now, max uint64) {
 	return p.stats.miners.Load(), p.stats.maxMiners.Load()
 }
 
-// Upstreams returns splitter upstream counts.
+// upstreams := p.Upstreams()
 func (p *Proxy) Upstreams() UpstreamStats {
 	if p == nil || p.splitter == nil {
 		return UpstreamStats{}
@@ -175,9 +174,7 @@ func (p *Proxy) Upstreams() UpstreamStats {
 	return p.splitter.Upstreams()
 }
 
-// Events returns the proxy event bus for external composition.
-//
-//	bus := p.Events()
+// bus := p.Events()
 func (p *Proxy) Events() *EventBus {
 	if p == nil {
 		return nil
@@ -185,9 +182,7 @@ func (p *Proxy) Events() *EventBus {
 	return p.events
 }
 
-// Start starts the TCP listeners, ticker loop, and optional HTTP API.
-//
-//	p.Start()
+// p.Start()
 func (p *Proxy) Start() {
 	if p == nil {
 		return
@@ -260,9 +255,7 @@ func (p *Proxy) Start() {
 	p.Stop()
 }
 
-// Stop shuts down listeners, background tasks, and HTTP.
-//
-//	p.Stop()
+// p.Stop()
 func (p *Proxy) Stop() {
 	if p == nil {
 		return
@@ -317,9 +310,7 @@ func (p *Proxy) closeAllMiners() {
 	}
 }
 
-// Reload swaps the live configuration and updates dependent state.
-//
-//	p.Reload(&proxy.Config{Mode: "simple", Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
+// p.Reload(&proxy.Config{Mode: "simple", Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
 func (p *Proxy) Reload(config *Config) {
 	if p == nil || config == nil {
 		return

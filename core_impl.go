@@ -116,10 +116,8 @@ func isValidWorkersMode(mode WorkersMode) bool {
 	}
 }
 
-// NewEventBus creates an empty synchronous event dispatcher.
-//
-//	bus := proxy.NewEventBus()
-//	bus.Subscribe(proxy.EventLogin, func(e proxy.Event) { _ = e.Miner })
+// bus := proxy.NewEventBus()
+// bus.Subscribe(proxy.EventLogin, func(e proxy.Event) { _ = e.Miner })
 func NewEventBus() *EventBus {
 	return &EventBus{listeners: make(map[EventType][]EventHandler)}
 }
@@ -231,10 +229,8 @@ func (cd *CustomDiff) OnLogin(e Event) {
 	e.Miner.customDiffResolved = true
 }
 
-// NewRateLimiter creates a per-IP token bucket limiter.
-//
-//	limiter := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
-//	limiter.Allow("203.0.113.42:3333")
+// limiter := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+// limiter.Allow("203.0.113.42:3333")
 func NewRateLimiter(config RateLimit) *RateLimiter {
 	return &RateLimiter{
 		config:  config,
@@ -306,10 +302,8 @@ func (rl *RateLimiter) Tick() {
 	}
 }
 
-// NewConfigWatcher creates a polling watcher for a config file.
-//
-//	watcher := NewConfigWatcher("config.json", func(cfg *Config) { _ = cfg })
-//	watcher.Start()
+// watcher := NewConfigWatcher("config.json", func(cfg *Config) { _ = cfg })
+// watcher.Start()
 func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher {
 	watcher := &ConfigWatcher{
 		path:     configPath,

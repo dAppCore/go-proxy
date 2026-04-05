@@ -1,12 +1,7 @@
 // Package api implements the HTTP monitoring endpoints for the proxy.
 //
-// Registered routes:
-//
-//	GET /1/summary — aggregated proxy stats
-//	GET /1/workers — per-worker hashrate table
-//	GET /1/miners  — per-connection state table
-//
-//	proxyapi.RegisterRoutes(apiRouter, p)
+// mux := http.NewServeMux()
+// RegisterRoutes(mux, p)
 package api
 
 import (
