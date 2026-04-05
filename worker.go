@@ -5,7 +5,7 @@ import (
 	"time"
 )
 
-// Workers tracks per-identity aggregates derived from miner login fields.
+// Workers tracks per-worker aggregates derived from miner login fields.
 //
 //	workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
 //	workers.OnLogin(proxy.Event{Miner: &proxy.Miner{rigID: "rig-alpha", user: "WALLET", ip: "10.0.0.1"}})
@@ -18,7 +18,7 @@ type Workers struct {
 	mu         sync.RWMutex
 }
 
-// WorkerRecord is the aggregate row returned by Workers.List().
+// WorkerRecord is the aggregate row returned by `Workers.List()`.
 //
 //	record := proxy.WorkerRecord{Name: "rig-alpha"}
 //	_ = record.Hashrate(60)

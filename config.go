@@ -1,6 +1,6 @@
 package proxy
 
-// Config is the top-level proxy configuration.
+// Config is the top-level proxy configuration used by `proxy.New`.
 //
 //	cfg := &proxy.Config{
 //	    Mode:    "nicehash",

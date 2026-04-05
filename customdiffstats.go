@@ -14,7 +14,7 @@ type CustomDiffBucketStats struct {
 	HashesTotal uint64 `json:"hashes_total"`
 }
 
-// CustomDiffBuckets records share totals grouped by miner custom difficulty.
+// CustomDiffBuckets groups share totals by the miner's resolved custom difficulty.
 //
 //	buckets := NewCustomDiffBuckets(true)
 //	buckets.OnAccept(Event{Miner: &Miner{customDiff: 50000}, Diff: 25000})

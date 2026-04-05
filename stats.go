@@ -6,11 +6,11 @@ import (
 	"time"
 )
 
-// Stats tracks the proxy-wide counters and rolling hashrate windows.
+// Stats tracks proxy-wide counters and rolling hashrate windows.
 //
-// stats := proxy.NewStats()
-// bus.Subscribe(proxy.EventAccept, stats.OnAccept)
-// bus.Subscribe(proxy.EventReject, stats.OnReject)
+//	stats := proxy.NewStats()
+//	bus.Subscribe(proxy.EventAccept, stats.OnAccept)
+//	bus.Subscribe(proxy.EventReject, stats.OnReject)
 type Stats struct {
 	accepted    atomic.Uint64
 	rejected    atomic.Uint64
@@ -50,7 +50,7 @@ type tickWindow struct {
 
 // StatsSummary is the serialisable snapshot returned by Stats.Summary().
 //
-// summary := proxy.NewStats().Summary()
+//	summary := proxy.NewStats().Summary()
 type StatsSummary struct {
 	Accepted        uint64                           `json:"accepted"`
 	Rejected        uint64                           `json:"rejected"`
