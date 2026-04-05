@@ -1,11 +1,12 @@
 package proxy
 
-// Config is the top-level proxy configuration used by `proxy.New`.
+// Config is the top-level proxy configuration.
 //
 //	cfg := &proxy.Config{
-//	    Mode:    "nicehash",
-//	    Bind:    []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}},
-//	    Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//	    Mode:   "nicehash",
+//	    Bind:   []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}},
+//	    Pools:  []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//	    Watch:  true,
 //	    Workers: proxy.WorkersByRigID,
 //	}
 type Config struct {
@@ -75,9 +76,12 @@ type HTTPConfig struct {
 	Restricted  bool   `json:"restricted"`   // true = read-only GET only
 }
 
-// RateLimit controls per-IP connection throttling.
+// RateLimit configures per-IP connection throttling.
 //
-//	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+//	limiter := proxy.NewRateLimiter(proxy.RateLimit{
+//	    MaxConnectionsPerMinute: 30,
+//	    BanDurationSeconds:      300,
+//	})
 type RateLimit struct {
 	MaxConnectionsPerMinute int `json:"max-connections-per-minute"` // 0 = disabled
 	BanDurationSeconds      int `json:"ban-duration"`               // 0 = no ban

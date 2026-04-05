@@ -16,7 +16,12 @@ import (
 
 // Proxy wires the configured listeners, splitters, stats, workers, and log sinks.
 //
-//	cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}, Workers: proxy.WorkersByRigID}
+//	cfg := &proxy.Config{
+//	    Mode:    "nicehash",
+//	    Bind:    []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}},
+//	    Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//	    Workers: proxy.WorkersByRigID,
+//	}
 //	p, result := proxy.New(cfg)
 //	if result.OK {
 //	    p.Start()
@@ -113,7 +118,10 @@ type CloseEvent struct {
 
 // ConfigWatcher polls a config file every second and reloads on modification.
 //
-//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) { p.Reload(cfg) })
+//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
+//	    p.Reload(cfg)
+//	})
+//	watcher.Start()
 type ConfigWatcher struct {
 	path     string
 	onChange func(*Config)
@@ -125,7 +133,10 @@ type ConfigWatcher struct {
 
 // RateLimiter throttles new connections per source IP.
 //
-//	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+//	limiter := proxy.NewRateLimiter(proxy.RateLimit{
+//	    MaxConnectionsPerMinute: 30,
+//	    BanDurationSeconds:      300,
+//	})
 //	if limiter.Allow("1.2.3.4:3333") {
 //	    // accept the socket
 //	}
