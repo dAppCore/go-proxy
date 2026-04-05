@@ -33,7 +33,10 @@ func (l *AccessLog) Close() {
 	}
 }
 
-// OnLogin writes `2026-04-04T12:00:00Z CONNECT  10.0.0.1  WALLET  XMRig/6.21.0`.
+// OnLogin writes a connect line such as:
+//
+//	al.OnLogin(proxy.Event{Miner: &proxy.Miner{}})
+//	// 2026-04-04T12:00:00Z CONNECT  10.0.0.1  WALLET  XMRig/6.21.0
 func (l *AccessLog) OnLogin(e proxy.Event) {
 	if l == nil || e.Miner == nil {
 		return
@@ -41,7 +44,10 @@ func (l *AccessLog) OnLogin(e proxy.Event) {
 	l.writeConnectLine(e.Miner.IP(), e.Miner.User(), e.Miner.Agent())
 }
 
-// OnClose writes `2026-04-04T12:00:00Z CLOSE  10.0.0.1  WALLET  rx=512  tx=4096`.
+// OnClose writes a close line such as:
+//
+//	al.OnClose(proxy.Event{Miner: &proxy.Miner{}})
+//	// 2026-04-04T12:00:00Z CLOSE  10.0.0.1  WALLET  rx=512  tx=4096
 func (l *AccessLog) OnClose(e proxy.Event) {
 	if l == nil || e.Miner == nil {
 		return
@@ -73,7 +79,10 @@ func (l *ShareLog) Close() {
 	}
 }
 
-// OnAccept writes `2026-04-04T12:00:00Z ACCEPT  WALLET  diff=100000  latency=82ms`.
+// OnAccept writes an accept line such as:
+//
+//	sl.OnAccept(proxy.Event{Miner: &proxy.Miner{}, Diff: 100000, Latency: 82})
+//	// 2026-04-04T12:00:00Z ACCEPT  WALLET  diff=100000  latency=82ms
 func (l *ShareLog) OnAccept(e proxy.Event) {
 	if l == nil || e.Miner == nil {
 		return
@@ -81,7 +90,10 @@ func (l *ShareLog) OnAccept(e proxy.Event) {
 	l.writeAcceptLine(e.Miner.User(), e.Diff, uint64(e.Latency))
 }
 
-// OnReject writes `2026-04-04T12:00:00Z REJECT  WALLET  reason="Invalid nonce"`.
+// OnReject writes a reject line such as:
+//
+//	sl.OnReject(proxy.Event{Miner: &proxy.Miner{}, Error: "Invalid nonce"})
+//	// 2026-04-04T12:00:00Z REJECT  WALLET  reason="Invalid nonce"
 func (l *ShareLog) OnReject(e proxy.Event) {
 	if l == nil || e.Miner == nil {
 		return

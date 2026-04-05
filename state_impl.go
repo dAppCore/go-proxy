@@ -1002,7 +1002,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		m.ReplyWithError(requestID(request.ID), "Invalid password")
 		return
 	}
-	m.user, m.customDiff = parseLoginUser(params.Login, m.globalDiff)
+	m.user, m.customDiff = resolveLoginCustomDiff(params.Login, m.globalDiff)
 	m.customDiffResolved = true
 	m.password = params.Pass
 	m.agent = params.Agent
@@ -1033,11 +1033,11 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	m.replyLoginSuccess(requestID(request.ID))
 }
 
-func parseLoginUser(login string, globalDiff uint64) (string, uint64) {
+func resolveLoginCustomDiff(login string, globalDiff uint64) (string, uint64) {
 	plus := strings.LastIndex(login, "+")
 	if plus >= 0 && plus < len(login)-1 {
 		suffix := login[plus+1:]
-		if isDigits(suffix) {
+		if isDecimalDigits(suffix) {
 			if parsed, err := strconv.ParseUint(suffix, 10, 64); err == nil {
 				return login[:plus], parsed
 			}
@@ -1050,7 +1050,7 @@ func parseLoginUser(login string, globalDiff uint64) (string, uint64) {
 	return login, 0
 }
 
-func isDigits(value string) bool {
+func isDecimalDigits(value string) bool {
 	if value == "" {
 		return false
 	}
