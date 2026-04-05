@@ -198,7 +198,7 @@ func TestMiner_HandleLogin_FailedAssignmentDoesNotDispatchLoginEvent(t *testing.
 	miner := NewMiner(minerConn, 3333, nil)
 	miner.extNH = true
 	miner.onLogin = func(*Miner) {}
-	miner.onLoginAccepted = func(m *Miner) {
+	miner.onLoginReady = func(m *Miner) {
 		proxyInstance.events.Dispatch(Event{Type: EventLogin, Miner: m})
 	}
 	proxyInstance.miners[miner.ID()] = miner

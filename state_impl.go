@@ -456,7 +456,7 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
 		}
 	}
-	miner.onLoginAccepted = func(m *Miner) {
+	miner.onLoginReady = func(m *Miner) {
 		if p.events != nil {
 			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
 		}
@@ -1032,8 +1032,8 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		m.ReplyWithError(requestID(request.ID), "Proxy is unavailable, try again later")
 		return
 	}
-	if m.onLoginAccepted != nil {
-		m.onLoginAccepted(m)
+	if m.onLoginReady != nil {
+		m.onLoginReady(m)
 	}
 	m.replyLoginSuccess(requestID(request.ID))
 }

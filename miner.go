@@ -57,7 +57,7 @@ type Miner struct {
 	sendMu             sync.Mutex  // serialises writes to conn
 	buf                [16384]byte // per-miner send buffer; avoids per-write allocations
 	onLogin            func(*Miner)
-	onLoginAccepted    func(*Miner)
+	onLoginReady       func(*Miner)
 	onSubmit           func(*Miner, *SubmitEvent)
 	onClose            func(*Miner)
 	closeOnce          sync.Once
