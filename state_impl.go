@@ -636,9 +636,9 @@ func (p *Proxy) startMonitoringServer() bool {
 		return false
 	}
 	mux := http.NewServeMux()
-	p.registerMonitoringRoute(mux, "/1/summary", func() any { return p.SummaryDocument() })
-	p.registerMonitoringRoute(mux, "/1/workers", func() any { return p.WorkersDocument() })
-	p.registerMonitoringRoute(mux, "/1/miners", func() any { return p.MinersDocument() })
+	p.registerMonitoringRoute(mux, MonitoringRouteSummary, func() any { return p.SummaryDocument() })
+	p.registerMonitoringRoute(mux, MonitoringRouteWorkers, func() any { return p.WorkersDocument() })
+	p.registerMonitoringRoute(mux, MonitoringRouteMiners, func() any { return p.MinersDocument() })
 	addr := net.JoinHostPort(p.config.HTTP.Host, strconv.Itoa(int(p.config.HTTP.Port)))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -710,7 +710,7 @@ func (p *Proxy) SummaryDocument() SummaryDocument {
 	now, max := p.MinerCount()
 	upstreams := p.Upstreams()
 	return SummaryDocument{
-		Version: "1.0.0",
+		Version: SummaryDocumentVersion,
 		Mode:    p.Mode(),
 		Hashrate: HashrateDocument{
 			Total: summary.Hashrate,
@@ -743,6 +743,10 @@ func (p *Proxy) WorkersDocument() WorkersDocument {
 	records := p.WorkerRecords()
 	rows := make([]WorkerRow, 0, len(records))
 	for _, record := range records {
+		hashrates := make([]float64, len(workerHashrateWindows))
+		for index, seconds := range workerHashrateWindows {
+			hashrates[index] = record.Hashrate(seconds)
+		}
 		rows = append(rows, WorkerRow{
 			record.Name,
 			record.LastIP,
@@ -752,11 +756,11 @@ func (p *Proxy) WorkersDocument() WorkersDocument {
 			record.Invalid,
 			record.Hashes,
 			unixOrZero(record.LastHashAt),
-			record.Hashrate(60),
-			record.Hashrate(600),
-			record.Hashrate(3600),
-			record.Hashrate(43200),
-			record.Hashrate(86400),
+			hashrates[0],
+			hashrates[1],
+			hashrates[2],
+			hashrates[3],
+			hashrates[4],
 		})
 	}
 	return WorkersDocument{
@@ -787,7 +791,7 @@ func (p *Proxy) MinersDocument() MinersDocument {
 		})
 	}
 	return MinersDocument{
-		Format: []string{"id", "ip", "tx", "rx", "state", "diff", "user", "password", "rig_id", "agent"},
+		Format: append([]string(nil), MinersDocumentFormat...),
 		Miners: rows,
 	}
 }

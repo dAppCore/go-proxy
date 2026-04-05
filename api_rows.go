@@ -1,5 +1,36 @@
 package proxy
 
+const (
+	// MonitoringRouteSummary documents the summary endpoint path.
+	//
+	//	http.Get("http://127.0.0.1:8080" + proxy.MonitoringRouteSummary)
+	MonitoringRouteSummary = "/1/summary"
+
+	// MonitoringRouteWorkers documents the workers endpoint path.
+	//
+	//	http.Get("http://127.0.0.1:8080" + proxy.MonitoringRouteWorkers)
+	MonitoringRouteWorkers = "/1/workers"
+
+	// MonitoringRouteMiners documents the miners endpoint path.
+	//
+	//	http.Get("http://127.0.0.1:8080" + proxy.MonitoringRouteMiners)
+	MonitoringRouteMiners = "/1/miners"
+
+	// SummaryDocumentVersion is the monitoring API version.
+	//
+	//	doc := proxy.SummaryDocument{Version: proxy.SummaryDocumentVersion}
+	SummaryDocumentVersion = "1.0.0"
+)
+
+var (
+	// MinersDocumentFormat defines the fixed /1/miners column order.
+	//
+	//	doc := proxy.MinersDocument{Format: append([]string(nil), proxy.MinersDocumentFormat...)}
+	MinersDocumentFormat = []string{"id", "ip", "tx", "rx", "state", "diff", "user", "password", "rig_id", "agent"}
+
+	workerHashrateWindows = [5]int{60, 600, 3600, 43200, 86400}
+)
+
 // WorkerRow{"rig-alpha", "10.0.0.1", 1, 10, 0, 0, 10000, 1712232000, 1.0, 1.0, 1.0, 1.0, 1.0}
 type WorkerRow [13]any
 

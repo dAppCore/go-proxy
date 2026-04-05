@@ -28,9 +28,9 @@ func RegisterRoutes(router RouteRegistrar, p *proxy.Proxy) {
 	if router == nil || p == nil {
 		return
 	}
-	registerJSONGetRoute(router, p, "/1/summary", func() any { return p.SummaryDocument() })
-	registerJSONGetRoute(router, p, "/1/workers", func() any { return p.WorkersDocument() })
-	registerJSONGetRoute(router, p, "/1/miners", func() any { return p.MinersDocument() })
+	registerJSONGetRoute(router, p, proxy.MonitoringRouteSummary, func() any { return p.SummaryDocument() })
+	registerJSONGetRoute(router, p, proxy.MonitoringRouteWorkers, func() any { return p.WorkersDocument() })
+	registerJSONGetRoute(router, p, proxy.MonitoringRouteMiners, func() any { return p.MinersDocument() })
 }
 
 func registerJSONGetRoute(router RouteRegistrar, proxyInstance *proxy.Proxy, pattern string, renderDocument func() any) {
