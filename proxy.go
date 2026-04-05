@@ -14,8 +14,9 @@ import (
 	"time"
 )
 
-// Proxy is the top-level orchestrator.
+// Proxy wires the configured listeners, splitters, stats, workers, and log sinks.
 //
+//	cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}, Workers: proxy.WorkersByRigID}
 //	p, result := proxy.New(cfg)
 //	if result.OK {
 //	    p.Start()
@@ -44,7 +45,7 @@ type Proxy struct {
 	submitCount       atomic.Int64
 }
 
-// Splitter is the shared interface implemented by the NiceHash and simple modes.
+// Splitter routes miner logins, submits, and disconnects to the active upstream strategy.
 //
 //	splitter := nicehash.NewNonceSplitter(cfg, bus, pool.NewStrategyFactory(cfg))
 //	splitter.Connect()
