@@ -7,8 +7,8 @@ import (
 
 // Workers tracks per-identity aggregates derived from miner login fields.
 //
-// workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
-// workers.OnLogin(proxy.Event{Miner: miner})
+//	workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
+//	workers.OnLogin(proxy.Event{Miner: &proxy.Miner{rigID: "rig-alpha", user: "WALLET", ip: "10.0.0.1"}})
 type Workers struct {
 	mode       WorkersMode
 	entries    []WorkerRecord // ordered by first-seen (stable)
@@ -20,7 +20,8 @@ type Workers struct {
 
 // WorkerRecord is the aggregate row returned by Workers.List().
 //
-// hr60 := record.Hashrate(60)
+//	record := proxy.WorkerRecord{Name: "rig-alpha"}
+//	_ = record.Hashrate(60)
 type WorkerRecord struct {
 	Name        string
 	LastIP      string

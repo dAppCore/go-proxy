@@ -4,9 +4,11 @@ import "sync"
 
 // EventBus dispatches proxy lifecycle events to synchronous listeners.
 //
-// bus := proxy.NewEventBus()
-// bus.Subscribe(proxy.EventLogin, func(e proxy.Event) { _ = e.Miner.User() })
-// bus.Subscribe(proxy.EventAccept, stats.OnAccept)
+//	bus := proxy.NewEventBus()
+//	bus.Subscribe(proxy.EventLogin, func(e proxy.Event) {
+//	    _ = e.Miner.User()
+//	})
+//	bus.Subscribe(proxy.EventAccept, stats.OnAccept)
 type EventBus struct {
 	listeners map[EventType][]EventHandler
 	mu        sync.RWMutex

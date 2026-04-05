@@ -11,7 +11,7 @@ import (
 //	    proxy.BindAddr{Host: "0.0.0.0", Port: 3333, TLS: false},
 //	    nil,
 //	    proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30}),
-//	    onAccept,
+//	    func(conn net.Conn, port uint16) { _ = conn; _ = port },
 //	)
 //	if result.OK {
 //	    srv.Start()
