@@ -665,7 +665,7 @@ func (p *Proxy) registerMonitoringRoute(mux *http.ServeMux, pattern string, rend
 		return
 	}
 	mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
-		if status, ok := p.allowMonitoringRequest(r); !ok {
+		if status, ok := p.AllowMonitoringRequest(r); !ok {
 			switch status {
 			case http.StatusUnauthorized:
 				w.Header().Set("WWW-Authenticate", "Bearer")
@@ -679,7 +679,10 @@ func (p *Proxy) registerMonitoringRoute(mux *http.ServeMux, pattern string, rend
 	})
 }
 
-func (p *Proxy) allowMonitoringRequest(r *http.Request) (int, bool) {
+// AllowMonitoringRequest applies the configured monitoring API access checks.
+//
+//	status, ok := p.AllowMonitoringRequest(request)
+func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 	if p == nil || p.config == nil {
 		return http.StatusServiceUnavailable, false
 	}
@@ -693,13 +696,6 @@ func (p *Proxy) allowMonitoringRequest(r *http.Request) (int, bool) {
 		}
 	}
 	return http.StatusOK, true
-}
-
-// AllowMonitoringRequest applies the configured monitoring API access checks.
-//
-//	status, ok := p.AllowMonitoringRequest(request)
-func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
-	return p.allowMonitoringRequest(r)
 }
 
 func (p *Proxy) writeJSONResponse(w http.ResponseWriter, payload any) {

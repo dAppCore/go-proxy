@@ -18,7 +18,7 @@ func TestProxy_allowHTTP_Good(t *testing.T) {
 		},
 	}
 
-	status, ok := p.allowMonitoringRequest(&http.Request{
+	status, ok := p.AllowMonitoringRequest(&http.Request{
 		Method: http.MethodGet,
 		Header: http.Header{
 			"Authorization": []string{"Bearer secret"},
@@ -41,7 +41,7 @@ func TestProxy_allowHTTP_Bad(t *testing.T) {
 		},
 	}
 
-	status, ok := p.allowMonitoringRequest(&http.Request{Method: http.MethodPost})
+	status, ok := p.AllowMonitoringRequest(&http.Request{Method: http.MethodPost})
 	if ok {
 		t.Fatal("expected non-GET request to be rejected")
 	}
@@ -57,7 +57,7 @@ func TestProxy_allowHTTP_Unrestricted_Good(t *testing.T) {
 		},
 	}
 
-	status, ok := p.allowMonitoringRequest(&http.Request{Method: http.MethodGet})
+	status, ok := p.AllowMonitoringRequest(&http.Request{Method: http.MethodGet})
 	if !ok {
 		t.Fatalf("expected unrestricted request to pass, got status %d", status)
 	}
@@ -73,7 +73,7 @@ func TestProxy_allowHTTP_Unrestricted_Bad(t *testing.T) {
 		},
 	}
 
-	status, ok := p.allowMonitoringRequest(&http.Request{Method: http.MethodPost})
+	status, ok := p.AllowMonitoringRequest(&http.Request{Method: http.MethodPost})
 	if !ok {
 		t.Fatalf("expected unrestricted non-GET request to pass, got status %d", status)
 	}
@@ -91,7 +91,7 @@ func TestProxy_allowHTTP_Ugly(t *testing.T) {
 		},
 	}
 
-	status, ok := p.allowMonitoringRequest(&http.Request{
+	status, ok := p.AllowMonitoringRequest(&http.Request{
 		Method: http.MethodGet,
 		Header: http.Header{
 			"Authorization": []string{"Bearer wrong"},
@@ -108,7 +108,7 @@ func TestProxy_allowHTTP_Ugly(t *testing.T) {
 func TestProxy_allowHTTP_NilConfig_Ugly(t *testing.T) {
 	p := &Proxy{}
 
-	status, ok := p.allowMonitoringRequest(&http.Request{Method: http.MethodGet})
+	status, ok := p.AllowMonitoringRequest(&http.Request{Method: http.MethodGet})
 	if ok {
 		t.Fatal("expected nil config request to be rejected")
 	}
