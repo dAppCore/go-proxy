@@ -17,10 +17,10 @@ import (
 //	    srv.Start()
 //	}
 type Server struct {
-	addr     BindAddr
-	tlsCfg   *tls.Config // nil for plain TCP
-	limiter  *RateLimiter
-	onAccept func(net.Conn, uint16)
-	listener net.Listener
-	done     chan struct{}
+	addr      BindAddr
+	tlsConfig *tls.Config // nil for plain TCP
+	limiter   *RateLimiter
+	onAccept  func(net.Conn, uint16)
+	listener  net.Listener
+	done      chan struct{}
 }

@@ -210,20 +210,20 @@ func (p *Proxy) Start() {
 		return
 	}
 	for _, bind := range p.config.Bind {
-		var tlsCfg *tls.Config
+		var tlsConfig *tls.Config
 		if bind.TLS {
 			if !p.config.TLS.Enabled {
 				p.Stop()
 				return
 			}
 			var result Result
-			tlsCfg, result = buildTLSConfig(p.config.TLS)
+			tlsConfig, result = buildTLSConfig(p.config.TLS)
 			if !result.OK {
 				p.Stop()
 				return
 			}
 		}
-		server, result := NewServer(bind, tlsCfg, p.rateLimit, p.acceptMiner)
+		server, result := NewServer(bind, tlsConfig, p.rateLimit, p.acceptMiner)
 		if !result.OK {
 			p.Stop()
 			return
@@ -1742,20 +1742,20 @@ func (cd *CustomDiff) Apply(miner *Miner) {
 
 // NewServer constructs a server instance.
 //
-//	server, result := proxy.NewServer(bind, tlsCfg, limiter, func(conn net.Conn, port uint16) {
+//	server, result := proxy.NewServer(bind, tlsConfig, limiter, func(conn net.Conn, port uint16) {
 //	    _ = conn
 //	    _ = port
 //	})
-func NewServer(bind BindAddr, tlsCfg *tls.Config, limiter *RateLimiter, onAccept func(net.Conn, uint16)) (*Server, Result) {
+func NewServer(bind BindAddr, tlsConfig *tls.Config, limiter *RateLimiter, onAccept func(net.Conn, uint16)) (*Server, Result) {
 	if onAccept == nil {
 		onAccept = func(net.Conn, uint16) {}
 	}
 	server := &Server{
-		addr:     bind,
-		tlsCfg:   tlsCfg,
-		limiter:  limiter,
-		onAccept: onAccept,
-		done:     make(chan struct{}),
+		addr:      bind,
+		tlsConfig: tlsConfig,
+		limiter:   limiter,
+		onAccept:  onAccept,
+		done:      make(chan struct{}),
 	}
 	if result := server.listen(); !result.OK {
 		return nil, result
@@ -1819,15 +1819,15 @@ func (s *Server) listen() Result {
 	if s.listener != nil {
 		return newSuccessResult()
 	}
-	if s.addr.TLS && s.tlsCfg == nil {
+	if s.addr.TLS && s.tlsConfig == nil {
 		return newErrorResult(NewScopedError("proxy.server", "tls listener requires a tls config", nil))
 	}
 	ln, err := net.Listen("tcp", net.JoinHostPort(s.addr.Host, strconv.Itoa(int(s.addr.Port))))
 	if err != nil {
 		return newErrorResult(NewScopedError("proxy.server", "listen failed", err))
 	}
-	if s.tlsCfg != nil {
-		ln = tls.NewListener(ln, s.tlsCfg)
+	if s.tlsConfig != nil {
+		ln = tls.NewListener(ln, s.tlsConfig)
 	}
 	s.listener = ln
 	return newSuccessResult()
