@@ -17,7 +17,12 @@ import (
 	"time"
 )
 
-// Result is a small success/error carrier used by constructors and loaders.
+// Result is the success/error carrier used by constructors and loaders.
+//
+//	cfg, result := proxy.LoadConfig("config.json")
+//	if !result.OK {
+//	    return result.Error
+//	}
 type Result struct {
 	OK    bool
 	Error error
@@ -34,7 +39,7 @@ func newErrorResult(err error) Result {
 var splitterFactoriesMu sync.RWMutex
 var splitterFactoriesByMode = map[string]func(*Config, *EventBus) Splitter{}
 
-// Register a mode-specific splitter constructor.
+// RegisterSplitterFactory installs the constructor used for one proxy mode.
 //
 //	proxy.RegisterSplitterFactory("simple", func(cfg *proxy.Config, bus *proxy.EventBus) proxy.Splitter {
 //	    return simple.NewSimpleSplitter(cfg, bus, nil)

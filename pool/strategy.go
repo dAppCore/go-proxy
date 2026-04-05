@@ -7,10 +7,11 @@ import (
 )
 
 // FailoverStrategy wraps an ordered slice of PoolConfig entries.
-// It connects to the first enabled pool and fails over in order on error.
-// On reconnect it always retries from the primary first.
 //
-//	strategy := pool.NewFailoverStrategy(cfg.Pools, listener, cfg)
+//	strategy := pool.NewFailoverStrategy([]proxy.PoolConfig{
+//	    {URL: "primary.example:3333", Enabled: true},
+//	    {URL: "backup.example:3333", Enabled: true},
+//	}, listener, cfg)
 //	strategy.Connect()
 type FailoverStrategy struct {
 	pools    []proxy.PoolConfig
@@ -23,8 +24,6 @@ type FailoverStrategy struct {
 }
 
 // StrategyFactory creates a FailoverStrategy for a given StratumListener.
-// Splitters use it to create one upstream strategy per mapper without importing
-// the pool wiring directly.
 //
 //	factory := pool.NewStrategyFactory(cfg)
 //	strategy := factory(listener)

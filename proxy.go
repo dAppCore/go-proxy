@@ -1,13 +1,10 @@
-// Package proxy is a CryptoNote stratum mining proxy library.
+// Package proxy is the mining proxy library.
 //
-// It accepts miner connections over TCP (optionally TLS), splits the 32-bit nonce
-// space across up to 256 simultaneous miners per upstream pool connection (NiceHash
-// mode), and presents a small monitoring API.
-//
-// Full specification: docs/RFC.md
-//
+//	cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}, Workers: proxy.WorkersByRigID}
 //	p, result := proxy.New(cfg)
-//	if result.OK { p.Start() }
+//	if result.OK {
+//	    p.Start()
+//	}
 package proxy
 
 import (

@@ -19,7 +19,7 @@ import (
 
 // NewStrategyFactory creates a StrategyFactory for the supplied config.
 //
-//	factory := pool.NewStrategyFactory(cfg)
+//	factory := pool.NewStrategyFactory(&proxy.Config{Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
 //	strategy := factory(listener)
 func NewStrategyFactory(config *proxy.Config) StrategyFactory {
 	return func(listener StratumListener) Strategy {
@@ -27,8 +27,11 @@ func NewStrategyFactory(config *proxy.Config) StrategyFactory {
 	}
 }
 
-// client := pool.NewStratumClient(poolCfg, listener)
-// client.Connect()
+// client := pool.NewStratumClient(proxy.PoolConfig{URL: "pool.example:3333", User: "WALLET", Pass: "x"}, listener)
+//
+//	if result := client.Connect(); result.OK {
+//	    client.Login()
+//	}
 func NewStratumClient(poolConfig proxy.PoolConfig, listener StratumListener) *StratumClient {
 	return &StratumClient{
 		config:   poolConfig,
@@ -47,7 +50,7 @@ func (c *StratumClient) IsActive() bool {
 	return c.active
 }
 
-// client.Connect()
+// result := client.Connect()
 func (c *StratumClient) Connect() proxy.Result {
 	if c == nil {
 		return proxy.Result{OK: false, Error: errors.New("client is nil")}
@@ -93,6 +96,8 @@ func (c *StratumClient) Connect() proxy.Result {
 }
 
 // client.Login()
+//
+// A login reply with a job triggers `OnJob` immediately.
 func (c *StratumClient) Login() {
 	if c == nil || c.conn == nil {
 		return
@@ -116,7 +121,7 @@ func (c *StratumClient) Login() {
 	_ = c.writeJSON(req)
 }
 
-// seq := client.Submit(jobID, "deadbeef", "HASH64HEX", "cn/r")
+// seq := client.Submit("job-1", "deadbeef", "HASH64HEX", "cn/r")
 func (c *StratumClient) Submit(jobID, nonce, result, algo string) int64 {
 	if c == nil {
 		return 0

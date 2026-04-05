@@ -1,7 +1,9 @@
-// Package pool implements the outbound stratum pool client and failover strategy.
+// Package pool implements the outbound pool client and failover strategy.
 //
-//	client := pool.NewStratumClient(poolCfg, listener)
-//	client.Connect()
+//	client := pool.NewStratumClient(proxy.PoolConfig{URL: "pool.example:3333", User: "WALLET", Pass: "x"}, listener)
+//	if result := client.Connect(); result.OK {
+//	    client.Login()
+//	}
 package pool
 
 import (
@@ -12,8 +14,11 @@ import (
 	"dappco.re/go/proxy"
 )
 
-// client := NewStratumClient(poolCfg, listener)
-// client.Connect()
+// client := pool.NewStratumClient(poolCfg, listener)
+//
+//	if result := client.Connect(); result.OK {
+//	    client.Login()
+//	}
 type StratumClient struct {
 	config     proxy.PoolConfig
 	listener   StratumListener
