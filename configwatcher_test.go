@@ -66,6 +66,36 @@ func TestConfigWatcher_Start_Good(t *testing.T) {
 	}
 }
 
+// TestConfigWatcher_Start_Bad verifies a watcher with a nonexistent path does not panic
+// and does not call the onChange callback.
+//
+//	watcher := proxy.NewConfigWatcher("/nonexistent/config.json", func(cfg *proxy.Config) {
+//	    // never called
+//	})
+//	watcher.Start()
+//	watcher.Stop()
+func TestConfigWatcher_Start_Bad(t *testing.T) {
+	called := make(chan struct{}, 1)
+	watcher := NewConfigWatcher("/nonexistent/path/config.json", func(*Config) {
+		select {
+		case called <- struct{}{}:
+		default:
+		}
+	})
+	if watcher == nil {
+		t.Fatal("expected watcher even for a nonexistent path")
+	}
+	watcher.Start()
+	defer watcher.Stop()
+
+	select {
+	case <-called:
+		t.Fatal("expected no callback for nonexistent config file")
+	case <-time.After(2 * time.Second):
+		// expected: no update fired
+	}
+}
+
 func TestConfigWatcher_Start_Ugly(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")

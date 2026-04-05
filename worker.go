@@ -5,9 +5,12 @@ import (
 	"time"
 )
 
-// workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
-// workers.OnLogin(proxy.Event{Miner: &proxy.Miner{rigID: "rig-alpha", user: "WALLET", ip: "10.0.0.1"}})
-// _ = workers.List()
+// Workers maintains per-worker aggregate stats. Workers are identified by name,
+// derived from the miner's login fields per WorkersMode.
+//
+//	workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
+//	workers.OnLogin(proxy.Event{Miner: miner})
+//	records := workers.List()
 type Workers struct {
 	mode       WorkersMode
 	entries    []WorkerRecord // ordered by first-seen (stable)
@@ -17,8 +20,10 @@ type Workers struct {
 	mu         sync.RWMutex
 }
 
-// record := proxy.WorkerRecord{Name: "rig-alpha"}
-// _ = record.Hashrate(60)
+// WorkerRecord is the per-identity aggregate with rolling hashrate windows.
+//
+//	record := proxy.WorkerRecord{Name: "rig-alpha", Accepted: 10, Hashes: 500000}
+//	hr60 := record.Hashrate(60) // H/s over the last 60 seconds
 type WorkerRecord struct {
 	Name        string
 	LastIP      string

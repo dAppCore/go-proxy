@@ -6,11 +6,14 @@ import (
 	"time"
 )
 
-// stats := proxy.NewStats()
-// bus.Subscribe(proxy.EventAccept, stats.OnAccept)
-// bus.Subscribe(proxy.EventReject, stats.OnReject)
-// stats.Tick()
-// _ = stats.Summary()
+// Stats tracks global proxy metrics. Hot-path counters are atomic. Hashrate windows
+// use a ring buffer per window size, advanced by Tick().
+//
+//	stats := proxy.NewStats()
+//	bus.Subscribe(proxy.EventAccept, stats.OnAccept)
+//	bus.Subscribe(proxy.EventReject, stats.OnReject)
+//	stats.Tick()
+//	summary := stats.Summary()
 type Stats struct {
 	accepted    atomic.Uint64
 	rejected    atomic.Uint64
@@ -45,7 +48,10 @@ type tickWindow struct {
 	size    int // window size in seconds = len(buckets)
 }
 
-// summary := proxy.NewStats().Summary()
+// StatsSummary is the serialisable snapshot returned by Summary().
+//
+//	summary := proxy.NewStats().Summary()
+//	_ = summary.Hashrate[0] // 60-second window H/s
 type StatsSummary struct {
 	Accepted        uint64                           `json:"accepted"`
 	Rejected        uint64                           `json:"rejected"`

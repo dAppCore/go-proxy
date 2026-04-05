@@ -48,6 +48,86 @@ func TestWorker_NewWorkers_Ugly(t *testing.T) {
 	}
 }
 
+// TestWorker_Hashrate_Good verifies that recording an accepted share produces a nonzero
+// hashrate reading from the 60-second window.
+//
+//	record := proxy.WorkerRecord{}
+//	record.Hashrate(60) // > 0.0 after an accepted share
+func TestWorker_Hashrate_Good(t *testing.T) {
+	bus := NewEventBus()
+	workers := NewWorkers(WorkersByUser, bus)
+
+	miner := &Miner{id: 100, user: "hashtest", ip: "10.0.0.10"}
+	bus.Dispatch(Event{Type: EventLogin, Miner: miner})
+	bus.Dispatch(Event{Type: EventAccept, Miner: miner, Diff: 50000})
+
+	records := workers.List()
+	if len(records) != 1 {
+		t.Fatalf("expected one worker record, got %d", len(records))
+	}
+	hr := records[0].Hashrate(60)
+	if hr <= 0 {
+		t.Fatalf("expected nonzero hashrate for 60-second window after accept, got %f", hr)
+	}
+}
+
+// TestWorker_Hashrate_Bad verifies that an invalid window size returns 0.
+//
+//	record := proxy.WorkerRecord{}
+//	record.Hashrate(999) // 0.0 (unsupported window)
+func TestWorker_Hashrate_Bad(t *testing.T) {
+	bus := NewEventBus()
+	workers := NewWorkers(WorkersByUser, bus)
+
+	miner := &Miner{id: 101, user: "hashtest-bad", ip: "10.0.0.11"}
+	bus.Dispatch(Event{Type: EventLogin, Miner: miner})
+	bus.Dispatch(Event{Type: EventAccept, Miner: miner, Diff: 50000})
+
+	records := workers.List()
+	if len(records) != 1 {
+		t.Fatalf("expected one worker record, got %d", len(records))
+	}
+	hr := records[0].Hashrate(999)
+	if hr != 0 {
+		t.Fatalf("expected zero hashrate for unsupported window, got %f", hr)
+	}
+	hrZero := records[0].Hashrate(0)
+	if hrZero != 0 {
+		t.Fatalf("expected zero hashrate for zero window, got %f", hrZero)
+	}
+	hrNeg := records[0].Hashrate(-1)
+	if hrNeg != 0 {
+		t.Fatalf("expected zero hashrate for negative window, got %f", hrNeg)
+	}
+}
+
+// TestWorker_Hashrate_Ugly verifies that calling Hashrate on a nil record returns 0
+// and that a worker with no accepts also returns 0.
+//
+//	var record *proxy.WorkerRecord
+//	record.Hashrate(60) // 0.0
+func TestWorker_Hashrate_Ugly(t *testing.T) {
+	var nilRecord *WorkerRecord
+	if hr := nilRecord.Hashrate(60); hr != 0 {
+		t.Fatalf("expected zero hashrate for nil record, got %f", hr)
+	}
+
+	bus := NewEventBus()
+	workers := NewWorkers(WorkersByUser, bus)
+
+	miner := &Miner{id: 102, user: "hashtest-ugly", ip: "10.0.0.12"}
+	bus.Dispatch(Event{Type: EventLogin, Miner: miner})
+
+	records := workers.List()
+	if len(records) != 1 {
+		t.Fatalf("expected one worker record, got %d", len(records))
+	}
+	hr := records[0].Hashrate(60)
+	if hr != 0 {
+		t.Fatalf("expected zero hashrate for worker with no accepts, got %f", hr)
+	}
+}
+
 func TestWorker_CustomDiffOrdering_Good(t *testing.T) {
 	cfg := &Config{
 		Mode:          "nicehash",

@@ -22,7 +22,11 @@ import (
 //	strategy := factory(listener)
 func NewStrategyFactory(config *proxy.Config) StrategyFactory {
 	return func(listener StratumListener) Strategy {
-		return NewFailoverStrategy(config.Pools, listener, config)
+		var pools []proxy.PoolConfig
+		if config != nil {
+			pools = config.Pools
+		}
+		return NewFailoverStrategy(pools, listener, config)
 	}
 }
 
