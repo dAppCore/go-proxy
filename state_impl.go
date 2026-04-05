@@ -191,6 +191,12 @@ func (p *Proxy) Events() *EventBus {
 }
 
 // p.Start()
+//
+//   go func() {
+//       time.Sleep(30 * time.Second)
+//       p.Stop()
+//   }()
+//   p.Start()
 func (p *Proxy) Start() {
 	if p == nil {
 		return
@@ -264,6 +270,8 @@ func (p *Proxy) Start() {
 }
 
 // p.Stop()
+//
+//   p.Stop()
 func (p *Proxy) Stop() {
 	if p == nil {
 		return
@@ -326,6 +334,11 @@ func (p *Proxy) activeMiners() []*Miner {
 }
 
 // p.Reload(&proxy.Config{Mode: "simple", Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
+//
+//   p.Reload(&proxy.Config{
+//       Mode:  "simple",
+//       Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//   })
 func (p *Proxy) Reload(config *Config) {
 	if p == nil || config == nil {
 		return
@@ -677,7 +690,7 @@ func (p *Proxy) allowMonitoringRequest(r *http.Request) (int, bool) {
 
 // AllowMonitoringRequest applies the configured monitoring API access checks.
 //
-//	status, ok := p.AllowMonitoringRequest(request)
+//   status, ok := p.AllowMonitoringRequest(request)
 func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 	return p.allowMonitoringRequest(r)
 }
@@ -689,7 +702,8 @@ func (p *Proxy) writeJSONResponse(w http.ResponseWriter, payload any) {
 
 // SummaryDocument builds the RFC-shaped /1/summary response body.
 //
-//	doc := p.SummaryDocument()
+//   doc := p.SummaryDocument()
+//   _ = doc.Results.Accepted
 func (p *Proxy) SummaryDocument() SummaryDocument {
 	summary := p.Summary()
 	now, max := p.MinerCount()
@@ -722,7 +736,8 @@ func (p *Proxy) SummaryDocument() SummaryDocument {
 
 // WorkersDocument builds the RFC-shaped /1/workers response body.
 //
-//	doc := p.WorkersDocument()
+//   doc := p.WorkersDocument()
+//   _ = doc.Workers[0][0]
 func (p *Proxy) WorkersDocument() WorkersDocument {
 	records := p.WorkerRecords()
 	rows := make([]WorkerRow, 0, len(records))
@@ -751,7 +766,8 @@ func (p *Proxy) WorkersDocument() WorkersDocument {
 
 // MinersDocument builds the RFC-shaped /1/miners response body.
 //
-//	doc := p.MinersDocument()
+//   doc := p.MinersDocument()
+//   _ = doc.Miners[0][7]
 func (p *Proxy) MinersDocument() MinersDocument {
 	records := p.MinerSnapshots()
 	rows := make([]MinerRow, 0, len(records))
