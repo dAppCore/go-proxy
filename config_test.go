@@ -40,7 +40,7 @@ func TestConfig_Validate_Ugly(t *testing.T) {
 	}
 }
 
-func TestConfig_Validate_NoEnabledPool_Ugly(t *testing.T) {
+func TestConfig_Validate_NoEnabledPool_Good(t *testing.T) {
 	cfg := &Config{
 		Mode:    "simple",
 		Workers: WorkersByRigID,
@@ -51,7 +51,7 @@ func TestConfig_Validate_NoEnabledPool_Ugly(t *testing.T) {
 		},
 	}
 
-	if result := cfg.Validate(); result.OK {
-		t.Fatalf("expected config with no enabled pools to fail validation")
+	if result := cfg.Validate(); !result.OK {
+		t.Fatalf("expected config with no enabled pools to be valid, got error: %v", result.Error)
 	}
 }

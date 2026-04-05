@@ -90,17 +90,10 @@ func (c *Config) Validate() Result {
 	if len(c.Pools) == 0 {
 		return newErrorResult(NewScopedError("proxy.config", "pool list is empty", nil))
 	}
-	enabledPools := 0
 	for _, pool := range c.Pools {
 		if pool.Enabled && strings.TrimSpace(pool.URL) == "" {
 			return newErrorResult(NewScopedError("proxy.config", "enabled pool url is empty", nil))
 		}
-		if pool.Enabled {
-			enabledPools++
-		}
-	}
-	if enabledPools == 0 {
-		return newErrorResult(NewScopedError("proxy.config", "pool list has no enabled entries", nil))
 	}
 	return newSuccessResult()
 }

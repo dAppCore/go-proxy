@@ -1036,8 +1036,11 @@ func (m *Miner) handleLogin(request stratumRequest) {
 func parseLoginUser(login string, globalDiff uint64) (string, uint64) {
 	plus := strings.LastIndex(login, "+")
 	if plus >= 0 && plus < len(login)-1 {
-		if parsed, err := strconv.ParseUint(login[plus+1:], 10, 64); err == nil {
-			return login[:plus], parsed
+		suffix := login[plus+1:]
+		if isDigits(suffix) {
+			if parsed, err := strconv.ParseUint(suffix, 10, 64); err == nil {
+				return login[:plus], parsed
+			}
 		}
 		return login, 0
 	}
@@ -1045,6 +1048,18 @@ func parseLoginUser(login string, globalDiff uint64) (string, uint64) {
 		return login, globalDiff
 	}
 	return login, 0
+}
+
+func isDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Miner) handleSubmit(request stratumRequest) {

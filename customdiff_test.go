@@ -29,6 +29,20 @@ func TestCustomDiff_OnLogin(t *testing.T) {
 	}
 }
 
+func TestCustomDiff_OnLogin_Ugly(t *testing.T) {
+	cd := NewCustomDiff(10000)
+	miner := &Miner{user: "WALLET+50000extra"}
+
+	cd.OnLogin(Event{Miner: miner})
+
+	if miner.User() != "WALLET+50000extra" {
+		t.Fatalf("expected non-suffix plus segment to remain unchanged, got %q", miner.User())
+	}
+	if miner.customDiff != 0 {
+		t.Fatalf("expected invalid suffix to disable custom diff, got %d", miner.customDiff)
+	}
+}
+
 func TestEffectiveShareDifficulty_CustomDiffCapsPoolDifficulty(t *testing.T) {
 	job := Job{Target: "01000000"}
 	miner := &Miner{customDiff: 25000}
