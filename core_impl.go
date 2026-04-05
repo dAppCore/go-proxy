@@ -57,7 +57,10 @@ func splitterFactoryForMode(mode string) (func(*Config, *EventBus) Splitter, boo
 }
 
 // cfg, result := proxy.LoadConfig("/etc/proxy.json")
-// if !result.OK { return result.Error }
+//
+//	if !result.OK {
+//	    return result.Error
+//	}
 func LoadConfig(path string) (*Config, Result) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -72,8 +75,16 @@ func LoadConfig(path string) (*Config, Result) {
 	return config, config.Validate()
 }
 
-// cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}, Workers: proxy.WorkersByRigID}
-// if result := cfg.Validate(); !result.OK { return result }
+//	cfg := &proxy.Config{
+//	    Mode:    "nicehash",
+//	    Bind:    []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}},
+//	    Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//	    Workers: proxy.WorkersByRigID,
+//	}
+//
+//	if result := cfg.Validate(); !result.OK {
+//	    return result
+//	}
 func (c *Config) Validate() Result {
 	if c == nil {
 		return newErrorResult(NewScopedError("proxy.config", "config is nil", nil))
@@ -117,7 +128,10 @@ func isValidWorkersMode(mode WorkersMode) bool {
 }
 
 // bus := proxy.NewEventBus()
-// bus.Subscribe(proxy.EventLogin, func(e proxy.Event) { _ = e.Miner })
+//
+//	bus.Subscribe(proxy.EventLogin, func(e proxy.Event) {
+//	    _ = e.Miner
+//	})
 func NewEventBus() *EventBus {
 	return &EventBus{listeners: make(map[EventType][]EventHandler)}
 }

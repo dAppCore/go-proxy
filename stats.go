@@ -11,6 +11,7 @@ import (
 //	stats := proxy.NewStats()
 //	bus.Subscribe(proxy.EventAccept, stats.OnAccept)
 //	bus.Subscribe(proxy.EventReject, stats.OnReject)
+//	stats.Tick()
 //	_ = stats.Summary()
 type Stats struct {
 	accepted    atomic.Uint64

@@ -1515,6 +1515,8 @@ func workerNameFor(mode WorkersMode, miner *Miner) string {
 }
 
 // OnLogin creates or updates a worker record.
+//
+//	workers.OnLogin(proxy.Event{Miner: miner})
 func (w *Workers) OnLogin(e Event) {
 	if w == nil || e.Miner == nil {
 		return
@@ -1550,6 +1552,8 @@ func (w *Workers) ResetMode(mode WorkersMode, miners []*Miner) {
 }
 
 // OnAccept updates the owning worker with the accepted share.
+//
+//	workers.OnAccept(proxy.Event{Miner: miner, Diff: 100000})
 func (w *Workers) OnAccept(e Event) {
 	if w == nil || e.Miner == nil {
 		return
@@ -1573,6 +1577,8 @@ func (w *Workers) OnAccept(e Event) {
 }
 
 // OnReject updates the owning worker with the rejected share.
+//
+//	workers.OnReject(proxy.Event{Miner: miner, Error: "Low difficulty share"})
 func (w *Workers) OnReject(e Event) {
 	if w == nil || e.Miner == nil {
 		return
@@ -1602,6 +1608,8 @@ func (w *Workers) OnClose(e Event) {
 }
 
 // List returns a snapshot of all workers.
+//
+//	records := workers.List()
 func (w *Workers) List() []WorkerRecord {
 	if w == nil {
 		return nil
@@ -1616,6 +1624,8 @@ func (w *Workers) List() []WorkerRecord {
 }
 
 // Tick advances worker hash windows.
+//
+//	workers.Tick()
 func (w *Workers) Tick() {
 	if w == nil {
 		return
