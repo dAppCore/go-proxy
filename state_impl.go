@@ -1264,8 +1264,8 @@ func (m *Miner) Close() {
 
 // NewStats creates zeroed global metrics.
 //
-//	stats := proxy.NewStats()
-//	bus.Subscribe(proxy.EventAccept, stats.OnAccept)
+// stats := proxy.NewStats()
+// _ = stats.Summary()
 func NewStats() *Stats {
 	stats := &Stats{startTime: time.Now().UTC(), latency: make([]uint16, 0, 1024)}
 	stats.windows[HashrateWindow60s] = newTickWindow(60)
@@ -1304,6 +1304,8 @@ func (s *Stats) OnClose(e Event) {
 }
 
 // OnAccept records an accepted share.
+//
+// stats.OnAccept(proxy.Event{Diff: 100000, Latency: 82})
 func (s *Stats) OnAccept(e Event) {
 	if s == nil {
 		return
@@ -1329,6 +1331,8 @@ func (s *Stats) OnAccept(e Event) {
 }
 
 // OnReject records a rejected share.
+//
+// stats.OnReject(proxy.Event{Error: "Low difficulty share"})
 func (s *Stats) OnReject(e Event) {
 	if s == nil {
 		return
@@ -1340,6 +1344,8 @@ func (s *Stats) OnReject(e Event) {
 }
 
 // Tick advances the rolling windows.
+//
+// stats.Tick()
 func (s *Stats) Tick() {
 	if s == nil {
 		return
@@ -1356,6 +1362,8 @@ func (s *Stats) Tick() {
 }
 
 // Summary returns a snapshot of the current metrics.
+//
+// summary := stats.Summary()
 func (s *Stats) Summary() StatsSummary {
 	if s == nil {
 		return StatsSummary{}
@@ -1591,6 +1599,8 @@ func (w *Workers) Tick() {
 }
 
 // Hashrate returns the configured worker hashrate window.
+//
+// hr60 := record.Hashrate(60)
 func (r *WorkerRecord) Hashrate(seconds int) float64 {
 	if r == nil || seconds <= 0 {
 		return 0
