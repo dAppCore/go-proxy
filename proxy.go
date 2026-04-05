@@ -44,9 +44,8 @@ type Proxy struct {
 
 // Splitter is the shared interface implemented by the NiceHash and simple modes.
 //
-//	type stubSplitter struct{}
-//
-//	func (stubSplitter) Connect() {}
+//	splitter := nicehash.NewNonceSplitter(cfg, bus, pool.NewStrategyFactory(cfg))
+//	splitter.Connect()
 type Splitter interface {
 	// Connect establishes the first pool upstream connection.
 	Connect()

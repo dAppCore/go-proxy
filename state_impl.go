@@ -96,7 +96,7 @@ func New(config *Config) (*Proxy, Result) {
 	return p, newSuccessResult()
 }
 
-// p.Mode()
+// Mode returns the runtime mode, for example "nicehash" or "simple".
 func (p *Proxy) Mode() string {
 	if p == nil || p.config == nil {
 		return ""
@@ -106,7 +106,7 @@ func (p *Proxy) Mode() string {
 	return p.config.Mode
 }
 
-// p.WorkersMode()
+// WorkersMode returns the active worker identity strategy, for example proxy.WorkersByRigID.
 func (p *Proxy) WorkersMode() WorkersMode {
 	if p == nil || p.config == nil {
 		return WorkersDisabled
@@ -116,7 +116,7 @@ func (p *Proxy) WorkersMode() WorkersMode {
 	return p.config.Workers
 }
 
-// summary := p.Summary()
+// Summary returns a snapshot of the current global metrics.
 func (p *Proxy) Summary() StatsSummary {
 	if p == nil || p.stats == nil {
 		return StatsSummary{}
@@ -128,7 +128,7 @@ func (p *Proxy) Summary() StatsSummary {
 	return summary
 }
 
-// workers := p.WorkerRecords()
+// WorkerRecords returns a snapshot of the current worker aggregates.
 func (p *Proxy) WorkerRecords() []WorkerRecord {
 	if p == nil || p.workers == nil {
 		return nil
@@ -136,7 +136,7 @@ func (p *Proxy) WorkerRecords() []WorkerRecord {
 	return p.workers.List()
 }
 
-// miners := p.MinerSnapshots()
+// MinerSnapshots returns a snapshot of the live miner connections.
 func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 	if p == nil {
 		return nil
@@ -166,7 +166,7 @@ func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 	return rows
 }
 
-// now, max := p.MinerCount()
+// MinerCount returns the current and peak miner counts.
 func (p *Proxy) MinerCount() (now, max uint64) {
 	if p == nil || p.stats == nil {
 		return 0, 0
@@ -174,7 +174,7 @@ func (p *Proxy) MinerCount() (now, max uint64) {
 	return p.stats.miners.Load(), p.stats.maxMiners.Load()
 }
 
-// upstreams := p.Upstreams()
+// Upstreams returns the current upstream connection counts.
 func (p *Proxy) Upstreams() UpstreamStats {
 	if p == nil || p.splitter == nil {
 		return UpstreamStats{}
@@ -182,7 +182,7 @@ func (p *Proxy) Upstreams() UpstreamStats {
 	return p.splitter.Upstreams()
 }
 
-// bus := p.Events()
+// Events returns the proxy event bus for subscription.
 func (p *Proxy) Events() *EventBus {
 	if p == nil {
 		return nil
@@ -269,9 +269,9 @@ func (p *Proxy) Start() {
 	p.Stop()
 }
 
-// p.Stop()
+// Stop shuts down listeners, pool connections, the config watcher, and log sinks.
 //
-//   p.Stop()
+//	p.Stop()
 func (p *Proxy) Stop() {
 	if p == nil {
 		return
@@ -1379,7 +1379,7 @@ func (s *Stats) Tick() {
 
 // Summary returns a snapshot of the current metrics.
 //
-// summary := stats.Summary()
+//	summary := stats.Summary()
 func (s *Stats) Summary() StatsSummary {
 	if s == nil {
 		return StatsSummary{}
