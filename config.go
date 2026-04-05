@@ -3,7 +3,10 @@ package proxy
 // Config is the top-level proxy configuration.
 //
 //	cfg, result := proxy.LoadConfig("/etc/proxy.json")
-//	if !result.OK { return result.Error }
+//	if !result.OK {
+//	    return result.Error
+//	}
+//	cfg.Workers = proxy.WorkersByRigID
 type Config struct {
 	Mode            string       `json:"mode"`              // "nicehash" or "simple"
 	Bind            []BindAddr   `json:"bind"`              // listen addresses
@@ -81,7 +84,7 @@ type RateLimit struct {
 
 // WorkersMode selects the login field used as the worker identity.
 //
-//	proxy.WorkersByRigID
+//	cfg.Workers = proxy.WorkersByRigID
 type WorkersMode string
 
 const (
