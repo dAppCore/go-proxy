@@ -20,16 +20,25 @@ type SummaryDocument struct {
 	CustomDiffStats map[uint64]CustomDiffBucketStats `json:"custom_diff_stats,omitempty"`
 }
 
+// SummaryResponse is the RFC name for SummaryDocument.
+type SummaryResponse = SummaryDocument
+
 // HashrateDocument{Total: [6]float64{12345.67, 11900.00, 12100.00, 11800.00, 12000.00, 12200.00}}
 type HashrateDocument struct {
 	Total [6]float64 `json:"total"`
 }
+
+// HashrateResponse is the RFC name for HashrateDocument.
+type HashrateResponse = HashrateDocument
 
 // MinersCountDocument{Now: 142, Max: 200}
 type MinersCountDocument struct {
 	Now uint64 `json:"now"`
 	Max uint64 `json:"max"`
 }
+
+// MinersCountResponse is the RFC name for MinersCountDocument.
+type MinersCountResponse = MinersCountDocument
 
 // UpstreamDocument{Active: 1, Sleep: 0, Error: 0, Total: 1, Ratio: 142.0}
 type UpstreamDocument struct {
@@ -39,6 +48,9 @@ type UpstreamDocument struct {
 	Total  uint64  `json:"total"`
 	Ratio  float64 `json:"ratio"`
 }
+
+// UpstreamResponse is the RFC name for UpstreamDocument.
+type UpstreamResponse = UpstreamDocument
 
 // ResultsDocument{Accepted: 4821, Rejected: 3, Invalid: 0, Expired: 12}
 type ResultsDocument struct {
@@ -51,6 +63,9 @@ type ResultsDocument struct {
 	HashesTotal uint64     `json:"hashes_total"`
 	Best        [10]uint64 `json:"best"`
 }
+
+// ResultsResponse is the RFC name for ResultsDocument.
+type ResultsResponse = ResultsDocument
 
 // doc := p.WorkersDocument()
 // _ = doc.Workers[0][0]
