@@ -23,16 +23,16 @@ type Result struct {
 	Error error
 }
 
-func successResult() Result {
+func newSuccessResult() Result {
 	return Result{OK: true}
 }
 
-func errorResult(err error) Result {
+func newErrorResult(err error) Result {
 	return Result{OK: false, Error: err}
 }
 
 var splitterFactoriesMu sync.RWMutex
-var splitterFactories = map[string]func(*Config, *EventBus) Splitter{}
+var splitterFactoriesByMode = map[string]func(*Config, *EventBus) Splitter{}
 
 // Register a mode-specific splitter constructor.
 //
@@ -42,13 +42,13 @@ var splitterFactories = map[string]func(*Config, *EventBus) Splitter{}
 func RegisterSplitterFactory(mode string, factory func(*Config, *EventBus) Splitter) {
 	splitterFactoriesMu.Lock()
 	defer splitterFactoriesMu.Unlock()
-	splitterFactories[strings.ToLower(mode)] = factory
+	splitterFactoriesByMode[strings.ToLower(mode)] = factory
 }
 
-func lookupSplitterFactory(mode string) (func(*Config, *EventBus) Splitter, bool) {
+func splitterFactoryForMode(mode string) (func(*Config, *EventBus) Splitter, bool) {
 	splitterFactoriesMu.RLock()
 	defer splitterFactoriesMu.RUnlock()
-	factory, ok := splitterFactories[strings.ToLower(mode)]
+	factory, ok := splitterFactoriesByMode[strings.ToLower(mode)]
 	return factory, ok
 }
 
@@ -57,12 +57,12 @@ func lookupSplitterFactory(mode string) (func(*Config, *EventBus) Splitter, bool
 func LoadConfig(path string) (*Config, Result) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errorResult(err)
+		return nil, newErrorResult(err)
 	}
 
 	config := &Config{}
 	if err := json.Unmarshal(data, config); err != nil {
-		return nil, errorResult(err)
+		return nil, newErrorResult(err)
 	}
 	config.configPath = path
 	return config, config.Validate()
@@ -72,26 +72,26 @@ func LoadConfig(path string) (*Config, Result) {
 // if result := cfg.Validate(); !result.OK { return result }
 func (c *Config) Validate() Result {
 	if c == nil {
-		return errorResult(errors.New("config is nil"))
+		return newErrorResult(errors.New("config is nil"))
 	}
 	if !isValidMode(c.Mode) {
-		return errorResult(errors.New("mode must be \"nicehash\" or \"simple\""))
+		return newErrorResult(errors.New("mode must be \"nicehash\" or \"simple\""))
 	}
 	if !isValidWorkersMode(c.Workers) {
-		return errorResult(errors.New("workers must be one of \"rig-id\", \"user\", \"password\", \"agent\", \"ip\", or \"false\""))
+		return newErrorResult(errors.New("workers must be one of \"rig-id\", \"user\", \"password\", \"agent\", \"ip\", or \"false\""))
 	}
 	if len(c.Bind) == 0 {
-		return errorResult(errors.New("bind list is empty"))
+		return newErrorResult(errors.New("bind list is empty"))
 	}
 	if len(c.Pools) == 0 {
-		return errorResult(errors.New("pool list is empty"))
+		return newErrorResult(errors.New("pool list is empty"))
 	}
 	for _, pool := range c.Pools {
 		if pool.Enabled && strings.TrimSpace(pool.URL) == "" {
-			return errorResult(errors.New("enabled pool url is empty"))
+			return newErrorResult(errors.New("enabled pool url is empty"))
 		}
 	}
-	return successResult()
+	return newSuccessResult()
 }
 
 func isValidMode(mode string) bool {

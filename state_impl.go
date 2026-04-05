@@ -40,7 +40,7 @@ type MinerSnapshot struct {
 //	}
 func New(config *Config) (*Proxy, Result) {
 	if config == nil {
-		return nil, errorResult(errors.New("config is nil"))
+		return nil, newErrorResult(errors.New("config is nil"))
 	}
 	if result := config.Validate(); !result.OK {
 		return nil, result
@@ -83,13 +83,13 @@ func New(config *Config) (*Proxy, Result) {
 		p.watcher = NewConfigWatcher(config.configPath, p.Reload)
 	}
 
-	if factory, ok := lookupSplitterFactory(config.Mode); ok {
+	if factory, ok := splitterFactoryForMode(config.Mode); ok {
 		p.splitter = factory(config, p.events)
 	} else {
 		p.splitter = &noopSplitter{}
 	}
 
-	return p, successResult()
+	return p, newSuccessResult()
 }
 
 // p.Mode()
@@ -468,19 +468,19 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 
 func buildTLSConfig(cfg TLSConfig) (*tls.Config, Result) {
 	if !cfg.Enabled {
-		return nil, successResult()
+		return nil, newSuccessResult()
 	}
 	if cfg.CertFile == "" || cfg.KeyFile == "" {
-		return nil, errorResult(errors.New("tls certificate or key path is empty"))
+		return nil, newErrorResult(errors.New("tls certificate or key path is empty"))
 	}
 	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
-		return nil, errorResult(err)
+		return nil, newErrorResult(err)
 	}
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
 	applyTLSProtocols(tlsConfig, cfg.Protocols)
 	applyTLSCiphers(tlsConfig, cfg.Ciphers)
-	return tlsConfig, successResult()
+	return tlsConfig, newSuccessResult()
 }
 
 func applyTLSProtocols(tlsConfig *tls.Config, protocols string) {
@@ -1683,7 +1683,7 @@ func NewServer(bind BindAddr, tlsCfg *tls.Config, limiter *RateLimiter, onAccept
 	if result := server.listen(); !result.OK {
 		return nil, result
 	}
-	return server, successResult()
+	return server, newSuccessResult()
 }
 
 // Start begins accepting connections in a goroutine.
@@ -1737,23 +1737,23 @@ func (s *Server) Stop() {
 
 func (s *Server) listen() Result {
 	if s == nil {
-		return errorResult(errors.New("server is nil"))
+		return newErrorResult(errors.New("server is nil"))
 	}
 	if s.listener != nil {
-		return successResult()
+		return newSuccessResult()
 	}
 	if s.addr.TLS && s.tlsCfg == nil {
-		return errorResult(errors.New("tls listener requires a tls config"))
+		return newErrorResult(errors.New("tls listener requires a tls config"))
 	}
 	ln, err := net.Listen("tcp", net.JoinHostPort(s.addr.Host, strconv.Itoa(int(s.addr.Port))))
 	if err != nil {
-		return errorResult(err)
+		return newErrorResult(err)
 	}
 	if s.tlsCfg != nil {
 		ln = tls.NewListener(ln, s.tlsCfg)
 	}
 	s.listener = ln
-	return successResult()
+	return newSuccessResult()
 }
 
 // IsActive reports whether the limiter has enabled rate limiting.
