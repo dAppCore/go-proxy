@@ -1,7 +1,7 @@
 // Package api mounts the monitoring endpoints on an HTTP mux.
 //
 //	mux := http.NewServeMux()
-//	api.RegisterRoutes(mux, p)
+//	api.RegisterRoutes(mux, proxyInstance)
 package api
 
 import (
@@ -14,13 +14,13 @@ import (
 // RouteRegistrar accepts HTTP handler registrations.
 //
 //	mux := http.NewServeMux()
-//	api.RegisterRoutes(mux, p)
+//	api.RegisterRoutes(mux, proxyInstance)
 type RouteRegistrar interface {
 	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
 }
 
 // mux := http.NewServeMux()
-// api.RegisterRoutes(mux, p)
+// api.RegisterRoutes(mux, proxyInstance)
 // _ = mux
 //
 // The mounted routes are GET /1/summary, /1/workers, and /1/miners.
@@ -33,9 +33,9 @@ func RegisterRoutes(router RouteRegistrar, p *proxy.Proxy) {
 	registerJSONGetRoute(router, p, "/1/miners", func() any { return p.MinersDocument() })
 }
 
-func registerJSONGetRoute(router RouteRegistrar, authoriser *proxy.Proxy, pattern string, renderDocument func() any) {
+func registerJSONGetRoute(router RouteRegistrar, proxyInstance *proxy.Proxy, pattern string, renderDocument func() any) {
 	router.HandleFunc(pattern, func(w http.ResponseWriter, request *http.Request) {
-		if status, ok := allowMonitoringRequest(authoriser, request); !ok {
+		if status, ok := allowMonitoringRequest(proxyInstance, request); !ok {
 			switch status {
 			case http.StatusMethodNotAllowed:
 				w.Header().Set("Allow", http.MethodGet)
@@ -49,14 +49,14 @@ func registerJSONGetRoute(router RouteRegistrar, authoriser *proxy.Proxy, patter
 	})
 }
 
-func allowMonitoringRequest(authoriser *proxy.Proxy, request *http.Request) (int, bool) {
+func allowMonitoringRequest(proxyInstance *proxy.Proxy, request *http.Request) (int, bool) {
+	if proxyInstance == nil {
+		return http.StatusServiceUnavailable, false
+	}
 	if request.Method != http.MethodGet {
 		return http.StatusMethodNotAllowed, false
 	}
-	if authoriser == nil {
-		return http.StatusServiceUnavailable, false
-	}
-	return authoriser.AllowMonitoringRequest(request)
+	return proxyInstance.AllowMonitoringRequest(request)
 }
 
 func writeJSON(w http.ResponseWriter, payload any) {
