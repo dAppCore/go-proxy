@@ -173,7 +173,7 @@ func (j Job) BlobWithFixedByte(fixedByte uint8) string {
 	return string(blob)
 }
 
-// DifficultyFromTarget converts the target to a rough integer difficulty.
+// DifficultyFromTarget converts the 8-char little-endian target into a difficulty.
 //
 //	diff := job.DifficultyFromTarget()
 func (j Job) DifficultyFromTarget() uint64 {
@@ -188,10 +188,7 @@ func (j Job) DifficultyFromTarget() uint64 {
 	if target == 0 {
 		return 0
 	}
-	if target == math.MaxUint32 {
-		return 1
-	}
-	return uint64((uint64(math.MaxUint32) * 10) / uint64(target))
+	return uint64(math.MaxUint32) / uint64(target)
 }
 
 func targetFromDifficulty(diff uint64) string {
@@ -199,7 +196,7 @@ func targetFromDifficulty(diff uint64) string {
 		return "ffffffff"
 	}
 	maxTarget := uint64(math.MaxUint32)
-	target := (maxTarget*10 + diff - 1) / diff
+	target := (maxTarget + diff - 1) / diff
 	if target == 0 {
 		target = 1
 	}

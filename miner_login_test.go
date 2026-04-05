@@ -183,12 +183,12 @@ func TestMiner_HandleLogin_CustomDiffCap_Good(t *testing.T) {
 	miner := NewMiner(minerConn, 3333, nil)
 	miner.onLogin = func(m *Miner) {
 		m.SetRouteID(1)
-		m.customDiff = 50000
+		m.customDiff = 5000
 	}
 	miner.currentJob = Job{
 		Blob:   strings.Repeat("0", 160),
 		JobID:  "job-1",
-		Target: targetFromDifficulty(100000),
+		Target: "01000000",
 	}
 
 	params, err := json.Marshal(loginParams{
@@ -219,8 +219,8 @@ func TestMiner_HandleLogin_CustomDiffCap_Good(t *testing.T) {
 
 	originalDiff := miner.currentJob.DifficultyFromTarget()
 	cappedDiff := Job{Target: payload.Result.Job.Target}.DifficultyFromTarget()
-	if cappedDiff == 0 || cappedDiff > 50000 {
-		t.Fatalf("expected capped difficulty at or below 50000, got %d", cappedDiff)
+	if cappedDiff == 0 || cappedDiff > 5000 {
+		t.Fatalf("expected capped difficulty at or below 5000, got %d", cappedDiff)
 	}
 	if cappedDiff >= originalDiff {
 		t.Fatalf("expected lowered target difficulty below %d, got %d", originalDiff, cappedDiff)

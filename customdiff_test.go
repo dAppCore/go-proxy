@@ -30,7 +30,7 @@ func TestCustomDiff_OnLogin(t *testing.T) {
 }
 
 func TestEffectiveShareDifficulty_CustomDiffCapsPoolDifficulty(t *testing.T) {
-	job := Job{Target: "b88d0600"}
+	job := Job{Target: "01000000"}
 	miner := &Miner{customDiff: 25000}
 
 	if got := EffectiveShareDifficulty(job, miner); got != 25000 {
