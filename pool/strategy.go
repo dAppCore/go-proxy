@@ -22,14 +22,15 @@ type FailoverStrategy struct {
 	mu       sync.Mutex
 }
 
-// StrategyFactory creates a new FailoverStrategy for a given StratumListener.
-// Used by splitters to create per-mapper strategies without coupling to Config.
+// StrategyFactory creates a FailoverStrategy for a given StratumListener.
+// Splitters use it to create one upstream strategy per mapper without importing
+// the pool wiring directly.
 //
 //	factory := pool.NewStrategyFactory(cfg)
-//	strategy := factory(listener)   // each mapper calls this
+//	strategy := factory(listener)
 type StrategyFactory func(listener StratumListener) Strategy
 
-// Strategy is the interface the splitters use to submit shares and check pool state.
+// Strategy is the interface splitters use to submit shares and inspect pool state.
 type Strategy interface {
 	Connect()
 	Submit(jobID, nonce, result, algo string) int64

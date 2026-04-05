@@ -1,4 +1,4 @@
-// Package api registers the monitoring routes on an HTTP mux.
+// Package api mounts the three monitoring endpoints on an HTTP mux.
 //
 //	mux := http.NewServeMux()
 //	api.RegisterRoutes(mux, p)

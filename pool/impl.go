@@ -18,6 +18,9 @@ import (
 )
 
 // NewStrategyFactory creates a StrategyFactory for the supplied config.
+//
+//	factory := pool.NewStrategyFactory(cfg)
+//	strategy := factory(listener)
 func NewStrategyFactory(config *proxy.Config) StrategyFactory {
 	return func(listener StratumListener) Strategy {
 		return NewFailoverStrategy(config.Pools, listener, config)
