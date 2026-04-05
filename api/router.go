@@ -21,6 +21,8 @@ type RouteRegistrar interface {
 
 // mux := http.NewServeMux()
 // api.RegisterRoutes(mux, p)
+// _ = mux
+//
 // The mounted routes are GET /1/summary, /1/workers, and /1/miners.
 func RegisterRoutes(router RouteRegistrar, p *proxy.Proxy) {
 	if router == nil || p == nil {

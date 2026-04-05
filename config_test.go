@@ -39,3 +39,19 @@ func TestConfig_Validate_Ugly(t *testing.T) {
 		t.Fatalf("expected invalid workers and empty pool url to fail validation")
 	}
 }
+
+func TestConfig_Validate_NoEnabledPool_Ugly(t *testing.T) {
+	cfg := &Config{
+		Mode:    "simple",
+		Workers: WorkersByRigID,
+		Bind:    []BindAddr{{Host: "0.0.0.0", Port: 3333}},
+		Pools: []PoolConfig{
+			{URL: "pool-a.example:3333", Enabled: false},
+			{URL: "pool-b.example:4444", Enabled: false},
+		},
+	}
+
+	if result := cfg.Validate(); result.OK {
+		t.Fatalf("expected config with no enabled pools to fail validation")
+	}
+}

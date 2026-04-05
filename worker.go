@@ -9,6 +9,7 @@ import (
 //
 //	workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
 //	workers.OnLogin(proxy.Event{Miner: &proxy.Miner{rigID: "rig-alpha", user: "WALLET", ip: "10.0.0.1"}})
+//	_ = workers.List()
 type Workers struct {
 	mode       WorkersMode
 	entries    []WorkerRecord // ordered by first-seen (stable)

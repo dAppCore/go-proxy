@@ -91,10 +91,17 @@ func (c *Config) Validate() Result {
 	if len(c.Pools) == 0 {
 		return newErrorResult(errors.New("pool list is empty"))
 	}
+	enabledPools := 0
 	for _, pool := range c.Pools {
 		if pool.Enabled && strings.TrimSpace(pool.URL) == "" {
 			return newErrorResult(errors.New("enabled pool url is empty"))
 		}
+		if pool.Enabled {
+			enabledPools++
+		}
+	}
+	if enabledPools == 0 {
+		return newErrorResult(errors.New("pool list has no enabled entries"))
 	}
 	return newSuccessResult()
 }
