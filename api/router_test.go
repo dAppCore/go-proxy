@@ -50,6 +50,9 @@ func TestRegisterRoutes_POSTSummary_Bad(t *testing.T) {
 		Workers: proxy.WorkersByRigID,
 		Bind:    []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}},
 		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		HTTP: proxy.HTTPConfig{
+			Restricted: true,
+		},
 	}
 	p, result := proxy.New(config)
 	if !result.OK {
@@ -65,6 +68,38 @@ func TestRegisterRoutes_POSTSummary_Bad(t *testing.T) {
 
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected %d, got %d", http.StatusMethodNotAllowed, recorder.Code)
+	}
+}
+
+func TestRegisterRoutes_POSTSummary_Unrestricted_Good(t *testing.T) {
+	config := &proxy.Config{
+		Mode:    "nicehash",
+		Workers: proxy.WorkersByRigID,
+		Bind:    []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+	}
+	p, result := proxy.New(config)
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+
+	router := http.NewServeMux()
+	RegisterRoutes(router, p)
+
+	request := httptest.NewRequest(http.MethodPost, "/1/summary", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	var document proxy.SummaryDocument
+	if err := json.Unmarshal(recorder.Body.Bytes(), &document); err != nil {
+		t.Fatalf("decode summary document: %v", err)
+	}
+	if document.Mode != "nicehash" {
+		t.Fatalf("expected mode %q, got %q", "nicehash", document.Mode)
 	}
 }
 

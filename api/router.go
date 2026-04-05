@@ -53,9 +53,6 @@ func allowMonitoringRequest(proxyInstance *proxy.Proxy, request *http.Request) (
 	if proxyInstance == nil {
 		return http.StatusServiceUnavailable, false
 	}
-	if request.Method != http.MethodGet {
-		return http.StatusMethodNotAllowed, false
-	}
 	return proxyInstance.AllowMonitoringRequest(request)
 }
 

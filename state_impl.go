@@ -677,7 +677,7 @@ func (p *Proxy) allowMonitoringRequest(r *http.Request) (int, bool) {
 	if p == nil || p.config == nil {
 		return http.StatusServiceUnavailable, false
 	}
-	if r.Method != http.MethodGet {
+	if p.config.HTTP.Restricted && r.Method != http.MethodGet {
 		return http.StatusMethodNotAllowed, false
 	}
 	if token := p.config.HTTP.AccessToken; token != "" {
