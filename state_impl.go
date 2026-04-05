@@ -283,10 +283,6 @@ func (p *Proxy) Stop() {
 		for _, server := range p.servers {
 			server.Stop()
 		}
-		p.closeAllMiners()
-		if splitter, ok := p.splitter.(interface{ Disconnect() }); ok {
-			splitter.Disconnect()
-		}
 		if p.watcher != nil {
 			p.watcher.Stop()
 		}
@@ -298,6 +294,10 @@ func (p *Proxy) Stop() {
 		deadline := time.Now().Add(5 * time.Second)
 		for p.submitCount.Load() > 0 && time.Now().Before(deadline) {
 			time.Sleep(10 * time.Millisecond)
+		}
+		p.closeAllMiners()
+		if splitter, ok := p.splitter.(interface{ Disconnect() }); ok {
+			splitter.Disconnect()
 		}
 		if p.accessLog != nil {
 			p.accessLog.Close()
