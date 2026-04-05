@@ -109,5 +109,14 @@ func (b *CustomDiffBuckets) bucketLocked(diff uint64) *CustomDiffBucketStats {
 
 func isInvalidShareReason(reason string) bool {
 	reason = strings.ToLower(reason)
-	return strings.Contains(reason, "difficulty") || strings.Contains(reason, "invalid") || strings.Contains(reason, "nonce")
+	if reason == "" {
+		return false
+	}
+	return strings.Contains(reason, "low diff") ||
+		strings.Contains(reason, "lowdifficulty") ||
+		strings.Contains(reason, "low difficulty") ||
+		strings.Contains(reason, "malformed") ||
+		strings.Contains(reason, "difficulty") ||
+		strings.Contains(reason, "invalid") ||
+		strings.Contains(reason, "nonce")
 }

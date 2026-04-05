@@ -42,14 +42,15 @@ func TestProxy_CustomDiffStats_Bad(t *testing.T) {
 	}
 
 	miner := &Miner{customDiff: 10000}
-	p.events.Dispatch(Event{Type: EventReject, Miner: miner, Error: "Invalid nonce"})
+	p.events.Dispatch(Event{Type: EventReject, Miner: miner, Error: "Low difficulty share"})
+	p.events.Dispatch(Event{Type: EventReject, Miner: miner, Error: "Malformed share"})
 
 	summary := p.Summary()
 	bucket, ok := summary.CustomDiffStats[10000]
 	if !ok {
 		t.Fatalf("expected custom diff bucket 10000 to be present")
 	}
-	if bucket.Rejected != 1 || bucket.Invalid != 1 {
+	if bucket.Rejected != 2 || bucket.Invalid != 2 {
 		t.Fatalf("unexpected bucket totals: %+v", bucket)
 	}
 }
