@@ -164,8 +164,9 @@ func (c *StratumClient) Disconnect() {
 		return
 	}
 	c.closedOnce.Do(func() {
-		if c.conn != nil {
-			_ = c.conn.Close()
+		conn := c.resetConnectionState()
+		if conn != nil {
+			_ = conn.Close()
 		}
 		if c.listener != nil {
 			c.listener.OnDisconnect()
@@ -175,10 +176,26 @@ func (c *StratumClient) Disconnect() {
 
 func (c *StratumClient) notifyDisconnect() {
 	c.closedOnce.Do(func() {
+		c.resetConnectionState()
 		if c.listener != nil {
 			c.listener.OnDisconnect()
 		}
 	})
+}
+
+func (c *StratumClient) resetConnectionState() net.Conn {
+	if c == nil {
+		return nil
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	conn := c.conn
+	c.conn = nil
+	c.tlsConn = nil
+	c.sessionID = ""
+	c.active = false
+	c.pending = make(map[int64]struct{})
+	return conn
 }
 
 func (c *StratumClient) writeJSON(payload any) error {
@@ -472,6 +489,7 @@ func (s *FailoverStrategy) OnDisconnect() {
 		return
 	}
 	s.mu.Lock()
+	s.client = nil
 	closing := s.closing
 	if closing {
 		s.closing = false

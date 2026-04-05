@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"net"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -61,5 +62,60 @@ func TestFailoverStrategy_Disconnect_Ugly(t *testing.T) {
 
 	if got := spy.disconnects.Load(); got != 0 {
 		t.Fatalf("expected repeated intentional disconnects to remain silent, got %d listener calls", got)
+	}
+}
+
+func TestStratumClient_NotifyDisconnect_ClearsState_Good(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+
+	spy := &disconnectSpy{}
+	client := &StratumClient{
+		conn:      clientConn,
+		listener:  spy,
+		sessionID: "session-1",
+		active:    true,
+		pending: map[int64]struct{}{
+			7: {},
+		},
+	}
+
+	client.notifyDisconnect()
+
+	if got := spy.disconnects.Load(); got != 1 {
+		t.Fatalf("expected one disconnect notification, got %d", got)
+	}
+	if client.conn != nil {
+		t.Fatalf("expected pooled connection to be cleared")
+	}
+	if client.sessionID != "" {
+		t.Fatalf("expected session id to be cleared, got %q", client.sessionID)
+	}
+	if client.IsActive() {
+		t.Fatalf("expected client to stop reporting active after disconnect")
+	}
+	if len(client.pending) != 0 {
+		t.Fatalf("expected pending submit state to be cleared, got %d entries", len(client.pending))
+	}
+}
+
+func TestFailoverStrategy_OnDisconnect_ClearsClient_Bad(t *testing.T) {
+	spy := &disconnectSpy{}
+	strategy := &FailoverStrategy{
+		listener: spy,
+		client:   &StratumClient{active: true, pending: make(map[int64]struct{})},
+	}
+
+	strategy.OnDisconnect()
+	time.Sleep(10 * time.Millisecond)
+
+	if strategy.client != nil {
+		t.Fatalf("expected strategy to drop the stale client before reconnect")
+	}
+	if strategy.IsActive() {
+		t.Fatalf("expected strategy to report inactive while reconnect is pending")
+	}
+	if got := spy.disconnects.Load(); got != 1 {
+		t.Fatalf("expected one disconnect notification, got %d", got)
 	}
 }
