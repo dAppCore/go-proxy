@@ -23,6 +23,7 @@ import (
 //	if result.OK { p.Start() }
 type Proxy struct {
 	config            *Config
+	configMu          sync.RWMutex
 	splitter          Splitter
 	stats             *Stats
 	workers           *Workers
@@ -135,5 +136,5 @@ type tokenBucket struct {
 //	resolver := proxy.NewCustomDiff(50000)
 //	resolver.Apply(&Miner{user: "WALLET+75000"})
 type CustomDiff struct {
-	globalDiff uint64
+	globalDiff atomic.Uint64
 }

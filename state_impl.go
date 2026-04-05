@@ -97,6 +97,8 @@ func (p *Proxy) Mode() string {
 	if p == nil || p.config == nil {
 		return ""
 	}
+	p.configMu.RLock()
+	defer p.configMu.RUnlock()
 	return p.config.Mode
 }
 
@@ -105,6 +107,8 @@ func (p *Proxy) WorkersMode() WorkersMode {
 	if p == nil || p.config == nil {
 		return WorkersDisabled
 	}
+	p.configMu.RLock()
+	defer p.configMu.RUnlock()
 	return p.config.Workers
 }
 
@@ -325,8 +329,10 @@ func (p *Proxy) Reload(config *Config) {
 	if result := config.Validate(); !result.OK {
 		return
 	}
+	p.configMu.Lock()
 	poolsChanged := p.config == nil || !reflect.DeepEqual(p.config.Pools, config.Pools)
 	workersChanged := p.config == nil || p.config.Workers != config.Workers
+	nextWorkersMode := config.Workers
 	if p.config == nil {
 		p.config = config
 	} else {
@@ -338,11 +344,12 @@ func (p *Proxy) Reload(config *Config) {
 		p.config.Mode = preservedMode
 		p.config.configPath = preservedConfigPath
 	}
+	p.configMu.Unlock()
 	if workersChanged && p.workers != nil {
-		p.workers.ResetMode(p.config.Workers, p.activeMiners())
+		p.workers.ResetMode(nextWorkersMode, p.activeMiners())
 	}
 	if p.customDiff != nil {
-		p.customDiff.globalDiff = config.CustomDiff
+		p.customDiff.globalDiff.Store(config.CustomDiff)
 	}
 	if p.customDiffBuckets != nil {
 		p.customDiffBuckets.SetEnabled(config.CustomDiffStats)
@@ -406,14 +413,26 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 		_ = conn.Close()
 		return
 	}
+	p.configMu.RLock()
+	accessPassword := ""
+	algoExtension := false
+	customDiff := uint64(0)
+	mode := ""
+	if p.config != nil {
+		accessPassword = p.config.AccessPassword
+		algoExtension = p.config.AlgoExtension
+		customDiff = p.config.CustomDiff
+		mode = p.config.Mode
+	}
+	p.configMu.RUnlock()
 	if p.stats != nil {
 		p.stats.connections.Add(1)
 	}
 	miner := NewMiner(conn, localPort, nil)
-	miner.accessPassword = p.config.AccessPassword
-	miner.algoEnabled = p.config.AlgoExtension
-	miner.globalDiff = p.config.CustomDiff
-	miner.extNH = strings.EqualFold(p.config.Mode, "nicehash")
+	miner.accessPassword = accessPassword
+	miner.algoEnabled = algoExtension
+	miner.globalDiff = customDiff
+	miner.extNH = strings.EqualFold(mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
 		if p.events != nil {
 			p.events.Dispatch(Event{Type: EventLogin, Miner: m})

@@ -62,7 +62,7 @@ func TestProxy_Reload_Good(t *testing.T) {
 	if got := p.config.Pools[0].URL; got != "pool-b.example:4444" {
 		t.Fatalf("expected pools to reload, got %q", got)
 	}
-	if got := p.customDiff.globalDiff; got != 50000 {
+	if got := p.customDiff.globalDiff.Load(); got != 50000 {
 		t.Fatalf("expected custom diff to reload, got %d", got)
 	}
 	if !p.rateLimit.IsActive() {

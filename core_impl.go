@@ -224,7 +224,9 @@ func EffectiveShareDifficulty(job Job, miner *Miner) uint64 {
 //	resolver := proxy.NewCustomDiff(50000)
 //	resolver.OnLogin(proxy.Event{Miner: miner})
 func NewCustomDiff(globalDiff uint64) *CustomDiff {
-	return &CustomDiff{globalDiff: globalDiff}
+	cd := &CustomDiff{}
+	cd.globalDiff.Store(globalDiff)
+	return cd
 }
 
 // OnLogin normalises the login user once during handshake.
@@ -237,7 +239,7 @@ func (cd *CustomDiff) OnLogin(e Event) {
 	if e.Miner.customDiffResolved {
 		return
 	}
-	e.Miner.user, e.Miner.customDiff = parseLoginUser(e.Miner.user, cd.globalDiff)
+	e.Miner.user, e.Miner.customDiff = parseLoginUser(e.Miner.user, cd.globalDiff.Load())
 	e.Miner.customDiffResolved = true
 }
 
