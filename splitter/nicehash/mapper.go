@@ -34,5 +34,6 @@ type SubmitContext struct {
 	RequestID int64 // JSON-RPC id from the miner's submit request
 	MinerID   int64 // miner that submitted
 	JobID     string
+	Diff      uint64
 	StartedAt time.Time
 }

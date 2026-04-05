@@ -28,3 +28,12 @@ func TestCustomDiff_OnLogin(t *testing.T) {
 		t.Fatalf("expected global diff fallback, got %d", miner.customDiff)
 	}
 }
+
+func TestEffectiveShareDifficulty_CustomDiffCapsPoolDifficulty(t *testing.T) {
+	job := Job{Target: "b88d0600"}
+	miner := &Miner{customDiff: 25000}
+
+	if got := EffectiveShareDifficulty(job, miner); got != 25000 {
+		t.Fatalf("expected capped difficulty 25000, got %d", got)
+	}
+}

@@ -165,3 +165,36 @@ func TestMapper_OnResultAccepted_ExpiredUsesPreviousJob(t *testing.T) {
 		t.Fatal("expected accept event")
 	}
 }
+
+func TestMapper_OnResultAccepted_CustomDiffUsesEffectiveDifficulty(t *testing.T) {
+	bus := proxy.NewEventBus()
+	events := make(chan proxy.Event, 1)
+	bus.Subscribe(proxy.EventAccept, func(e proxy.Event) {
+		events <- e
+	})
+
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	miner.SetID(8)
+	mapper := NewNonceMapper(1, &proxy.Config{}, &startCountingStrategy{})
+	mapper.events = bus
+	mapper.storage.job = proxy.Job{JobID: "job-new", Blob: "blob-new", Target: "b88d0600"}
+	mapper.storage.miners[miner.ID()] = miner
+	mapper.pending[10] = SubmitContext{
+		RequestID: 77,
+		MinerID:   miner.ID(),
+		JobID:     "job-new",
+		Diff:      25000,
+		StartedAt: time.Now(),
+	}
+
+	mapper.OnResultAccepted(10, true, "")
+
+	select {
+	case event := <-events:
+		if event.Diff != 25000 {
+			t.Fatalf("expected effective difficulty 25000, got %d", event.Diff)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected accept event")
+	}
+}

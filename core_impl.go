@@ -203,6 +203,14 @@ func targetFromDifficulty(diff uint64) string {
 	return hex.EncodeToString(raw[:])
 }
 
+func EffectiveShareDifficulty(job Job, miner *Miner) uint64 {
+	diff := job.DifficultyFromTarget()
+	if miner == nil || miner.customDiff == 0 || diff == 0 || diff <= miner.customDiff {
+		return diff
+	}
+	return miner.customDiff
+}
+
 // NewCustomDiff creates a login-time custom difficulty resolver.
 //
 //	resolver := proxy.NewCustomDiff(50000)

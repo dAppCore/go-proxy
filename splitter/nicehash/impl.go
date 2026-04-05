@@ -291,6 +291,7 @@ func (m *NonceMapper) Submit(event *proxy.SubmitEvent) {
 		RequestID: event.RequestID,
 		MinerID:   event.Miner.ID(),
 		JobID:     jobID,
+		Diff:      proxy.EffectiveShareDifficulty(job, event.Miner),
 		StartedAt: time.Now(),
 	}
 	m.lastUsed = time.Now()
@@ -359,13 +360,13 @@ func (m *NonceMapper) OnResultAccepted(sequence int64, accepted bool, errorMessa
 	if accepted {
 		miner.Success(ctx.RequestID, "OK")
 		if m.events != nil {
-			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Job: &job, Diff: job.DifficultyFromTarget(), Latency: latency, Expired: expired})
+			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Job: &job, Diff: ctx.Diff, Latency: latency, Expired: expired})
 		}
 		return
 	}
 	miner.ReplyWithError(ctx.RequestID, errorMessage)
 	if m.events != nil {
-		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Job: &job, Diff: job.DifficultyFromTarget(), Error: errorMessage, Latency: latency})
+		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Job: &job, Diff: ctx.Diff, Error: errorMessage, Latency: latency})
 	}
 }
 

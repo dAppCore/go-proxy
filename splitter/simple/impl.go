@@ -272,8 +272,17 @@ func (m *SimpleMapper) Submit(event *proxy.SubmitEvent) {
 		m.rejectInvalidJobLocked(event, m.currentJob)
 		return
 	}
+	submissionJob := m.currentJob
+	if jobID == m.prevJob.JobID && m.prevJob.JobID != "" {
+		submissionJob = m.prevJob
+	}
 	seq := m.strategy.Submit(jobID, event.Nonce, event.Result, event.Algo)
-	m.pending[seq] = submitContext{RequestID: event.RequestID, StartedAt: time.Now(), JobID: jobID}
+	m.pending[seq] = submitContext{
+		RequestID: event.RequestID,
+		Diff:      proxy.EffectiveShareDifficulty(submissionJob, event.Miner),
+		StartedAt: time.Now(),
+		JobID:     jobID,
+	}
 }
 
 func (m *SimpleMapper) rejectInvalidJobLocked(event *proxy.SubmitEvent, job proxy.Job) {
@@ -338,13 +347,13 @@ func (m *SimpleMapper) OnResultAccepted(sequence int64, accepted bool, errorMess
 	if accepted {
 		miner.Success(ctx.RequestID, "OK")
 		if m.events != nil {
-			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job, Latency: latency, Expired: expired})
+			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Diff: ctx.Diff, Job: &job, Latency: latency, Expired: expired})
 		}
 		return
 	}
 	miner.ReplyWithError(ctx.RequestID, errorMessage)
 	if m.events != nil {
-		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job, Error: errorMessage, Latency: latency})
+		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Diff: ctx.Diff, Job: &job, Error: errorMessage, Latency: latency})
 	}
 }
 

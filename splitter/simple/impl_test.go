@@ -184,6 +184,45 @@ func TestSimpleMapper_OnResultAccepted_Expired(t *testing.T) {
 	}
 }
 
+func TestSimpleMapper_OnResultAccepted_CustomDiffUsesEffectiveDifficulty(t *testing.T) {
+	bus := proxy.NewEventBus()
+	events := make(chan proxy.Event, 1)
+	var once sync.Once
+	bus.Subscribe(proxy.EventAccept, func(e proxy.Event) {
+		once.Do(func() {
+			events <- e
+		})
+	})
+
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	miner.SetID(2)
+	job := proxy.Job{JobID: "job-new", Blob: "blob-new", Target: "b88d0600"}
+	mapper := &SimpleMapper{
+		miner:      miner,
+		currentJob: job,
+		events:     bus,
+		pending: map[int64]submitContext{
+			8: {
+				RequestID: 10,
+				Diff:      25000,
+				StartedAt: time.Now(),
+				JobID:     "job-new",
+			},
+		},
+	}
+
+	mapper.OnResultAccepted(8, true, "")
+
+	select {
+	case event := <-events:
+		if event.Diff != 25000 {
+			t.Fatalf("expected effective difficulty 25000, got %d", event.Diff)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected accept event")
+	}
+}
+
 func TestSimpleMapper_Submit_InvalidJob_Good(t *testing.T) {
 	minerConn, clientConn := net.Pipe()
 	defer minerConn.Close()

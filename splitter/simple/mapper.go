@@ -28,6 +28,7 @@ type SimpleMapper struct {
 
 type submitContext struct {
 	RequestID int64
+	Diff      uint64
 	StartedAt time.Time
 	JobID     string
 }
