@@ -375,6 +375,7 @@ func (p *Proxy) Reload(config *Config) {
 	if p.customDiff != nil {
 		p.customDiff.globalDiff.Store(config.CustomDiff)
 	}
+	p.reloadCustomDiff(config.CustomDiff)
 	if p.customDiffBuckets != nil {
 		p.customDiffBuckets.SetEnabled(config.CustomDiffStats)
 	}
@@ -394,6 +395,29 @@ func (p *Proxy) Reload(config *Config) {
 	if poolsChanged {
 		if reloadable, ok := p.splitter.(interface{ ReloadPools() }); ok {
 			reloadable.ReloadPools()
+		}
+	}
+}
+
+func (p *Proxy) reloadCustomDiff(globalDiff uint64) {
+	if p == nil {
+		return
+	}
+	for _, miner := range p.activeMiners() {
+		if miner == nil {
+			continue
+		}
+		miner.globalDiff = globalDiff
+		if miner.customDiffFromLogin {
+			continue
+		}
+		miner.customDiff = globalDiff
+		switch miner.state {
+		case MinerStateWaitReady, MinerStateReady:
+			job := miner.CurrentJob()
+			if job.IsValid() {
+				miner.ForwardJob(job, job.Algo)
+			}
 		}
 	}
 }
@@ -1010,7 +1034,10 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		m.ReplyWithError(requestID(request.ID), "Invalid password")
 		return
 	}
-	m.user, m.customDiff = resolveLoginCustomDiff(params.Login, m.globalDiff)
+	resolved := resolveLoginCustomDiff(params.Login, m.globalDiff)
+	m.user = resolved.user
+	m.customDiff = resolved.diff
+	m.customDiffFromLogin = resolved.fromLogin
 	m.customDiffResolved = true
 	m.password = params.Pass
 	m.agent = params.Agent
@@ -1044,21 +1071,27 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	m.replyLoginSuccess(requestID(request.ID))
 }
 
-func resolveLoginCustomDiff(login string, globalDiff uint64) (string, uint64) {
+type resolvedCustomDiff struct {
+	user      string
+	diff      uint64
+	fromLogin bool
+}
+
+func resolveLoginCustomDiff(login string, globalDiff uint64) resolvedCustomDiff {
 	plus := strings.LastIndex(login, "+")
 	if plus >= 0 && plus < len(login)-1 {
 		suffix := login[plus+1:]
 		if isDecimalDigits(suffix) {
 			if parsed, err := strconv.ParseUint(suffix, 10, 64); err == nil {
-				return login[:plus], parsed
+				return resolvedCustomDiff{user: login[:plus], diff: parsed, fromLogin: true}
 			}
 		}
-		return login, 0
+		return resolvedCustomDiff{user: login}
 	}
 	if globalDiff > 0 {
-		return login, globalDiff
+		return resolvedCustomDiff{user: login, diff: globalDiff}
 	}
-	return login, 0
+	return resolvedCustomDiff{user: login}
 }
 
 func isDecimalDigits(value string) bool {

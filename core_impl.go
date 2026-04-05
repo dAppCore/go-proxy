@@ -296,7 +296,10 @@ func (cd *CustomDiff) OnLogin(e Event) {
 	if e.Miner.customDiffResolved {
 		return
 	}
-	e.Miner.user, e.Miner.customDiff = resolveLoginCustomDiff(e.Miner.user, cd.globalDiff.Load())
+	resolved := resolveLoginCustomDiff(e.Miner.user, cd.globalDiff.Load())
+	e.Miner.user = resolved.user
+	e.Miner.customDiff = resolved.diff
+	e.Miner.customDiffFromLogin = resolved.fromLogin
 	e.Miner.customDiffResolved = true
 }
 

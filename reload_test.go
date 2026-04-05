@@ -1,6 +1,13 @@
 package proxy
 
-import "testing"
+import (
+	"bufio"
+	"encoding/json"
+	"net"
+	"strings"
+	"testing"
+	"time"
+)
 
 type reloadableSplitter struct {
 	reloads int
@@ -102,6 +109,160 @@ func TestProxy_Reload_WorkersMode_Good(t *testing.T) {
 	}
 	if got := records[0].Name; got != "wallet-a" {
 		t.Fatalf("expected worker record to rebuild using user mode, got %q", got)
+	}
+}
+
+func TestProxy_Reload_CustomDiff_Good(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := NewMiner(minerConn, 3333, nil)
+	miner.state = MinerStateReady
+	miner.globalDiff = 1000
+	miner.customDiff = 1000
+	miner.currentJob = Job{
+		Blob:   strings.Repeat("0", 160),
+		JobID:  "job-1",
+		Target: "01000000",
+		Algo:   "cn/r",
+	}
+
+	p := &Proxy{
+		config: &Config{
+			Mode:       "nicehash",
+			Workers:    WorkersByRigID,
+			Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			CustomDiff: 1000,
+		},
+		customDiff: NewCustomDiff(1000),
+		miners:     map[int64]*Miner{miner.ID(): miner},
+	}
+
+	done := make(chan map[string]any, 1)
+	go func() {
+		line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+		if err != nil {
+			done <- nil
+			return
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(line, &payload); err != nil {
+			done <- nil
+			return
+		}
+		done <- payload
+	}()
+
+	p.Reload(&Config{
+		Mode:       "nicehash",
+		Workers:    WorkersByRigID,
+		Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		CustomDiff: 5000,
+	})
+
+	select {
+	case payload := <-done:
+		if payload == nil {
+			t.Fatal("expected reload to resend the current job with the new custom diff")
+		}
+		params, ok := payload["params"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected job params payload, got %#v", payload["params"])
+		}
+		target, _ := params["target"].(string)
+		if got := (Job{Target: target}).DifficultyFromTarget(); got == 0 || got > 5000 {
+			t.Fatalf("expected resent job difficulty at or below 5000, got %d", got)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for reload job refresh")
+	}
+
+	if miner.customDiff != 5000 {
+		t.Fatalf("expected active miner custom diff to reload, got %d", miner.customDiff)
+	}
+	if miner.globalDiff != 5000 {
+		t.Fatalf("expected active miner global diff to reload, got %d", miner.globalDiff)
+	}
+}
+
+func TestProxy_Reload_CustomDiff_Bad(t *testing.T) {
+	miner := &Miner{
+		id:                  9,
+		state:               MinerStateReady,
+		globalDiff:          1000,
+		customDiff:          7000,
+		customDiffFromLogin: true,
+		currentJob: Job{
+			Blob:   strings.Repeat("0", 160),
+			JobID:  "job-1",
+			Target: "01000000",
+		},
+	}
+
+	p := &Proxy{
+		config: &Config{
+			Mode:       "nicehash",
+			Workers:    WorkersByRigID,
+			Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			CustomDiff: 1000,
+		},
+		customDiff: NewCustomDiff(1000),
+		miners:     map[int64]*Miner{miner.ID(): miner},
+	}
+
+	p.Reload(&Config{
+		Mode:       "nicehash",
+		Workers:    WorkersByRigID,
+		Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		CustomDiff: 5000,
+	})
+
+	if miner.customDiff != 7000 {
+		t.Fatalf("expected login suffix custom diff to be preserved, got %d", miner.customDiff)
+	}
+	if miner.globalDiff != 5000 {
+		t.Fatalf("expected miner global diff to update for future logins, got %d", miner.globalDiff)
+	}
+}
+
+func TestProxy_Reload_CustomDiff_Ugly(t *testing.T) {
+	miner := &Miner{
+		id:         11,
+		state:      MinerStateWaitLogin,
+		globalDiff: 1000,
+		customDiff: 1000,
+	}
+
+	p := &Proxy{
+		config: &Config{
+			Mode:       "nicehash",
+			Workers:    WorkersByRigID,
+			Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			CustomDiff: 1000,
+		},
+		customDiff: NewCustomDiff(1000),
+		miners:     map[int64]*Miner{miner.ID(): miner},
+	}
+
+	p.Reload(&Config{
+		Mode:       "nicehash",
+		Workers:    WorkersByRigID,
+		Bind:       []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:      []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		CustomDiff: 0,
+	})
+
+	if miner.customDiff != 0 {
+		t.Fatalf("expected reload to clear the global custom diff for unauthenticated miners, got %d", miner.customDiff)
+	}
+	if miner.globalDiff != 0 {
+		t.Fatalf("expected miner global diff to be cleared, got %d", miner.globalDiff)
 	}
 }
 
