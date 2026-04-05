@@ -14,10 +14,12 @@ import (
 	"time"
 )
 
-// Proxy owns the servers, splitters, stats, workers, and monitoring API.
+// Proxy is the top-level orchestrator.
 //
 //	p, result := proxy.New(cfg)
-//	if result.OK { p.Start() }
+//	if result.OK {
+//	    p.Start()
+//	}
 type Proxy struct {
 	config            *Config
 	configMu          sync.RWMutex
@@ -110,7 +112,9 @@ type CloseEvent struct {
 
 // ConfigWatcher polls a config file for changes.
 //
-//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) { p.Reload(cfg) })
+//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
+//	    p.Reload(cfg)
+//	})
 type ConfigWatcher struct {
 	path     string
 	onChange func(*Config)
@@ -121,7 +125,9 @@ type ConfigWatcher struct {
 // RateLimiter throttles new connections per source IP.
 //
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
-//	limiter.Allow("1.2.3.4:3333")
+//	if limiter.Allow("1.2.3.4:3333") {
+//	    // accept the socket
+//	}
 type RateLimiter struct {
 	config  RateLimit
 	buckets map[string]*tokenBucket
