@@ -1,13 +1,8 @@
 package proxy
 
-// Job holds the current work unit received from a pool. Immutable once assigned.
+// Job holds one pool work unit and its metadata.
 //
-//	j := proxy.Job{
-//	    Blob:   "0707d5ef...b01",
-//	    JobID:  "4BiGm3/RgGQzgkTI",
-//	    Target: "b88d0600",
-//	    Algo:   "cn/r",
-//	}
+// j := proxy.Job{Blob: "0707d5ef...b01", JobID: "4BiGm3/RgGQzgkTI", Target: "b88d0600", Algo: "cn/r"}
 type Job struct {
 	Blob     string // hex-encoded block template (160 hex chars = 80 bytes)
 	JobID    string // pool-assigned identifier

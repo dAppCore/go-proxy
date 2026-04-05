@@ -1,6 +1,9 @@
 package proxy
 
-// LoadConfig("/etc/proxy.json")
+// Config is the top-level proxy configuration.
+//
+// cfg, result := proxy.LoadConfig("/etc/proxy.json")
+// if !result.OK { return result.Error }
 type Config struct {
 	Mode            string       `json:"mode"`              // "nicehash" or "simple"
 	Bind            []BindAddr   `json:"bind"`              // listen addresses
@@ -22,14 +25,18 @@ type Config struct {
 	configPath      string
 }
 
-// BindAddr{Host: "0.0.0.0", Port: 3333, TLS: false}
+// BindAddr is one TCP listen endpoint.
+//
+// proxy.BindAddr{Host: "0.0.0.0", Port: 3333, TLS: false}
 type BindAddr struct {
 	Host string `json:"host"`
 	Port uint16 `json:"port"`
 	TLS  bool   `json:"tls"`
 }
 
-// PoolConfig{URL: "pool.lthn.io:3333", User: "WALLET", Pass: "x", Enabled: true}
+// PoolConfig is one upstream pool entry.
+//
+// proxy.PoolConfig{URL: "pool.lthn.io:3333", User: "WALLET", Pass: "x", Enabled: true}
 type PoolConfig struct {
 	URL            string `json:"url"`
 	User           string `json:"user"`
@@ -42,7 +49,9 @@ type PoolConfig struct {
 	Enabled        bool   `json:"enabled"`
 }
 
-// TLSConfig{Enabled: true, CertFile: "/etc/proxy/cert.pem", KeyFile: "/etc/proxy/key.pem"}
+// TLSConfig controls inbound TLS for miner listeners.
+//
+// proxy.TLSConfig{Enabled: true, CertFile: "/etc/proxy/cert.pem", KeyFile: "/etc/proxy/key.pem"}
 type TLSConfig struct {
 	Enabled   bool   `json:"enabled"`
 	CertFile  string `json:"cert"`
@@ -51,7 +60,9 @@ type TLSConfig struct {
 	Protocols string `json:"protocols"` // TLS version string; "" = default
 }
 
-// HTTPConfig{Enabled: true, Host: "127.0.0.1", Port: 8080, Restricted: true}
+// HTTPConfig controls the monitoring API server.
+//
+// proxy.HTTPConfig{Enabled: true, Host: "127.0.0.1", Port: 8080, Restricted: true}
 type HTTPConfig struct {
 	Enabled     bool   `json:"enabled"`
 	Host        string `json:"host"`
@@ -60,13 +71,17 @@ type HTTPConfig struct {
 	Restricted  bool   `json:"restricted"`   // true = read-only GET only
 }
 
-// RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300}
+// RateLimit controls per-IP connection throttling.
+//
+// proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300}
 type RateLimit struct {
 	MaxConnectionsPerMinute int `json:"max-connections-per-minute"` // 0 = disabled
 	BanDurationSeconds      int `json:"ban-duration"`               // 0 = no ban
 }
 
-// WorkersByRigID
+// WorkersMode selects the login field used as the worker identity.
+//
+// proxy.WorkersByRigID
 type WorkersMode string
 
 const (

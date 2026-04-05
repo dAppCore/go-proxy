@@ -6,9 +6,11 @@ import (
 	"time"
 )
 
-// stats := NewStats()
-// bus.Subscribe(EventAccept, stats.OnAccept)
-// bus.Subscribe(EventReject, stats.OnReject)
+// Stats tracks the proxy-wide counters and rolling hashrate windows.
+//
+// stats := proxy.NewStats()
+// bus.Subscribe(proxy.EventAccept, stats.OnAccept)
+// bus.Subscribe(proxy.EventReject, stats.OnReject)
 type Stats struct {
 	accepted    atomic.Uint64
 	rejected    atomic.Uint64
@@ -25,7 +27,9 @@ type Stats struct {
 	mu          sync.Mutex
 }
 
-// HashrateWindow60s
+// HashrateWindow60s selects the 60-second hashrate window.
+//
+// proxy.HashrateWindow60s
 const (
 	HashrateWindow60s   = 0 // 1 minute
 	HashrateWindow600s  = 1 // 10 minutes
@@ -35,14 +39,18 @@ const (
 	HashrateWindowAll   = 5 // all-time (single accumulator, no window)
 )
 
-// newTickWindow(60)
+// tickWindow is a fixed-capacity ring buffer of per-second difficulty totals.
+//
+// window := newTickWindow(60)
 type tickWindow struct {
 	buckets []uint64
 	pos     int
 	size    int // window size in seconds = len(buckets)
 }
 
-// NewStats().Summary()
+// StatsSummary is the serialisable snapshot returned by Stats.Summary().
+//
+// summary := proxy.NewStats().Summary()
 type StatsSummary struct {
 	Accepted        uint64                           `json:"accepted"`
 	Rejected        uint64                           `json:"rejected"`

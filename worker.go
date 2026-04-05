@@ -5,7 +5,9 @@ import (
 	"time"
 )
 
-// workers := NewWorkers(WorkersByRigID, bus)
+// Workers tracks per-identity aggregates derived from miner login fields.
+//
+// workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
 // records := workers.List()
 type Workers struct {
 	mode       WorkersMode
@@ -16,6 +18,8 @@ type Workers struct {
 	mu         sync.RWMutex
 }
 
+// WorkerRecord is the aggregate row returned by Workers.List().
+//
 // record.Hashrate(60)
 type WorkerRecord struct {
 	Name        string
