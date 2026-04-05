@@ -136,6 +136,29 @@ func TestSimpleSplitter_Upstreams_Ugly(t *testing.T) {
 	}
 }
 
+func TestSimpleSplitter_Upstreams_RecoveryResetsStopped_Good(t *testing.T) {
+	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, func(listener pool.StratumListener) pool.Strategy {
+		return activeStrategy{}
+	})
+	mapper := &SimpleMapper{id: 1, strategy: activeStrategy{}, stopped: true}
+	splitter.active[1] = mapper
+
+	before := splitter.Upstreams()
+	if before.Error != 1 {
+		t.Fatalf("expected disconnected mapper to count as error, got %+v", before)
+	}
+
+	mapper.OnJob(proxy.Job{JobID: "job-1", Blob: "blob"})
+
+	after := splitter.Upstreams()
+	if after.Active != 1 {
+		t.Fatalf("expected recovered mapper to count as active, got %+v", after)
+	}
+	if after.Error != 0 {
+		t.Fatalf("expected recovered mapper not to remain in error, got %+v", after)
+	}
+}
+
 type discardConn struct{}
 
 func (discardConn) Read([]byte) (int, error)         { return 0, io.EOF }

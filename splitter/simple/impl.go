@@ -304,6 +304,8 @@ func (m *SimpleMapper) OnJob(job proxy.Job) {
 	m.mu.Lock()
 	m.prevJob = m.currentJob
 	m.currentJob = job
+	m.stopped = false
+	m.idleAt = time.Time{}
 	miner := m.miner
 	m.mu.Unlock()
 	if miner == nil {
