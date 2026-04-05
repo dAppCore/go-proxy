@@ -597,36 +597,9 @@ func (p *Proxy) startMonitoringServer() bool {
 		return false
 	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/1/summary", func(w http.ResponseWriter, r *http.Request) {
-		if status, ok := p.allowMonitoringRequest(r); !ok {
-			if status == http.StatusUnauthorized {
-				w.Header().Set("WWW-Authenticate", "Bearer")
-			}
-			w.WriteHeader(status)
-			return
-		}
-		p.writeJSONResponse(w, p.SummaryDocument())
-	})
-	mux.HandleFunc("/1/workers", func(w http.ResponseWriter, r *http.Request) {
-		if status, ok := p.allowMonitoringRequest(r); !ok {
-			if status == http.StatusUnauthorized {
-				w.Header().Set("WWW-Authenticate", "Bearer")
-			}
-			w.WriteHeader(status)
-			return
-		}
-		p.writeJSONResponse(w, p.WorkersDocument())
-	})
-	mux.HandleFunc("/1/miners", func(w http.ResponseWriter, r *http.Request) {
-		if status, ok := p.allowMonitoringRequest(r); !ok {
-			if status == http.StatusUnauthorized {
-				w.Header().Set("WWW-Authenticate", "Bearer")
-			}
-			w.WriteHeader(status)
-			return
-		}
-		p.writeJSONResponse(w, p.MinersDocument())
-	})
+	p.registerMonitoringRoute(mux, "/1/summary", func() any { return p.SummaryDocument() })
+	p.registerMonitoringRoute(mux, "/1/workers", func() any { return p.WorkersDocument() })
+	p.registerMonitoringRoute(mux, "/1/miners", func() any { return p.MinersDocument() })
 	addr := net.JoinHostPort(p.config.HTTP.Host, strconv.Itoa(int(p.config.HTTP.Port)))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -640,6 +613,25 @@ func (p *Proxy) startMonitoringServer() bool {
 		}
 	}()
 	return true
+}
+
+func (p *Proxy) registerMonitoringRoute(mux *http.ServeMux, pattern string, renderDocument func() any) {
+	if p == nil || mux == nil || renderDocument == nil {
+		return
+	}
+	mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+		if status, ok := p.allowMonitoringRequest(r); !ok {
+			switch status {
+			case http.StatusUnauthorized:
+				w.Header().Set("WWW-Authenticate", "Bearer")
+			case http.StatusMethodNotAllowed:
+				w.Header().Set("Allow", http.MethodGet)
+			}
+			w.WriteHeader(status)
+			return
+		}
+		p.writeJSONResponse(w, renderDocument())
+	})
 }
 
 func (p *Proxy) allowMonitoringRequest(r *http.Request) (int, bool) {

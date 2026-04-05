@@ -3,6 +3,7 @@ package proxy
 import (
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strconv"
 	"testing"
 )
@@ -155,5 +156,53 @@ func TestProxy_startHTTP_Bad(t *testing.T) {
 
 	if ok := p.startMonitoringServer(); ok {
 		t.Fatal("expected HTTP server start to fail when the port is already in use")
+	}
+}
+
+func TestProxy_registerMonitoringRoute_MethodNotAllowed_Bad(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{
+				Restricted: true,
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	p.registerMonitoringRoute(mux, "/1/summary", func() any { return map[string]string{"status": "ok"} })
+
+	request := httptest.NewRequest(http.MethodPost, "/1/summary", nil)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected %d, got %d", http.StatusMethodNotAllowed, recorder.Code)
+	}
+	if got := recorder.Header().Get("Allow"); got != http.MethodGet {
+		t.Fatalf("expected Allow header %q, got %q", http.MethodGet, got)
+	}
+}
+
+func TestProxy_registerMonitoringRoute_Unauthorized_Ugly(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{
+				AccessToken: "secret",
+			},
+		},
+	}
+
+	mux := http.NewServeMux()
+	p.registerMonitoringRoute(mux, "/1/summary", func() any { return map[string]string{"status": "ok"} })
+
+	request := httptest.NewRequest(http.MethodGet, "/1/summary", nil)
+	recorder := httptest.NewRecorder()
+	mux.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected %d, got %d", http.StatusUnauthorized, recorder.Code)
+	}
+	if got := recorder.Header().Get("WWW-Authenticate"); got != "Bearer" {
+		t.Fatalf("expected WWW-Authenticate header %q, got %q", "Bearer", got)
 	}
 }
