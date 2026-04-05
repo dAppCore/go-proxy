@@ -83,7 +83,7 @@ func New(config *Config) (*Proxy, Result) {
 		p.watcher = NewConfigWatcher(config.configPath, p.Reload)
 	}
 
-	if factory, ok := getSplitterFactory(config.Mode); ok {
+	if factory, ok := lookupSplitterFactory(config.Mode); ok {
 		p.splitter = factory(config, p.events)
 	} else {
 		p.splitter = &noopSplitter{}

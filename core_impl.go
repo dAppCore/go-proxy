@@ -31,8 +31,8 @@ func errorResult(err error) Result {
 	return Result{OK: false, Error: err}
 }
 
-var splitterRegistryMu sync.RWMutex
-var splitterRegistry = map[string]func(*Config, *EventBus) Splitter{}
+var splitterFactoriesMu sync.RWMutex
+var splitterFactories = map[string]func(*Config, *EventBus) Splitter{}
 
 // Register a mode-specific splitter constructor.
 //
@@ -40,15 +40,15 @@ var splitterRegistry = map[string]func(*Config, *EventBus) Splitter{}
 //	    return simple.NewSimpleSplitter(cfg, bus, nil)
 //	})
 func RegisterSplitterFactory(mode string, factory func(*Config, *EventBus) Splitter) {
-	splitterRegistryMu.Lock()
-	defer splitterRegistryMu.Unlock()
-	splitterRegistry[strings.ToLower(mode)] = factory
+	splitterFactoriesMu.Lock()
+	defer splitterFactoriesMu.Unlock()
+	splitterFactories[strings.ToLower(mode)] = factory
 }
 
-func getSplitterFactory(mode string) (func(*Config, *EventBus) Splitter, bool) {
-	splitterRegistryMu.RLock()
-	defer splitterRegistryMu.RUnlock()
-	factory, ok := splitterRegistry[strings.ToLower(mode)]
+func lookupSplitterFactory(mode string) (func(*Config, *EventBus) Splitter, bool) {
+	splitterFactoriesMu.RLock()
+	defer splitterFactoriesMu.RUnlock()
+	factory, ok := splitterFactories[strings.ToLower(mode)]
 	return factory, ok
 }
 
@@ -150,11 +150,17 @@ func (b *EventBus) Dispatch(e Event) {
 }
 
 // IsValid returns true when the job contains a blob and job id.
+//
+//	if !job.IsValid() {
+//	    return
+//	}
 func (j Job) IsValid() bool {
 	return j.Blob != "" && j.JobID != ""
 }
 
 // BlobWithFixedByte replaces the blob byte at position 39 with fixedByte.
+//
+//	partitioned := job.BlobWithFixedByte(0x2A)
 func (j Job) BlobWithFixedByte(fixedByte uint8) string {
 	if len(j.Blob) < 80 {
 		return j.Blob
@@ -168,6 +174,8 @@ func (j Job) BlobWithFixedByte(fixedByte uint8) string {
 }
 
 // DifficultyFromTarget converts the target to a rough integer difficulty.
+//
+//	diff := job.DifficultyFromTarget()
 func (j Job) DifficultyFromTarget() uint64 {
 	if len(j.Target) != 8 {
 		return 0
