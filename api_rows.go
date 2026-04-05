@@ -34,7 +34,7 @@ var (
 // WorkerRow{"rig-alpha", "10.0.0.1", 1, 10, 0, 0, 10000, 1712232000, 1.0, 1.0, 1.0, 1.0, 1.0}
 type WorkerRow [13]any
 
-// MinerRow{1, "10.0.0.1:49152", 4096, 512, 2, 10000, "WALLET", "********", "rig-alpha", "XMRig/6.21.0"}
+// MinerRow{1, "10.0.0.1:49152", 4096, 512, 2, 10000, "WALLET", maskedPassword, "rig-alpha", "XMRig/6.21.0"}
 type MinerRow [10]any
 
 // doc := p.SummaryDocument()

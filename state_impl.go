@@ -15,7 +15,13 @@ import (
 	"time"
 )
 
-const maxStratumLineLength = 16384
+const (
+	maxStratumLineLength = 16384
+	minerLoginTimeout    = 10 * time.Second
+	minerReadyTimeout    = 600 * time.Second
+	submitDrainTimeout   = 5 * time.Second
+	maskedPassword       = "********"
+)
 
 // MinerSnapshot is a serialisable view of one miner connection.
 type MinerSnapshot struct {
@@ -156,7 +162,7 @@ func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 			State:    miner.state,
 			Diff:     miner.diff,
 			User:     miner.user,
-			Password: "********",
+			Password: maskedPassword,
 			RigID:    miner.rigID,
 			Agent:    miner.agent,
 		})
@@ -287,11 +293,11 @@ func (p *Proxy) Stop() {
 			p.watcher.Stop()
 		}
 		if p.httpServer != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), submitDrainTimeout)
 			defer cancel()
 			_ = p.httpServer.Shutdown(ctx)
 		}
-		deadline := time.Now().Add(5 * time.Second)
+		deadline := time.Now().Add(submitDrainTimeout)
 		for p.submitCount.Load() > 0 && time.Now().Before(deadline) {
 			time.Sleep(10 * time.Millisecond)
 		}
@@ -956,9 +962,9 @@ func (m *Miner) readLoop() {
 func (m *Miner) readTimeout() time.Duration {
 	switch m.state {
 	case MinerStateWaitLogin:
-		return 10 * time.Second
+		return minerLoginTimeout
 	case MinerStateWaitReady, MinerStateReady:
-		return 600 * time.Second
+		return minerReadyTimeout
 	default:
 		return 0
 	}
@@ -1266,7 +1272,7 @@ func (m *Miner) touchActivity() {
 	}
 	m.lastActivityAt = time.Now().UTC()
 	if m.conn != nil {
-		_ = m.conn.SetReadDeadline(time.Now().Add(600 * time.Second))
+		_ = m.conn.SetReadDeadline(time.Now().Add(minerReadyTimeout))
 	}
 }
 
