@@ -392,12 +392,16 @@ func (m *NonceMapper) OnDisconnect() {
 	m.suspended++
 }
 
-// NewNonceStorage creates an empty slot table.
+// NewNonceStorage creates a 256-slot table ready for round-robin miner allocation.
+//
+//	storage := nicehash.NewNonceStorage()
 func NewNonceStorage() *NonceStorage {
 	return &NonceStorage{miners: make(map[int64]*proxy.Miner)}
 }
 
-// Add finds the next free slot.
+// Add assigns the next free slot, such as 0x2a, to one miner.
+//
+//	ok := storage.Add(&proxy.Miner{})
 func (s *NonceStorage) Add(miner *proxy.Miner) bool {
 	if s == nil || miner == nil {
 		return false
@@ -418,7 +422,9 @@ func (s *NonceStorage) Add(miner *proxy.Miner) bool {
 	return false
 }
 
-// Remove marks a slot as dead.
+// Remove marks one miner's slot as dead until the next SetJob call.
+//
+//	storage.Remove(miner)
 func (s *NonceStorage) Remove(miner *proxy.Miner) {
 	if s == nil || miner == nil {
 		return
@@ -432,7 +438,9 @@ func (s *NonceStorage) Remove(miner *proxy.Miner) {
 	delete(s.miners, miner.ID())
 }
 
-// SetJob replaces the current job and sends it to active miners.
+// SetJob broadcasts one pool job to all active miners and clears dead slots.
+//
+//	storage.SetJob(proxy.Job{Blob: strings.Repeat("0", 160), JobID: "job-1"})
 func (s *NonceStorage) SetJob(job proxy.Job) {
 	if s == nil || !job.IsValid() {
 		return
@@ -458,7 +466,9 @@ func (s *NonceStorage) SetJob(job proxy.Job) {
 	}
 }
 
-// IsValidJobID returns true if the id matches the current or previous job.
+// IsValidJobID accepts the current job, or the immediately previous one after a pool roll.
+//
+//	if !storage.IsValidJobID("job-1") { return }
 func (s *NonceStorage) IsValidJobID(id string) bool {
 	if s == nil {
 		return false
@@ -478,7 +488,9 @@ func (s *NonceStorage) IsValidJobID(id string) bool {
 	return false
 }
 
-// SlotCount returns free, dead, and active counts.
+// SlotCount returns free, dead, and active slot counts such as 254, 1, 1.
+//
+//	free, dead, active := storage.SlotCount()
 func (s *NonceStorage) SlotCount() (free, dead, active int) {
 	if s == nil {
 		return 0, 0, 0
