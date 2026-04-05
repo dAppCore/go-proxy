@@ -21,20 +21,35 @@ func RegisterRoutes(router Router, p *proxy.Proxy) {
 	if router == nil || p == nil {
 		return
 	}
-	registerJSONGetRoute(router, "/1/summary", func() any { return p.SummaryDocument() })
-	registerJSONGetRoute(router, "/1/workers", func() any { return p.WorkersDocument() })
-	registerJSONGetRoute(router, "/1/miners", func() any { return p.MinersDocument() })
+	registerJSONGetRoute(router, p, "/1/summary", func() any { return p.SummaryDocument() })
+	registerJSONGetRoute(router, p, "/1/workers", func() any { return p.WorkersDocument() })
+	registerJSONGetRoute(router, p, "/1/miners", func() any { return p.MinersDocument() })
 }
 
-func registerJSONGetRoute(router Router, pattern string, renderDocument func() any) {
+func registerJSONGetRoute(router Router, authoriser *proxy.Proxy, pattern string, renderDocument func() any) {
 	router.HandleFunc(pattern, func(w http.ResponseWriter, request *http.Request) {
-		if request.Method != http.MethodGet {
-			w.Header().Set("Allow", http.MethodGet)
-			w.WriteHeader(http.StatusMethodNotAllowed)
+		if status, ok := allowMonitoringRequest(authoriser, request); !ok {
+			switch status {
+			case http.StatusMethodNotAllowed:
+				w.Header().Set("Allow", http.MethodGet)
+			case http.StatusUnauthorized:
+				w.Header().Set("WWW-Authenticate", "Bearer")
+			}
+			w.WriteHeader(status)
 			return
 		}
 		writeJSON(w, renderDocument())
 	})
+}
+
+func allowMonitoringRequest(authoriser *proxy.Proxy, request *http.Request) (int, bool) {
+	if request.Method != http.MethodGet {
+		return http.StatusMethodNotAllowed, false
+	}
+	if authoriser == nil {
+		return http.StatusServiceUnavailable, false
+	}
+	return authoriser.AllowMonitoringRequest(request)
 }
 
 func writeJSON(w http.ResponseWriter, payload any) {

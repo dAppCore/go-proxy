@@ -102,3 +102,65 @@ func TestRegisterRoutes_GETMiners_Ugly(t *testing.T) {
 		t.Fatalf("expected no miners in a new proxy, got %d", len(document.Miners))
 	}
 }
+
+func TestRegisterRoutes_GETSummaryAuthRequired_Bad(t *testing.T) {
+	config := &proxy.Config{
+		Mode:    "nicehash",
+		Workers: proxy.WorkersByRigID,
+		Bind:    []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		HTTP: proxy.HTTPConfig{
+			Enabled:     true,
+			Restricted:  true,
+			AccessToken: "secret",
+		},
+	}
+	p, result := proxy.New(config)
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+
+	router := http.NewServeMux()
+	RegisterRoutes(router, p)
+
+	request := httptest.NewRequest(http.MethodGet, "/1/summary", nil)
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected %d, got %d", http.StatusUnauthorized, recorder.Code)
+	}
+	if got := recorder.Header().Get("WWW-Authenticate"); got != "Bearer" {
+		t.Fatalf("expected bearer challenge, got %q", got)
+	}
+}
+
+func TestRegisterRoutes_GETSummaryAuthGranted_Ugly(t *testing.T) {
+	config := &proxy.Config{
+		Mode:    "nicehash",
+		Workers: proxy.WorkersByRigID,
+		Bind:    []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		HTTP: proxy.HTTPConfig{
+			Enabled:     true,
+			Restricted:  true,
+			AccessToken: "secret",
+		},
+	}
+	p, result := proxy.New(config)
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+
+	router := http.NewServeMux()
+	RegisterRoutes(router, p)
+
+	request := httptest.NewRequest(http.MethodGet, "/1/summary", nil)
+	request.Header.Set("Authorization", "Bearer secret")
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
+	}
+}

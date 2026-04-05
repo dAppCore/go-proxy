@@ -669,6 +669,13 @@ func (p *Proxy) allowMonitoringRequest(r *http.Request) (int, bool) {
 	return http.StatusOK, true
 }
 
+// AllowMonitoringRequest applies the configured monitoring API access checks.
+//
+//	status, ok := p.AllowMonitoringRequest(request)
+func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
+	return p.allowMonitoringRequest(r)
+}
+
 func (p *Proxy) writeJSONResponse(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(payload)
