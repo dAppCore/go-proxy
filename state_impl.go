@@ -341,6 +341,8 @@ func (p *Proxy) Reload(config *Config) {
 		p.config = config
 	} else {
 		preservedBind := append([]BindAddr(nil), p.config.Bind...)
+		// Splitter wiring is established at start-up, so reload only swaps the
+		// knobs that live subsystems can absorb without reconnecting listeners.
 		preservedMode := p.config.Mode
 		preservedConfigPath := p.config.configPath
 		*p.config = *config
