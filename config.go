@@ -1,6 +1,6 @@
 package proxy
 
-// Config is the top-level proxy configuration.
+// Config is the top-level proxy configuration loaded from JSON.
 //
 //	cfg := &proxy.Config{
 //	    Mode:   "nicehash",
@@ -76,7 +76,7 @@ type HTTPConfig struct {
 	Restricted  bool   `json:"restricted"`   // true = read-only GET only
 }
 
-// RateLimit configures per-IP connection throttling.
+// RateLimit caps connection attempts per source IP.
 //
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{
 //	    MaxConnectionsPerMinute: 30,
@@ -87,7 +87,7 @@ type RateLimit struct {
 	BanDurationSeconds      int `json:"ban-duration"`               // 0 = no ban
 }
 
-// WorkersMode selects the login field used as the worker identity.
+// WorkersMode picks the login field used as the worker name.
 //
 //	cfg.Workers = proxy.WorkersByRigID
 type WorkersMode string
