@@ -20,6 +20,21 @@ func (a activeStrategy) Submit(string, string, string, string) int64 { return 0 
 func (a activeStrategy) Disconnect()                                 {}
 func (a activeStrategy) IsActive() bool                              { return true }
 
+type submitRecordingStrategy struct {
+	submits int
+}
+
+func (s *submitRecordingStrategy) Connect() {}
+
+func (s *submitRecordingStrategy) Submit(string, string, string, string) int64 {
+	s.submits++
+	return int64(s.submits)
+}
+
+func (s *submitRecordingStrategy) Disconnect() {}
+
+func (s *submitRecordingStrategy) IsActive() bool { return true }
+
 func TestSimpleMapper_New_Good(t *testing.T) {
 	strategy := activeStrategy{}
 	mapper := NewSimpleMapper(7, strategy)
@@ -87,6 +102,38 @@ func TestSimpleSplitter_OnLogin_Ugly(t *testing.T) {
 	}
 	if len(splitter.idle) != 1 {
 		t.Fatalf("expected expired mapper to remain idle until GC, got %d idle mappers", len(splitter.idle))
+	}
+}
+
+func TestSimpleSplitter_OnSubmit_UsesRouteID_Good(t *testing.T) {
+	strategy := &submitRecordingStrategy{}
+	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, nil)
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	miner.SetID(21)
+	miner.SetRouteID(7)
+
+	mapper := &SimpleMapper{
+		id:         7,
+		miner:      miner,
+		currentJob: proxy.Job{JobID: "job-1", Blob: "blob", Target: "b88d0600"},
+		strategy:   strategy,
+		pending:    make(map[int64]submitContext),
+	}
+	splitter.active[99] = mapper
+
+	splitter.OnSubmit(&proxy.SubmitEvent{
+		Miner:     miner,
+		JobID:     "job-1",
+		Nonce:     "deadbeef",
+		Result:    "hash",
+		RequestID: 11,
+	})
+
+	if strategy.submits != 1 {
+		t.Fatalf("expected one submit routed by route id, got %d", strategy.submits)
+	}
+	if len(mapper.pending) != 1 {
+		t.Fatalf("expected routed submit to create one pending entry, got %d", len(mapper.pending))
 	}
 }
 

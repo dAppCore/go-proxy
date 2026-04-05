@@ -87,7 +87,7 @@ func (s *SimpleSplitter) OnSubmit(event *proxy.SubmitEvent) {
 		return
 	}
 	s.mu.Lock()
-	mapper := s.active[event.Miner.ID()]
+	mapper := s.activeMapperByRouteIDLocked(event.Miner.RouteID())
 	s.mu.Unlock()
 	if mapper != nil {
 		mapper.Submit(event)
@@ -255,6 +255,18 @@ func (s *SimpleSplitter) newMapperLocked() *SimpleMapper {
 		mapper.strategy = s.factory(mapper)
 	}
 	return mapper
+}
+
+func (s *SimpleSplitter) activeMapperByRouteIDLocked(routeID int64) *SimpleMapper {
+	if s == nil || routeID < 0 {
+		return nil
+	}
+	for _, mapper := range s.active {
+		if mapper != nil && mapper.id == routeID {
+			return mapper
+		}
+	}
+	return nil
 }
 
 // Submit forwards a share to the pool.

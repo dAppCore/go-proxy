@@ -297,6 +297,11 @@ func (c *StratumClient) handleMessage(line []byte) {
 		}
 	}
 
+	if len(base.Error) > 0 && requestID(base.ID) == 1 {
+		c.notifyDisconnect()
+		return
+	}
+
 	if base.Method == "job" {
 		var params struct {
 			Blob     string `json:"blob"`

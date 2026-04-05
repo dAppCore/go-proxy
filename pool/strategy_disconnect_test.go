@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"encoding/json"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -117,5 +118,31 @@ func TestFailoverStrategy_OnDisconnect_ClearsClient_Bad(t *testing.T) {
 	}
 	if got := spy.disconnects.Load(); got != 1 {
 		t.Fatalf("expected one disconnect notification, got %d", got)
+	}
+}
+
+func TestStratumClient_HandleMessage_LoginErrorDisconnects_Ugly(t *testing.T) {
+	spy := &disconnectSpy{}
+	client := &StratumClient{
+		listener: spy,
+		pending:  make(map[int64]struct{}),
+	}
+
+	payload, err := json.Marshal(map[string]any{
+		"id":      1,
+		"jsonrpc": "2.0",
+		"error": map[string]any{
+			"code":    -1,
+			"message": "Invalid payment address provided",
+		},
+	})
+	if err != nil {
+		t.Fatalf("marshal login error payload: %v", err)
+	}
+
+	client.handleMessage(payload)
+
+	if got := spy.disconnects.Load(); got != 1 {
+		t.Fatalf("expected login failure to disconnect upstream once, got %d", got)
 	}
 }
