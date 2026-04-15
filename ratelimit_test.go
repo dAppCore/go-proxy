@@ -58,6 +58,26 @@ func TestRateLimiter_Allow_Ugly(t *testing.T) {
 	}
 }
 
+// TestRateLimiter_Allow_ExhaustedBucketStartsBan verifies the ban starts as soon as
+// the final token is consumed, not only on the next rejected attempt.
+func TestRateLimiter_Allow_ExhaustedBucketStartsBan(t *testing.T) {
+	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 300})
+
+	if !rl.Allow("1.2.3.4:3333") {
+		t.Fatalf("expected first call to pass")
+	}
+
+	rl.mu.Lock()
+	until, banned := rl.banUntilByHost["1.2.3.4"]
+	rl.mu.Unlock()
+	if !banned {
+		t.Fatalf("expected ban to start when the bucket reaches zero")
+	}
+	if until.Before(time.Now()) {
+		t.Fatalf("expected ban deadline to be in the future")
+	}
+}
+
 // TestRateLimiter_Tick_Good verifies Tick removes expired bans.
 //
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 1})

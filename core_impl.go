@@ -358,6 +358,9 @@ func (rl *RateLimiter) Allow(ip string) bool {
 
 	bucket.tokens--
 	bucket.lastRefill = now
+	if bucket.tokens == 0 && rl.limit.BanDurationSeconds > 0 {
+		rl.banUntilByHost[host] = now.Add(time.Duration(rl.limit.BanDurationSeconds) * time.Second)
+	}
 	return true
 }
 
