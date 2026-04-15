@@ -15,6 +15,20 @@ func TestConfig_Validate_Good(t *testing.T) {
 	}
 }
 
+func TestConfig_Validate_HTTPLoopbackNoToken_Good(t *testing.T) {
+	cfg := &Config{
+		Mode:    "nicehash",
+		Workers: WorkersByRigID,
+		Bind:    []BindAddr{{Host: "0.0.0.0", Port: 3333}},
+		Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		HTTP:    HTTPConfig{Enabled: true, Host: "127.0.0.1", Port: 8080},
+	}
+
+	if result := cfg.Validate(); !result.OK {
+		t.Fatalf("expected loopback http monitoring without token to remain valid, got error: %v", result.Error)
+	}
+}
+
 func TestConfig_Validate_Bad(t *testing.T) {
 	t.Run("nil_config", func(t *testing.T) {
 		var cfg *Config
@@ -96,6 +110,20 @@ func TestConfig_Validate_Bad(t *testing.T) {
 
 		if result := cfg.Validate(); result.OK {
 			t.Fatalf("expected empty http host to fail validation")
+		}
+	})
+
+	t.Run("public_http_without_token", func(t *testing.T) {
+		cfg := &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			HTTP:    HTTPConfig{Enabled: true, Host: "0.0.0.0", Port: 8080},
+		}
+
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected public http monitoring without token to fail validation")
 		}
 	})
 

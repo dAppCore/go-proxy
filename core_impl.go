@@ -113,6 +113,9 @@ func (c *Config) Validate() Result {
 	if c.HTTP.Enabled && trimString(c.HTTP.Host) == "" {
 		return newErrorResult(NewScopedError("proxy.config", "http host is empty", nil))
 	}
+	if c.HTTP.Enabled && trimString(c.HTTP.AccessToken) == "" && !isLoopbackHTTPHost(c.HTTP.Host) {
+		return newErrorResult(NewScopedError("proxy.config", "public http monitoring requires an access token", nil))
+	}
 	if c.ReuseTimeout < 0 {
 		return newErrorResult(NewScopedError("proxy.config", "reuse timeout is negative", nil))
 	}
@@ -539,6 +542,20 @@ func hostOnly(ip string) string {
 		return host
 	}
 	return ip
+}
+
+func isLoopbackHTTPHost(host string) bool {
+	host = trimString(host)
+	if host == "" {
+		return false
+	}
+	if equalFoldString(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 func refillBucket(bucket *tokenBucket, limit int, now time.Time) {
