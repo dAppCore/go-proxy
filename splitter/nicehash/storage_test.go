@@ -286,6 +286,18 @@ func TestStorage_SetJob_Ugly(t *testing.T) {
 	}
 }
 
+func TestStorage_SetJob_EmptyClientID_Bad(t *testing.T) {
+	storage := NewNonceStorage()
+	blob160 := strings.Repeat("0", 160)
+
+	storage.SetJob(proxy.Job{JobID: "job-1", Blob: blob160, Target: "b88d0600"})
+	storage.SetJob(proxy.Job{JobID: "job-2", Blob: blob160, Target: "b88d0600"})
+
+	if got := storage.prevJob.JobID; got != "" {
+		t.Fatalf("expected previous job to reset when client ids are absent, got %q", got)
+	}
+}
+
 // TestStorage_SlotCount_Good verifies free/dead/active counts on a fresh storage.
 //
 //	storage := nicehash.NewNonceStorage()

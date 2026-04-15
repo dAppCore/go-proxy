@@ -486,6 +486,22 @@ func TestSimpleMapper_OnJob_ResetsPreviousJobAcrossPoolSessions_Ugly(t *testing.
 	}
 }
 
+func TestSimpleMapper_OnJob_ResetsPreviousJobWithoutClientID_Bad(t *testing.T) {
+	mapper := &SimpleMapper{
+		currentJob: proxy.Job{JobID: "job-1", Blob: "blob-1"},
+		prevJob:    proxy.Job{JobID: "job-0", Blob: "blob-0"},
+	}
+
+	mapper.OnJob(proxy.Job{JobID: "job-2", Blob: "blob-2"})
+
+	if mapper.currentJob.JobID != "job-2" {
+		t.Fatalf("expected current job to advance, got %q", mapper.currentJob.JobID)
+	}
+	if mapper.prevJob.JobID != "" {
+		t.Fatalf("expected previous job history to reset without stable client ids, got %q", mapper.prevJob.JobID)
+	}
+}
+
 func TestSimpleMapper_Submit_InvalidJob_Good(t *testing.T) {
 	minerConn, clientConn := net.Pipe()
 	defer minerConn.Close()

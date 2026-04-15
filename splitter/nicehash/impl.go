@@ -489,7 +489,7 @@ func (s *NonceStorage) SetJob(job proxy.Job) {
 	}
 	s.mu.Lock()
 	s.prevJob = s.job
-	if s.prevJob.ClientID != job.ClientID {
+	if !shouldRetainPreviousJob(s.prevJob, job) {
 		s.prevJob = proxy.Job{}
 	}
 	s.job = job
@@ -506,6 +506,13 @@ func (s *NonceStorage) SetJob(job proxy.Job) {
 	for _, miner := range miners {
 		miner.ForwardJob(job, job.Algo)
 	}
+}
+
+func shouldRetainPreviousJob(previous, next proxy.Job) bool {
+	if previous.ClientID == "" || next.ClientID == "" {
+		return false
+	}
+	return previous.ClientID == next.ClientID
 }
 
 // IsValidJobID accepts the current job, or the immediately previous one after a pool roll.

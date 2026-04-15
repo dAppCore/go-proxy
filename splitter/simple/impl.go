@@ -367,7 +367,7 @@ func (m *SimpleMapper) OnJob(job proxy.Job) {
 	}
 	m.mu.Lock()
 	m.prevJob = m.currentJob
-	if m.prevJob.ClientID != job.ClientID {
+	if !shouldRetainPreviousJob(m.prevJob, job) {
 		m.prevJob = proxy.Job{}
 	}
 	m.currentJob = job
@@ -434,4 +434,11 @@ func (m *SimpleMapper) OnDisconnect() {
 	m.mu.Lock()
 	m.stopped = true
 	m.mu.Unlock()
+}
+
+func shouldRetainPreviousJob(previous, next proxy.Job) bool {
+	if previous.ClientID == "" || next.ClientID == "" {
+		return false
+	}
+	return previous.ClientID == next.ClientID
 }

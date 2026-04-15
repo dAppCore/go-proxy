@@ -392,6 +392,15 @@ func (f failingConn) SetDeadline(time.Time) error      { return nil }
 func (f failingConn) SetReadDeadline(time.Time) error  { return nil }
 func (f failingConn) SetWriteDeadline(time.Time) error { return nil }
 
+type deadlineConn struct {
+	deadline time.Time
+}
+
+func (d *deadlineConn) SetDeadline(deadline time.Time) error {
+	d.deadline = deadline
+	return nil
+}
+
 func TestStratumClient_Submit_Ugly(t *testing.T) {
 	spy := &clientListenerSpy{}
 	client := &StratumClient{
@@ -411,6 +420,26 @@ func TestStratumClient_Submit_Ugly(t *testing.T) {
 	defer spy.mu.Unlock()
 	if spy.disconnects != 1 {
 		t.Fatalf("expected write failure to notify one disconnect, got %d", spy.disconnects)
+	}
+}
+
+func TestSetConnectDeadline_Good(t *testing.T) {
+	conn := &deadlineConn{}
+	deadline := time.Now().Add(time.Second)
+
+	if err := setConnectDeadline(conn, deadline); err != nil {
+		t.Fatalf("expected deadline to be applied, got %v", err)
+	}
+	if conn.deadline.IsZero() {
+		t.Fatal("expected a non-zero deadline to be recorded")
+	}
+}
+
+func TestSetConnectDeadline_Bad(t *testing.T) {
+	conn := &deadlineConn{}
+
+	if err := setConnectDeadline(conn, time.Now().Add(-time.Millisecond)); err == nil {
+		t.Fatal("expected expired deadline to fail")
 	}
 }
 

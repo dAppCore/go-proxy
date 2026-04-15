@@ -74,6 +74,7 @@ func (c *StratumClient) Connect() proxy.Result {
 	if addr == "" {
 		return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.client", "pool url is empty", nil)}
 	}
+	deadline := time.Now().Add(poolConnectTimeout)
 	dialer := net.Dialer{Timeout: poolConnectTimeout}
 	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
@@ -92,7 +93,10 @@ func (c *StratumClient) Connect() proxy.Result {
 			tlsCfg.InsecureSkipVerify = true
 		}
 		tlsConn := tls.Client(conn, tlsCfg)
-		_ = tlsConn.SetDeadline(time.Now().Add(poolConnectTimeout))
+		if err := setConnectDeadline(tlsConn, deadline); err != nil {
+			_ = conn.Close()
+			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake timeout", err)}
+		}
 		if err := tlsConn.Handshake(); err != nil {
 			_ = conn.Close()
 			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake failed", err)}
@@ -117,6 +121,19 @@ func (c *StratumClient) Connect() proxy.Result {
 	}
 	go c.readLoop()
 	return proxy.Result{Result: core.Result{OK: true}}
+}
+
+func setConnectDeadline(conn interface{ SetDeadline(time.Time) error }, deadline time.Time) error {
+	if conn == nil {
+		return proxy.NewScopedError("proxy.pool.client", "connection is nil", nil)
+	}
+	if deadline.IsZero() {
+		return conn.SetDeadline(time.Time{})
+	}
+	if !time.Now().Before(deadline) {
+		return proxy.NewScopedError("proxy.pool.client", "connect timeout exceeded", nil)
+	}
+	return conn.SetDeadline(deadline)
 }
 
 // client.Login()
