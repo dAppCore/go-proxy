@@ -155,6 +155,26 @@ func TestTLS_buildTLSConfig_Ugly(t *testing.T) {
 	}
 }
 
+func TestTLS_buildTLSConfig_DefaultMinVersion_Good(t *testing.T) {
+	dir := t.TempDir()
+	certFile, keyFile := writeTestCertPair(t, dir)
+
+	cfg, result := buildTLSConfig(TLSConfig{
+		Enabled:  true,
+		CertFile: certFile,
+		KeyFile:  keyFile,
+	})
+	if !result.OK {
+		t.Fatalf("expected TLS config to load, got error: %v", result.Error)
+	}
+	if cfg == nil {
+		t.Fatal("expected TLS config")
+	}
+	if cfg.MinVersion != tls.VersionTLS12 {
+		t.Fatalf("expected default min version TLS1.2, got %d", cfg.MinVersion)
+	}
+}
+
 func TestTLS_sha256Hex_Good(t *testing.T) {
 	if got := sha256Hex([]byte("abc")); got != "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" {
 		t.Fatalf("unexpected sha256 hex: %s", got)

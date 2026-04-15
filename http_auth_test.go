@@ -105,6 +105,24 @@ func TestProxy_allowHTTP_Ugly(t *testing.T) {
 	}
 }
 
+func TestProxy_allowHTTP_PublicHostWithoutToken_Bad(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{
+				Host: "0.0.0.0",
+			},
+		},
+	}
+
+	status, ok := p.AllowMonitoringRequest(&http.Request{Method: http.MethodGet})
+	if ok {
+		t.Fatal("expected public monitoring without token to be rejected")
+	}
+	if status != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, status)
+	}
+}
+
 func TestProxy_allowHTTP_MalformedAuth_Bad(t *testing.T) {
 	p := &Proxy{
 		config: &Config{
@@ -279,6 +297,23 @@ func TestProxy_startHTTP_BlankHost_Bad(t *testing.T) {
 
 	if ok := p.startMonitoringServer(); ok {
 		t.Fatal("expected HTTP server start to fail with an empty host")
+	}
+}
+
+func TestProxy_startHTTP_PublicHostWithoutToken_Bad(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{
+				Enabled: true,
+				Host:    "0.0.0.0",
+				Port:    0,
+			},
+		},
+		done: make(chan struct{}),
+	}
+
+	if ok := p.startMonitoringServer(); ok {
+		t.Fatal("expected HTTP server start to fail without a token on a public host")
 	}
 }
 

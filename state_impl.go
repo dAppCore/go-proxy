@@ -647,7 +647,10 @@ func buildTLSConfig(cfg TLSConfig) (*tls.Config, Result) {
 	if err != nil {
 		return nil, newErrorResult(NewScopedError("proxy.tls", "load certificate failed", err))
 	}
-	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	}
 	applyTLSProtocols(tlsConfig, cfg.Protocols)
 	applyTLSCiphers(tlsConfig, cfg.Ciphers)
 	return tlsConfig, newSuccessResult()
@@ -785,6 +788,9 @@ func (p *Proxy) startMonitoringServer() bool {
 	if trimString(httpCfg.Host) == "" {
 		return false
 	}
+	if !isLoopbackHTTPHost(httpCfg.Host) && trimString(httpCfg.AccessToken) == "" {
+		return false
+	}
 	mux := http.NewServeMux()
 	p.registerMonitoringRoute(mux, MonitoringRouteSummary, func() any { return p.SummaryDocument() })
 	p.registerMonitoringRoute(mux, MonitoringRouteWorkers, func() any { return p.WorkersDocument() })
@@ -885,6 +891,9 @@ func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 	httpCfg := p.currentHTTPConfig()
 	if r.Method != http.MethodGet {
 		return http.StatusMethodNotAllowed, false
+	}
+	if host := trimString(httpCfg.Host); host != "" && !isLoopbackHTTPHost(host) && trimString(httpCfg.AccessToken) == "" {
+		return http.StatusUnauthorized, false
 	}
 	if token := httpCfg.AccessToken; token != "" {
 		parts := splitStringN(r.Header.Get("Authorization"), " ", 2)
@@ -1351,7 +1360,6 @@ func (m *Miner) readLoop() {
 		}
 		m.mu.Lock()
 		m.rx += uint64(len(line) + 1)
-		m.lastActivityAt = time.Now().UTC()
 		m.mu.Unlock()
 		if !m.handleLine(line) {
 			m.Close()
@@ -1361,14 +1369,21 @@ func (m *Miner) readLoop() {
 }
 
 func (m *Miner) readTimeout() time.Duration {
+	m.mu.RLock()
+	lastActivityAt := m.lastActivityAt
+	connectedAt := m.connectedAt
+	m.mu.RUnlock()
 	switch m.State() {
 	case MinerStateWaitLogin:
-		if m.connectedAt.IsZero() {
+		if connectedAt.IsZero() {
 			return minerLoginTimeout
 		}
-		return time.Until(m.connectedAt.Add(minerLoginTimeout))
+		return time.Until(connectedAt.Add(minerLoginTimeout))
 	case MinerStateWaitReady, MinerStateReady:
-		return minerReadyTimeout
+		if lastActivityAt.IsZero() {
+			return minerReadyTimeout
+		}
+		return time.Until(lastActivityAt.Add(minerReadyTimeout))
 	default:
 		return 0
 	}
@@ -1473,6 +1488,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		m.rejectLogin(requestID(request.ID), "Proxy is unavailable, try again later")
 		return
 	}
+	m.touchActivity()
 	if pinger := m.onLoginReady; pinger != nil {
 		pinger(m)
 	}
@@ -2289,6 +2305,9 @@ func (s *Server) Start() {
 				case <-s.done:
 					return
 				default:
+					if ne, ok := err.(net.Error); ok && (ne.Temporary() || ne.Timeout()) {
+						time.Sleep(100 * time.Millisecond)
+					}
 					continue
 				}
 			}

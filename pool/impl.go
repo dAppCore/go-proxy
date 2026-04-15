@@ -84,7 +84,10 @@ func (c *StratumClient) Connect() proxy.Result {
 		if containsString(addr, ":") {
 			host, _, _ = net.SplitHostPort(addr)
 		}
-		tlsCfg := &tls.Config{ServerName: host}
+		tlsCfg := &tls.Config{
+			ServerName: host,
+			MinVersion: tls.VersionTLS12,
+		}
 		if trimString(c.config.TLSFingerprint) != "" {
 			tlsCfg.InsecureSkipVerify = true
 		}
