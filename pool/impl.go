@@ -435,10 +435,16 @@ func (s *FailoverStrategy) currentPools() []proxy.PoolConfig {
 
 // seq := strategy.Submit(jobID, nonce, result, algo)
 func (s *FailoverStrategy) Submit(jobID, nonce, result, algo string) int64 {
-	if s == nil || s.client == nil {
+	if s == nil {
 		return 0
 	}
-	return s.client.Submit(jobID, nonce, result, algo)
+	s.mu.Lock()
+	client := s.client
+	s.mu.Unlock()
+	if client == nil || !client.IsActive() {
+		return 0
+	}
+	return client.Submit(jobID, nonce, result, algo)
 }
 
 // strategy.Disconnect()
@@ -506,10 +512,13 @@ func (s *FailoverStrategy) OnDisconnect() {
 		return
 	}
 	s.mu.Lock()
-	s.client = nil
+	client := s.client
 	closing := s.closing
 	if closing {
 		s.closing = false
+	}
+	if client != nil && client.IsActive() {
+		s.client = nil
 	}
 	s.mu.Unlock()
 	if closing {
