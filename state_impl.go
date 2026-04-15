@@ -265,9 +265,13 @@ func (p *Proxy) Start() {
 			return
 		}
 	}
+	p.lifecycleMu.Lock()
+	if p.ticker == nil {
+		p.ticker = time.NewTicker(time.Second)
+	}
+	ticker := p.ticker
+	p.lifecycleMu.Unlock()
 	go func() {
-		ticker := time.NewTicker(time.Second)
-		defer ticker.Stop()
 		var ticks uint64
 		for {
 			select {
@@ -309,10 +313,19 @@ func (p *Proxy) Stop() {
 		p.lifecycleMu.RLock()
 		servers := append([]*Server(nil), p.servers...)
 		httpServer := p.httpServer
+		ticker := p.ticker
 		accessLog := p.accessLog
 		shareLog := p.shareLog
 		watcher := p.watcher
 		p.lifecycleMu.RUnlock()
+		if ticker != nil {
+			ticker.Stop()
+			p.lifecycleMu.Lock()
+			if p.ticker == ticker {
+				p.ticker = nil
+			}
+			p.lifecycleMu.Unlock()
+		}
 		for _, server := range servers {
 			server.Stop()
 		}
