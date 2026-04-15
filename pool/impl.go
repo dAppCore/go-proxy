@@ -387,8 +387,8 @@ func (s *FailoverStrategy) Connect() {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	s.closing = false
+	s.mu.Unlock()
 	s.connectLocked(0)
 }
 
@@ -408,19 +408,44 @@ func (s *FailoverStrategy) connectLocked(start int) {
 		}
 	}
 	for attempt := 0; attempt < retries; attempt++ {
+		if s.isClosing() {
+			return
+		}
 		for i := 0; i < len(enabled); i++ {
+			if s.isClosing() {
+				return
+			}
 			index := (start + i) % len(enabled)
 			poolCfg := enabled[index]
 			client := NewStratumClient(poolCfg, s)
 			if result := client.Connect(); result.OK {
+				s.mu.Lock()
+				if s.closing {
+					s.mu.Unlock()
+					client.Disconnect()
+					return
+				}
 				s.client = client
 				s.current = index
+				s.mu.Unlock()
 				client.Login()
 				return
 			}
 		}
+		if s.isClosing() {
+			return
+		}
 		time.Sleep(retryPause)
 	}
+}
+
+func (s *FailoverStrategy) isClosing() bool {
+	if s == nil {
+		return true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.closing
 }
 
 func (s *FailoverStrategy) currentPools() []proxy.PoolConfig {
@@ -512,14 +537,11 @@ func (s *FailoverStrategy) OnDisconnect() {
 		return
 	}
 	s.mu.Lock()
-	client := s.client
 	closing := s.closing
 	if closing {
 		s.closing = false
 	}
-	if client != nil && client.IsActive() {
-		s.client = nil
-	}
+	s.client = nil
 	s.mu.Unlock()
 	if closing {
 		return

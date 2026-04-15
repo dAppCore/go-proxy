@@ -1028,10 +1028,24 @@ func monitoringConfigChanged(current, next HTTPConfig) bool {
 }
 
 func secureStringEqual(a, b string) bool {
-	if len(a) != len(b) {
-		return false
+	max := len(a)
+	if len(b) > max {
+		max = len(b)
 	}
-	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
+	var diff byte
+	diff |= byte(len(a) ^ len(b))
+	for index := 0; index < max; index++ {
+		var left byte
+		var right byte
+		if index < len(a) {
+			left = a[index]
+		}
+		if index < len(b) {
+			right = b[index]
+		}
+		diff |= left ^ right
+	}
+	return subtle.ConstantTimeByteEq(diff, 0) == 1
 }
 
 func NewMiner(conn net.Conn, localPort uint16, tlsCfg *tls.Config) *Miner {
