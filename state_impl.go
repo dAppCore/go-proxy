@@ -1258,6 +1258,9 @@ func (m *Miner) readLoop() {
 		}
 		if timeout := m.readTimeout(); timeout > 0 {
 			_ = conn.SetReadDeadline(time.Now().Add(timeout))
+		} else if m.State() == MinerStateWaitLogin {
+			m.Close()
+			return
 		}
 		line, isPrefix, err := reader.ReadLine()
 		if err != nil {
@@ -1285,7 +1288,10 @@ func (m *Miner) readLoop() {
 func (m *Miner) readTimeout() time.Duration {
 	switch m.State() {
 	case MinerStateWaitLogin:
-		return minerLoginTimeout
+		if m.connectedAt.IsZero() {
+			return minerLoginTimeout
+		}
+		return time.Until(m.connectedAt.Add(minerLoginTimeout))
 	case MinerStateWaitReady, MinerStateReady:
 		return minerReadyTimeout
 	default:

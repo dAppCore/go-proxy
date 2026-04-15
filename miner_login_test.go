@@ -489,6 +489,27 @@ func TestMiner_HandleKeepalived_Good(t *testing.T) {
 	}
 }
 
+func TestMiner_ReadLoop_LoginTimeout_IsAbsolute(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := NewMiner(minerConn, 3333, nil)
+	miner.connectedAt = time.Now().Add(-minerLoginTimeout - time.Second)
+
+	done := make(chan struct{})
+	go func() {
+		miner.readLoop()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("expected expired login deadline to close the connection")
+	}
+}
+
 func TestMiner_ReadLoop_RFCLineLimit_Good(t *testing.T) {
 	minerConn, clientConn := net.Pipe()
 	defer minerConn.Close()
