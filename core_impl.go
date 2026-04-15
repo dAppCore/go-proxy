@@ -23,6 +23,7 @@ import (
 //	    return result.Error
 //	}
 type Result struct {
+	Value any
 	OK    bool
 	Error error
 }
@@ -32,7 +33,7 @@ func newSuccessResult() Result {
 }
 
 func newErrorResult(err error) Result {
-	return Result{OK: false, Error: err}
+	return Result{Value: err, OK: false, Error: err}
 }
 
 var splitterFactoriesMu sync.RWMutex
@@ -72,7 +73,7 @@ func LoadConfig(path string) (*Config, Result) {
 		return nil, newErrorResult(NewScopedError("proxy.config", "parse config failed", err))
 	}
 	config.configPath = path
-	return config, newSuccessResult()
+	return config, Result{Value: config, OK: true}
 }
 
 //	cfg := &proxy.Config{
