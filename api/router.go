@@ -11,11 +11,11 @@ import (
 	"dappco.re/go/proxy"
 )
 
-// RouteRegistrar accepts HTTP handler registrations.
+// Engine accepts HTTP handler registrations.
 //
 //	mux := http.NewServeMux()
 //	api.RegisterRoutes(mux, proxyInstance)
-type RouteRegistrar interface {
+type Engine interface {
 	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
 }
 
@@ -24,7 +24,9 @@ type RouteRegistrar interface {
 // _ = mux
 //
 // The mounted routes are GET /1/summary, /1/workers, and /1/miners.
-func RegisterRoutes(router RouteRegistrar, p *proxy.Proxy) {
+type RouteRegistrar = Engine
+
+func RegisterRoutes(router Engine, p *proxy.Proxy) {
 	if router == nil || p == nil {
 		return
 	}
