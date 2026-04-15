@@ -2331,21 +2331,37 @@ func (s *Server) Start() {
 				_ = conn.Close()
 				continue
 			}
-			if s.tlsConfig != nil {
-				tlsConn := tls.Server(conn, s.tlsConfig)
-				_ = conn.SetDeadline(time.Now().Add(minerTLSHandshakeTimeout))
-				if err := tlsConn.Handshake(); err != nil {
-					_ = conn.Close()
-					continue
-				}
-				_ = tlsConn.SetDeadline(time.Time{})
-				conn = tlsConn
-			}
-			if s.onAccept != nil {
-				s.onAccept(conn, s.addr.Port)
-			}
+			go s.handleAcceptedConn(conn)
 		}
 	}()
+}
+
+func (s *Server) handleAcceptedConn(conn net.Conn) {
+	if s == nil || conn == nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		return
+	}
+	if s.tlsConfig != nil {
+		tlsConn := tls.Server(conn, s.tlsConfig)
+		_ = conn.SetDeadline(time.Now().Add(minerTLSHandshakeTimeout))
+		if err := tlsConn.Handshake(); err != nil {
+			_ = conn.Close()
+			return
+		}
+		_ = tlsConn.SetDeadline(time.Time{})
+		conn = tlsConn
+	}
+	select {
+	case <-s.done:
+		_ = conn.Close()
+		return
+	default:
+	}
+	if s.onAccept != nil {
+		s.onAccept(conn, s.addr.Port)
+	}
 }
 
 // Stop closes the listener.
