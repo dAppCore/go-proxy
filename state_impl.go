@@ -1333,8 +1333,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		RigID: valueString(paramsMap["rigid"]),
 	}
 	if trimString(params.Login) == "" {
-		m.ReplyWithError(requestID(request.ID), "Invalid payment address provided")
-		m.closeTransport()
+		m.rejectLogin(requestID(request.ID), "Invalid payment address provided")
 		return
 	}
 	m.mu.RLock()
@@ -1343,8 +1342,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	extNH := m.extNH
 	m.mu.RUnlock()
 	if accessPassword != "" && !secureStringEqual(params.Pass, accessPassword) {
-		m.ReplyWithError(requestID(request.ID), "Invalid password")
-		m.closeTransport()
+		m.rejectLogin(requestID(request.ID), "Invalid password")
 		return
 	}
 	resolved := resolveLoginCustomDiff(params.Login, globalDiff)
@@ -1371,25 +1369,25 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	m.mu.Unlock()
 	if extNH {
 		if m.MapperID() < 0 {
-			m.mu.Lock()
-			m.state = MinerStateWaitLogin
-			m.rpcID = ""
-			m.mu.Unlock()
-			m.ReplyWithError(requestID(request.ID), "Proxy is full, try again later")
+			m.rejectLogin(requestID(request.ID), "Proxy is full, try again later")
 			return
 		}
 	} else if m.RouteID() < 0 {
-		m.mu.Lock()
-		m.state = MinerStateWaitLogin
-		m.rpcID = ""
-		m.mu.Unlock()
-		m.ReplyWithError(requestID(request.ID), "Proxy is unavailable, try again later")
+		m.rejectLogin(requestID(request.ID), "Proxy is unavailable, try again later")
 		return
 	}
 	if m.onLoginReady != nil {
 		m.onLoginReady(m)
 	}
 	m.replyLoginSuccess(requestID(request.ID))
+}
+
+func (m *Miner) rejectLogin(id int64, message string) {
+	if m == nil {
+		return
+	}
+	m.ReplyWithError(id, message)
+	m.closeTransport()
 }
 
 type resolvedCustomDiff struct {
