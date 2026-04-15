@@ -375,6 +375,12 @@ func (p *Proxy) activeMiners() []*Miner {
 	for _, miner := range p.miners {
 		miners = append(miners, miner)
 	}
+	sort.Slice(miners, func(i, j int) bool {
+		if miners[i] == nil || miners[j] == nil {
+			return miners[j] != nil
+		}
+		return miners[i].ID() < miners[j].ID()
+	})
 	return miners
 }
 
@@ -2083,6 +2089,12 @@ func (w *Workers) ResetMode(mode WorkersMode, miners []*Miner) {
 	w.entries = nil
 	w.nameIndex = make(map[string]int)
 	w.idIndex = make(map[int64]int)
+	sort.Slice(miners, func(i, j int) bool {
+		if miners[i] == nil || miners[j] == nil {
+			return miners[j] != nil
+		}
+		return miners[i].ID() < miners[j].ID()
+	})
 	for _, miner := range miners {
 		w.recordLoginLocked(miner)
 	}
