@@ -76,7 +76,7 @@ func (l *shareLogSink) writeLine(kind, user string, diff uint64, latency uint16,
 	builder.WriteByte(' ')
 	builder.WriteString(kind)
 	builder.WriteString("  ")
-	builder.WriteString(sanitizeLogField(user))
+	builder.WriteString(sanitizeLogColumnField(user))
 	switch kind {
 	case "ACCEPT":
 		builder.WriteString("  diff=")

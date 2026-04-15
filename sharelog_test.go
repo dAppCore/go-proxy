@@ -82,6 +82,47 @@ func TestProxy_ShareLog_SanitizesReason(t *testing.T) {
 	}
 }
 
+func TestProxy_ShareLog_SanitizesColumns(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "shares.log")
+
+	cfg := &Config{
+		Mode:         "nicehash",
+		Workers:      WorkersByRigID,
+		ShareLogFile: path,
+		Bind:         []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:        []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+	}
+	p, result := New(cfg)
+	if !result.OK {
+		t.Fatalf("expected valid proxy, got error: %v", result.Error)
+	}
+
+	miner := &Miner{
+		user:  "WALLET MALICIOUS\nENTRY",
+		conn:  noopConn{},
+		state: MinerStateReady,
+	}
+	p.events.Dispatch(Event{Type: EventAccept, Miner: miner, Diff: 1234, Latency: 56})
+	p.events.Dispatch(Event{Type: EventReject, Miner: miner, Error: "reason"})
+	p.Stop()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read share log: %v", err)
+	}
+	text := string(data)
+	if strings.Contains(text, "WALLET MALICIOUS") {
+		t.Fatalf("expected whitespace in user column to be encoded, got %q", text)
+	}
+	if !strings.Contains(text, "WALLET_MALICIOUS_ENTRY") {
+		t.Fatalf("expected sanitized user column to remain readable, got %q", text)
+	}
+	if strings.Count(text, "\n") != 2 {
+		t.Fatalf("expected two log lines, got %q", text)
+	}
+}
+
 func TestShareLogSink_SetPath_Good(t *testing.T) {
 	dir := t.TempDir()
 	first := filepath.Join(dir, "first.log")

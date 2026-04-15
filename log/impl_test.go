@@ -4,9 +4,11 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"dappco.re/go/proxy"
 )
@@ -240,6 +242,66 @@ func TestShareLog_OnReject_Ugly(t *testing.T) {
 
 	miner := newTestMiner(t)
 	sl.OnReject(proxy.Event{Miner: miner, Error: "reason"})
+}
+
+// TestShareLog_OnAccept_ColumnsSanitized verifies whitespace in the user
+// column is encoded so a miner cannot inject malformed log columns.
+func TestShareLog_OnAccept_ColumnsSanitized(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "shares.log")
+	sl := NewShareLog(path)
+	defer sl.Close()
+
+	miner := newTestMiner(t)
+	setMinerStringField(t, miner, "user", "WALLET MALICIOUS\nENTRY")
+	sl.OnAccept(proxy.Event{Miner: miner, Diff: 1000, Latency: 1})
+	sl.Close()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected log file to exist: %v", err)
+	}
+	line := strings.TrimSpace(string(data))
+	if strings.Contains(line, "WALLET MALICIOUS") {
+		t.Fatalf("expected whitespace in user column to be encoded, got %q", line)
+	}
+	if !strings.Contains(line, "WALLET_MALICIOUS_ENTRY") {
+		t.Fatalf("expected sanitized user column, got %q", line)
+	}
+}
+
+// TestAccessLog_OnLogin_ColumnsSanitized verifies whitespace in user-controlled
+// columns is encoded so a miner cannot inject malformed log columns.
+func TestAccessLog_OnLogin_ColumnsSanitized(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.log")
+	al := NewAccessLog(path)
+	defer al.Close()
+
+	miner := newTestMiner(t)
+	setMinerStringField(t, miner, "user", "WALLET MALICIOUS\nENTRY")
+	setMinerStringField(t, miner, "agent", "XMRig 6.21.0\u2028BAD")
+	al.OnLogin(proxy.Event{Miner: miner})
+	al.Close()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("expected log file to exist: %v", err)
+	}
+	line := strings.TrimSpace(string(data))
+	if strings.Contains(line, "WALLET MALICIOUS") || strings.Contains(line, "XMRig 6.21.0") {
+		t.Fatalf("expected whitespace in columns to be encoded, got %q", line)
+	}
+	if !strings.Contains(line, "WALLET_MALICIOUS_ENTRY") || !strings.Contains(line, "XMRig_6.21.0_BAD") {
+		t.Fatalf("expected sanitized column values, got %q", line)
+	}
+}
+
+func setMinerStringField(t *testing.T, miner *proxy.Miner, field, value string) {
+	t.Helper()
+	target := reflect.ValueOf(miner).Elem().FieldByName(field)
+	if !target.IsValid() {
+		t.Fatalf("expected miner field %q to exist", field)
+	}
+	reflect.NewAt(target.Type(), unsafe.Pointer(target.UnsafeAddr())).Elem().SetString(value)
 }
 
 // TestAccessLog_Close_Good verifies Close releases the file handle and is safe to call twice.

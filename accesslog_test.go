@@ -128,6 +128,47 @@ func TestProxy_AccessLog_SanitizesFields(t *testing.T) {
 	}
 }
 
+func TestProxy_AccessLog_SanitizesColumns(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "access.log")
+
+	cfg := &Config{
+		Mode:          "nicehash",
+		Workers:       WorkersByRigID,
+		AccessLogFile: path,
+		Bind:          []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:         []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+	}
+	p, result := New(cfg)
+	if !result.OK {
+		t.Fatalf("expected valid proxy, got error: %v", result.Error)
+	}
+
+	miner := &Miner{
+		ip:    "10.0.0.1",
+		user:  "WALLET MALICIOUS\nENTRY",
+		agent: "XMRig 6.21.0\u2028BAD",
+		conn:  noopConn{},
+	}
+	p.events.Dispatch(Event{Type: EventLogin, Miner: miner})
+	p.Stop()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read access log: %v", err)
+	}
+	text := string(data)
+	if strings.Contains(text, "WALLET MALICIOUS") || strings.Contains(text, "XMRig 6.21.0") {
+		t.Fatalf("expected whitespace in column fields to be encoded, got %q", text)
+	}
+	if !strings.Contains(text, "WALLET_MALICIOUS_ENTRY") || !strings.Contains(text, "XMRig_6.21.0_BAD") {
+		t.Fatalf("expected sanitized column fields to remain readable, got %q", text)
+	}
+	if strings.Count(text, "\n") != 1 {
+		t.Fatalf("expected a single log line, got %q", text)
+	}
+}
+
 func TestAccessLogSink_SetPath_Good(t *testing.T) {
 	dir := t.TempDir()
 	first := filepath.Join(dir, "first.log")
