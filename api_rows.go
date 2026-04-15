@@ -41,14 +41,13 @@ type MinerRow [10]any
 // _ = doc.Results.Accepted
 // _ = doc.Upstreams.Ratio
 type SummaryDocument struct {
-	Version         string                           `json:"version"`
-	Mode            string                           `json:"mode"`
-	Hashrate        HashrateDocument                 `json:"hashrate"`
-	Miners          MinersCountDocument              `json:"miners"`
-	Workers         uint64                           `json:"workers"`
-	Upstreams       UpstreamDocument                 `json:"upstreams"`
-	Results         ResultsDocument                  `json:"results"`
-	CustomDiffStats map[uint64]CustomDiffBucketStats `json:"custom_diff_stats,omitempty"`
+	Version   string              `json:"version"`
+	Mode      string              `json:"mode"`
+	Hashrate  HashrateDocument    `json:"hashrate"`
+	Miners    MinersCountDocument `json:"miners"`
+	Workers   uint64              `json:"workers"`
+	Upstreams UpstreamDocument    `json:"upstreams"`
+	Results   ResultsDocument     `json:"results"`
 }
 
 // SummaryResponse is the RFC name for SummaryDocument.

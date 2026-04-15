@@ -923,7 +923,6 @@ func (p *Proxy) SummaryDocument() SummaryDocument {
 		Hashrate: HashrateDocument{
 			Total: summary.Hashrate,
 		},
-		CustomDiffStats: summary.CustomDiffStats,
 		Miners: MinersCountDocument{
 			Now: now,
 			Max: max,
