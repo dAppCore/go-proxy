@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	core "dappco.re/go/core"
 )
 
 // Result is the success/error carrier used by constructors and loaders.
@@ -20,17 +22,16 @@ import (
 //	    return result.Error
 //	}
 type Result struct {
-	Value any
-	OK    bool
+	core.Result
 	Error error
 }
 
 func newSuccessResult() Result {
-	return Result{OK: true}
+	return Result{Result: core.Result{OK: true}}
 }
 
 func newErrorResult(err error) Result {
-	return Result{Value: err, OK: false, Error: err}
+	return Result{Result: core.Result{Value: err, OK: false}, Error: err}
 }
 
 var splitterFactoriesMu sync.RWMutex
@@ -73,7 +74,7 @@ func LoadConfig(path string) (*Config, Result) {
 	}
 	normalizeConfigValues(config)
 	config.configPath = path
-	return config, Result{Value: config, OK: true}
+	return config, Result{Result: core.Result{Value: config, OK: true}}
 }
 
 //	cfg := &proxy.Config{

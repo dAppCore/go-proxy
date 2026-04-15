@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	core "dappco.re/go/core"
 	"dappco.re/go/proxy"
 )
 
@@ -66,15 +67,15 @@ func (c *StratumClient) SessionID() string {
 // result := client.Connect()
 func (c *StratumClient) Connect() proxy.Result {
 	if c == nil {
-		return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.client", "client is nil", nil)}
+		return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.client", "client is nil", nil)}
 	}
 	addr := c.config.URL
 	if addr == "" {
-		return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.client", "pool url is empty", nil)}
+		return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.client", "pool url is empty", nil)}
 	}
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
-		return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.client", "dial pool failed", err)}
+		return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.client", "dial pool failed", err)}
 	}
 	if c.config.TLS {
 		host := addr
@@ -88,18 +89,18 @@ func (c *StratumClient) Connect() proxy.Result {
 		tlsConn := tls.Client(conn, tlsCfg)
 		if err := tlsConn.Handshake(); err != nil {
 			_ = conn.Close()
-			return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.tls", "handshake failed", err)}
+			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake failed", err)}
 		}
 		if fp := lowerString(trimString(c.config.TLSFingerprint)); fp != "" {
 			cert := tlsConn.ConnectionState().PeerCertificates
 			if len(cert) == 0 {
 				_ = tlsConn.Close()
-				return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.tls", "missing certificate", nil)}
+				return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "missing certificate", nil)}
 			}
 			sum := sha256.Sum256(cert[0].Raw)
 			if hex.EncodeToString(sum[:]) != fp {
 				_ = tlsConn.Close()
-				return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.tls", "tls fingerprint mismatch", nil)}
+				return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "tls fingerprint mismatch", nil)}
 			}
 		}
 		c.conn = tlsConn
@@ -108,7 +109,7 @@ func (c *StratumClient) Connect() proxy.Result {
 		c.conn = conn
 	}
 	go c.readLoop()
-	return proxy.Result{OK: true}
+	return proxy.Result{Result: core.Result{OK: true}}
 }
 
 // client.Login()
