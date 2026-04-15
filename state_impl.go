@@ -598,14 +598,15 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner.mu.Unlock()
 	miner.extNH = equalFoldString(mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
-		if p.events != nil {
-			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
-		}
 		if p.splitter != nil {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
 		}
 	}
-	miner.onLoginReady = nil
+	miner.onLoginReady = func(m *Miner) {
+		if p.events != nil {
+			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
+		}
+	}
 	miner.onSubmit = func(m *Miner, event *SubmitEvent) {
 		if p.splitter != nil {
 			if _, ok := p.splitter.(*noopSplitter); !ok {
@@ -1380,15 +1381,15 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	m.extAlgo = len(m.loginAlgos) > 0
 	m.rpcID = generateUUID()
 	m.mu.Unlock()
+	m.mu.Lock()
+	m.state = MinerStateWaitReady
+	m.mu.Unlock()
 	if m.onLogin != nil {
 		m.onLogin(m)
 	}
 	if m.State() == MinerStateClosing {
 		return
 	}
-	m.mu.Lock()
-	m.state = MinerStateWaitReady
-	m.mu.Unlock()
 	if extNH {
 		if m.MapperID() < 0 {
 			m.rejectLogin(requestID(request.ID), "Proxy is full, try again later")
@@ -1398,8 +1399,11 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		m.rejectLogin(requestID(request.ID), "Proxy is unavailable, try again later")
 		return
 	}
-	if m.onLoginReady != nil {
-		m.onLoginReady(m)
+	if pinger := m.onLoginReady; pinger != nil {
+		pinger(m)
+	}
+	if m.State() == MinerStateClosing {
+		return
 	}
 	m.replyLoginSuccess(requestID(request.ID))
 }
