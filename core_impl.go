@@ -103,6 +103,29 @@ func (c *Config) Validate() Result {
 	if len(c.Pools) == 0 {
 		return newErrorResult(NewScopedError("proxy.config", "pool list is empty", nil))
 	}
+	for _, bind := range c.Bind {
+		if trimString(bind.Host) == "" {
+			return newErrorResult(NewScopedError("proxy.config", "bind host is empty", nil))
+		}
+	}
+	if c.HTTP.Enabled && trimString(c.HTTP.Host) == "" {
+		return newErrorResult(NewScopedError("proxy.config", "http host is empty", nil))
+	}
+	if c.ReuseTimeout < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "reuse timeout is negative", nil))
+	}
+	if c.Retries < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "retries is negative", nil))
+	}
+	if c.RetryPause < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "retry pause is negative", nil))
+	}
+	if c.RateLimit.MaxConnectionsPerMinute < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "rate limit is negative", nil))
+	}
+	if c.RateLimit.BanDurationSeconds < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "ban duration is negative", nil))
+	}
 	workers := lowerString(trimString(string(c.Workers)))
 	if workers != "" && !isSupportedWorkersMode(workers) {
 		return newErrorResult(NewScopedError("proxy.config", "unsupported workers mode", nil))

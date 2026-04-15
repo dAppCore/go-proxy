@@ -777,6 +777,9 @@ func (p *Proxy) startMonitoringServer() bool {
 	if !httpCfg.Enabled {
 		return false
 	}
+	if trimString(httpCfg.Host) == "" {
+		return false
+	}
 	mux := http.NewServeMux()
 	p.registerMonitoringRoute(mux, MonitoringRouteSummary, func() any { return p.SummaryDocument() })
 	p.registerMonitoringRoute(mux, MonitoringRouteWorkers, func() any { return p.WorkersDocument() })
@@ -2230,6 +2233,9 @@ func (s *Server) listen() Result {
 	}
 	if s.listener != nil {
 		return newSuccessResult()
+	}
+	if trimString(s.addr.Host) == "" {
+		return newErrorResult(NewScopedError("proxy.server", "listener host is empty", nil))
 	}
 	if s.addr.TLS && s.tlsConfig == nil {
 		return newErrorResult(NewScopedError("proxy.server", "tls listener requires a tls config", nil))

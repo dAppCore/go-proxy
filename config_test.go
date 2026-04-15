@@ -71,6 +71,47 @@ func TestConfig_Validate_Bad(t *testing.T) {
 			t.Fatalf("expected empty pool list to fail validation")
 		}
 	})
+
+	t.Run("empty_bind_host", func(t *testing.T) {
+		cfg := &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: " ", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		}
+
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected empty bind host to fail validation")
+		}
+	})
+
+	t.Run("empty_http_host", func(t *testing.T) {
+		cfg := &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			HTTP:    HTTPConfig{Enabled: true, Port: 8080},
+		}
+
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected empty http host to fail validation")
+		}
+	})
+
+	t.Run("negative_numeric_values", func(t *testing.T) {
+		cfg := &Config{
+			Mode:         "nicehash",
+			Workers:      WorkersByRigID,
+			Bind:         []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:        []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			ReuseTimeout: -1,
+		}
+
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected negative reuse timeout to fail validation")
+		}
+	})
 }
 
 func TestConfig_Validate_Ugly(t *testing.T) {

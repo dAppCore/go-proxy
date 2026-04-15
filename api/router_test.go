@@ -225,6 +225,7 @@ func TestRegisterRoutes_GETSummaryAuthRequired_Bad(t *testing.T) {
 		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
 		HTTP: proxy.HTTPConfig{
 			Enabled:     true,
+			Host:        "127.0.0.1",
 			Restricted:  true,
 			AccessToken: "secret",
 		},
@@ -261,6 +262,7 @@ func TestRegisterRoutes_GETSummaryAuthGranted_Ugly(t *testing.T) {
 		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
 		HTTP: proxy.HTTPConfig{
 			Enabled:     true,
+			Host:        "127.0.0.1",
 			Restricted:  true,
 			AccessToken: "secret",
 		},
@@ -295,6 +297,7 @@ func TestRegisterRoutes_GETWorkersAuthRequired_Ugly(t *testing.T) {
 		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
 		HTTP: proxy.HTTPConfig{
 			Enabled:     true,
+			Host:        "127.0.0.1",
 			Restricted:  true,
 			AccessToken: "secret",
 		},

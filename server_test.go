@@ -95,3 +95,10 @@ func TestProxy_Start_Ugly(t *testing.T) {
 		t.Fatalf("expected no miners when no connections were accepted, got %d", got)
 	}
 }
+
+func TestServer_listen_BlankHost_Bad(t *testing.T) {
+	srv, result := NewServer(BindAddr{Host: "", Port: 0}, nil, nil, func(net.Conn, uint16) {})
+	if result.OK || srv != nil {
+		t.Fatalf("expected blank host to fail listener construction, got srv=%#v result=%+v", srv, result)
+	}
+}

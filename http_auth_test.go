@@ -175,6 +175,22 @@ func TestProxy_startHTTP_Bad(t *testing.T) {
 	}
 }
 
+func TestProxy_startHTTP_BlankHost_Bad(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{
+				Enabled: true,
+				Port:    0,
+			},
+		},
+		done: make(chan struct{}),
+	}
+
+	if ok := p.startMonitoringServer(); ok {
+		t.Fatal("expected HTTP server start to fail with an empty host")
+	}
+}
+
 func TestProxy_registerMonitoringRoute_MethodNotAllowed_Bad(t *testing.T) {
 	p := &Proxy{
 		config: &Config{
