@@ -2,6 +2,7 @@ package pool
 
 import (
 	"bufio"
+	"context"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
@@ -81,6 +82,11 @@ func (c *StratumClient) Connect() proxy.Result {
 		return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.client", "dial pool failed", err)}
 	}
 	if c.config.TLS {
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			_ = conn.Close()
+			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake timeout", context.DeadlineExceeded)}
+		}
 		host := addr
 		if containsString(addr, ":") {
 			host, _, _ = net.SplitHostPort(addr)
@@ -93,7 +99,7 @@ func (c *StratumClient) Connect() proxy.Result {
 			tlsCfg.InsecureSkipVerify = true
 		}
 		tlsConn := tls.Client(conn, tlsCfg)
-		if err := setConnectDeadline(tlsConn, deadline); err != nil {
+		if err := setConnectDeadline(tlsConn, time.Now().Add(remaining)); err != nil {
 			_ = conn.Close()
 			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake timeout", err)}
 		}
