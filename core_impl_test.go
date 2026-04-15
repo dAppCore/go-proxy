@@ -45,7 +45,10 @@ func TestCoreImpl_HelperFunctions_Bad(t *testing.T) {
 }
 
 func TestCoreImpl_HelperFunctions_Ugly(t *testing.T) {
-	uuid := generateUUID()
+	uuid, err := generateUUID()
+	if err != nil {
+		t.Fatalf("expected secure UUID generation to succeed, got %v", err)
+	}
 	if len(uuid) != 36 {
 		t.Fatalf("expected UUID-like length 36, got %d", len(uuid))
 	}

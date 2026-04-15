@@ -8,7 +8,6 @@ import (
 	"io"
 	"math"
 	"net"
-	"strconv"
 	"sync"
 	"time"
 
@@ -587,10 +586,10 @@ func refillBucket(bucket *tokenBucket, limit int, now time.Time) {
 	bucket.lastRefill = bucket.lastRefill.Add(time.Duration(add) * interval)
 }
 
-func generateUUID() string {
+func generateUUID() (string, error) {
 	var b [16]byte
 	if _, err := io.ReadFull(rand.Reader, b[:]); err != nil {
-		return strconv.FormatInt(time.Now().UnixNano(), 16)
+		return "", err
 	}
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
@@ -604,7 +603,7 @@ func generateUUID() string {
 	hex.Encode(out[19:23], b[8:10])
 	out[23] = '-'
 	hex.Encode(out[24:36], b[10:16])
-	return string(out[:])
+	return string(out[:]), nil
 }
 
 func sha256Hex(data []byte) string {

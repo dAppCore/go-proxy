@@ -1476,7 +1476,12 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	m.rigID = params.RigID
 	m.loginAlgos = append([]string(nil), params.Algo...)
 	m.extAlgo = len(m.loginAlgos) > 0
-	m.rpcID = generateUUID()
+	rpcID, err := generateUUID()
+	if err != nil || rpcID == "" {
+		m.rejectLogin(requestID(request.ID), "Proxy is unavailable, try again later")
+		return
+	}
+	m.rpcID = rpcID
 	m.mu.Unlock()
 	if m.onLogin != nil {
 		m.onLogin(m)
@@ -2321,9 +2326,7 @@ func (s *Server) Start() {
 				case <-s.done:
 					return
 				default:
-					if ne, ok := err.(net.Error); ok && (ne.Temporary() || ne.Timeout()) {
-						time.Sleep(100 * time.Millisecond)
-					}
+					time.Sleep(100 * time.Millisecond)
 					continue
 				}
 			}
