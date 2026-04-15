@@ -98,3 +98,24 @@ func TestMiner_Accessors_Ugly(t *testing.T) {
 		t.Fatalf("expected LoginAlgos to return a copy, got %#v", miner.LoginAlgos())
 	}
 }
+
+func TestMiner_IP_Good(t *testing.T) {
+	miner := &Miner{ip: "10.0.0.1"}
+	if got := miner.IP(); got != "10.0.0.1" {
+		t.Fatalf("expected IP accessor to return 10.0.0.1, got %q", got)
+	}
+}
+
+func TestMiner_IP_Bad(t *testing.T) {
+	miner := &Miner{}
+	if got := miner.IP(); got != "" {
+		t.Fatalf("expected empty IP by default, got %q", got)
+	}
+}
+
+func TestMiner_IP_Ugly(t *testing.T) {
+	miner := &Miner{ip: "2001:db8::1"}
+	if got := miner.IP(); got != "2001:db8::1" {
+		t.Fatalf("expected IP accessor to preserve IPv6 text, got %q", got)
+	}
+}

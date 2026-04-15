@@ -244,6 +244,60 @@ func TestShareLog_OnReject_Ugly(t *testing.T) {
 	sl.OnReject(proxy.Event{Miner: miner, Error: "reason"})
 }
 
+// TestImpl_sanitizeLogField_Good verifies a clean message is preserved verbatim.
+func TestImpl_sanitizeLogField_Good(t *testing.T) {
+	if got := sanitizeLogField("Low difficulty share"); got != "Low difficulty share" {
+		t.Fatalf("expected plain message to remain unchanged, got %q", got)
+	}
+}
+
+// TestImpl_sanitizeLogField_Bad verifies an empty message stays empty.
+func TestImpl_sanitizeLogField_Bad(t *testing.T) {
+	if got := sanitizeLogField(""); got != "" {
+		t.Fatalf("expected empty message to remain empty, got %q", got)
+	}
+}
+
+// TestImpl_sanitizeLogField_Ugly verifies control characters are normalised and quoting is escaped.
+func TestImpl_sanitizeLogField_Ugly(t *testing.T) {
+	got := sanitizeLogField("bad\"\nreason\r\t\u2028\u2029\\")
+	if !strings.Contains(got, "\\\"") {
+		t.Fatalf("expected quotes to be escaped, got %q", got)
+	}
+	if !strings.Contains(got, "\\\\") {
+		t.Fatalf("expected backslashes to be escaped, got %q", got)
+	}
+	if strings.ContainsAny(got, "\n\r\t") {
+		t.Fatalf("expected control whitespace to be normalised, got %q", got)
+	}
+	if strings.Contains(got, "\u2028") || strings.Contains(got, "\u2029") {
+		t.Fatalf("expected unicode line separators to be normalised, got %q", got)
+	}
+}
+
+// TestImpl_sanitizeLogColumnField_Good verifies a clean column value is preserved verbatim.
+func TestImpl_sanitizeLogColumnField_Good(t *testing.T) {
+	if got := sanitizeLogColumnField("WALLET"); got != "WALLET" {
+		t.Fatalf("expected plain column field to remain unchanged, got %q", got)
+	}
+}
+
+// TestImpl_sanitizeLogColumnField_Bad verifies an empty column value stays empty.
+func TestImpl_sanitizeLogColumnField_Bad(t *testing.T) {
+	if got := sanitizeLogColumnField(""); got != "" {
+		t.Fatalf("expected empty column field to remain empty, got %q", got)
+	}
+}
+
+// TestImpl_sanitizeLogColumnField_Ugly verifies whitespace and control characters are encoded.
+func TestImpl_sanitizeLogColumnField_Ugly(t *testing.T) {
+	got := sanitizeLogColumnField("WALLET MALICIOUS\nENTRY\u2028TAB\t\"\\")
+	want := "WALLET_MALICIOUS_ENTRY_TAB_\\\"\\\\"
+	if got != want {
+		t.Fatalf("expected sanitized column field %q, got %q", want, got)
+	}
+}
+
 // TestShareLog_OnAccept_ColumnsSanitized verifies whitespace in the user
 // column is encoded so a miner cannot inject malformed log columns.
 func TestShareLog_OnAccept_ColumnsSanitized(t *testing.T) {

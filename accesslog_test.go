@@ -221,6 +221,70 @@ func TestAccessLogSink_SetPath_Ugly(t *testing.T) {
 	}
 }
 
+func TestAccessLogSink_sanitizeLogColumnField_Good(t *testing.T) {
+	if got := sanitizeLogColumnField("10.0.0.1"); got != "10.0.0.1" {
+		t.Fatalf("expected plain column field to remain unchanged, got %q", got)
+	}
+}
+
+func TestAccessLogSink_sanitizeLogColumnField_Bad(t *testing.T) {
+	if got := sanitizeLogColumnField(""); got != "" {
+		t.Fatalf("expected empty column field to remain empty, got %q", got)
+	}
+}
+
+func TestAccessLogSink_sanitizeLogColumnField_Ugly(t *testing.T) {
+	got := sanitizeLogColumnField("A B\tC\nD\rE\u2028F\u2029G\x07H\"\\I")
+	want := "A_B_C_D_E_F_G_H\\\"\\\\I"
+	if got != want {
+		t.Fatalf("expected sanitized column field %q, got %q", want, got)
+	}
+}
+
+func TestAccessLogSink_sanitizeLogField_Good(t *testing.T) {
+	if got := sanitizeLogField("reason text"); got != "reason text" {
+		t.Fatalf("expected plain message to remain unchanged, got %q", got)
+	}
+}
+
+func TestAccessLogSink_sanitizeLogField_Bad(t *testing.T) {
+	if got := sanitizeLogField(""); got != "" {
+		t.Fatalf("expected empty message to remain empty, got %q", got)
+	}
+}
+
+func TestAccessLogSink_sanitizeLogField_Ugly(t *testing.T) {
+	got := sanitizeLogField("A\"B\\C\nD\rE\tF\u2028G\u2029H\x07I")
+	if !strings.Contains(got, "\\\"") {
+		t.Fatalf("expected quotes to be escaped, got %q", got)
+	}
+	if !strings.Contains(got, "\\\\") {
+		t.Fatalf("expected backslashes to be escaped, got %q", got)
+	}
+	if strings.ContainsAny(got, "\n\r\t") {
+		t.Fatalf("expected control whitespace to be normalised, got %q", got)
+	}
+	if strings.Contains(got, "\u2028") || strings.Contains(got, "\u2029") {
+		t.Fatalf("expected unicode line separators to be normalised, got %q", got)
+	}
+}
+
+func TestAccessLogSink_OnLogin_Bad(t *testing.T) {
+	var sink *accessLogSink
+	sink.OnLogin(Event{})
+
+	sink = newAccessLogSink("")
+	sink.OnLogin(Event{})
+}
+
+func TestAccessLogSink_OnClose_Bad(t *testing.T) {
+	var sink *accessLogSink
+	sink.OnClose(Event{})
+
+	sink = newAccessLogSink("")
+	sink.OnClose(Event{})
+}
+
 type noopConn struct{}
 
 func (noopConn) Read([]byte) (int, error)         { return 0, os.ErrClosed }

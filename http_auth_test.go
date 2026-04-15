@@ -105,6 +105,52 @@ func TestProxy_allowHTTP_Ugly(t *testing.T) {
 	}
 }
 
+func TestProxy_allowHTTP_MalformedAuth_Bad(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{
+				AccessToken: "secret",
+			},
+		},
+	}
+
+	status, ok := p.AllowMonitoringRequest(&http.Request{
+		Method: http.MethodGet,
+		Header: http.Header{
+			"Authorization": []string{"Bearer"},
+		},
+	})
+	if ok {
+		t.Fatal("expected malformed authorization header to be rejected")
+	}
+	if status != http.StatusUnauthorized {
+		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, status)
+	}
+}
+
+func TestProxy_allowHTTP_LowercaseBearer_Good(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{
+				AccessToken: "secret",
+			},
+		},
+	}
+
+	status, ok := p.AllowMonitoringRequest(&http.Request{
+		Method: http.MethodGet,
+		Header: http.Header{
+			"Authorization": []string{"bearer secret"},
+		},
+	})
+	if !ok {
+		t.Fatalf("expected lowercase bearer scheme to be accepted, got status %d", status)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, status)
+	}
+}
+
 func TestProxy_allowHTTP_NilConfig_Ugly(t *testing.T) {
 	p := &Proxy{}
 

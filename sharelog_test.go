@@ -174,3 +174,67 @@ func TestShareLogSink_SetPath_Ugly(t *testing.T) {
 		t.Fatalf("expected both lines to be preserved when path is unchanged, got %q", text)
 	}
 }
+
+func TestShareLogSink_sanitizeLogColumnField_Good(t *testing.T) {
+	if got := sanitizeLogColumnField("WALLET"); got != "WALLET" {
+		t.Fatalf("expected plain user field to remain unchanged, got %q", got)
+	}
+}
+
+func TestShareLogSink_sanitizeLogColumnField_Bad(t *testing.T) {
+	if got := sanitizeLogColumnField(""); got != "" {
+		t.Fatalf("expected empty user field to remain empty, got %q", got)
+	}
+}
+
+func TestShareLogSink_sanitizeLogColumnField_Ugly(t *testing.T) {
+	got := sanitizeLogColumnField("WALLET MALICIOUS\nENTRY\u2028TAB\t\"\\")
+	want := "WALLET_MALICIOUS_ENTRY_TAB_\\\"\\\\"
+	if got != want {
+		t.Fatalf("expected sanitized column field %q, got %q", want, got)
+	}
+}
+
+func TestShareLogSink_sanitizeLogField_Good(t *testing.T) {
+	if got := sanitizeLogField("Low difficulty share"); got != "Low difficulty share" {
+		t.Fatalf("expected plain reason to remain unchanged, got %q", got)
+	}
+}
+
+func TestShareLogSink_sanitizeLogField_Bad(t *testing.T) {
+	if got := sanitizeLogField(""); got != "" {
+		t.Fatalf("expected empty reason to remain empty, got %q", got)
+	}
+}
+
+func TestShareLogSink_sanitizeLogField_Ugly(t *testing.T) {
+	got := sanitizeLogField("bad\"\nreason\r\u2028\u2029\\")
+	if !strings.Contains(got, "\\\"") {
+		t.Fatalf("expected quotes to be escaped, got %q", got)
+	}
+	if !strings.Contains(got, "\\\\") {
+		t.Fatalf("expected backslashes to be escaped, got %q", got)
+	}
+	if strings.ContainsAny(got, "\n\r") {
+		t.Fatalf("expected newlines to be normalised, got %q", got)
+	}
+	if strings.Contains(got, "\u2028") || strings.Contains(got, "\u2029") {
+		t.Fatalf("expected unicode line separators to be normalised, got %q", got)
+	}
+}
+
+func TestShareLogSink_OnAccept_Bad(t *testing.T) {
+	var sink *shareLogSink
+	sink.OnAccept(Event{})
+
+	sink = newShareLogSink("")
+	sink.OnAccept(Event{})
+}
+
+func TestShareLogSink_OnReject_Bad(t *testing.T) {
+	var sink *shareLogSink
+	sink.OnReject(Event{})
+
+	sink = newShareLogSink("")
+	sink.OnReject(Event{})
+}
