@@ -95,7 +95,9 @@ func (c *Config) Validate() Result {
 		return newErrorResult(NewScopedError("proxy.config", "mode is empty", nil))
 	}
 	if !isSupportedMode(mode) {
-		return newErrorResult(NewScopedError("proxy.config", "unsupported mode", nil))
+		if _, ok := splitterFactoryForMode(mode); !ok {
+			return newErrorResult(NewScopedError("proxy.config", "unsupported mode", nil))
+		}
 	}
 	if len(c.Bind) == 0 {
 		return newErrorResult(NewScopedError("proxy.config", "bind list is empty", nil))
