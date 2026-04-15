@@ -218,7 +218,10 @@ func (c *StratumClient) Disconnect() {
 
 func (c *StratumClient) notifyDisconnect() {
 	c.closedOnce.Do(func() {
-		c.resetConnectionState()
+		conn := c.resetConnectionState()
+		if conn != nil {
+			_ = conn.Close()
+		}
 		if c.listener != nil {
 			c.listener.OnDisconnect()
 		}
