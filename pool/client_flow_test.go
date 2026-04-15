@@ -2,8 +2,17 @@ package pool
 
 import (
 	"bufio"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"io"
+	"math/big"
 	"net"
 	"strings"
 	"sync"
@@ -195,6 +204,25 @@ func TestStratumClient_Connect_Good(t *testing.T) {
 		t.Fatalf("expected one disconnect notification, got %d", spy.disconnects)
 	}
 	spy.mu.Unlock()
+
+	t.Run("tls_fingerprint", func(t *testing.T) {
+		addr, fingerprint, shutdownTLS := startTLSStratumServer(t)
+		defer shutdownTLS()
+
+		spy := &clientListenerSpy{}
+		client := NewStratumClient(proxy.PoolConfig{
+			URL:            addr,
+			User:           "WALLET",
+			Pass:           "x",
+			TLS:            true,
+			TLSFingerprint: fingerprint,
+		}, spy)
+
+		if result := client.Connect(); !result.OK {
+			t.Fatalf("expected tls connect to succeed, got %v", result.Error)
+		}
+		time.Sleep(25 * time.Millisecond)
+	})
 }
 
 func TestStratumClient_Connect_Bad(t *testing.T) {
@@ -216,4 +244,86 @@ func TestStratumClient_HandleMessage_Ugly(t *testing.T) {
 	if len(spy.jobs) != 0 || len(spy.results) != 0 || spy.disconnects != 1 {
 		t.Fatalf("expected malformed payloads to be ignored and login error to disconnect once, got jobs=%d results=%d disconnects=%d", len(spy.jobs), len(spy.results), spy.disconnects)
 	}
+}
+
+func TestStratumClient_Connect_Bad_TLSFingerprint(t *testing.T) {
+	addr, _, shutdownTLS := startTLSStratumServer(t)
+	defer shutdownTLS()
+
+	client := NewStratumClient(proxy.PoolConfig{
+		URL:            addr,
+		User:           "WALLET",
+		Pass:           "x",
+		TLS:            true,
+		TLSFingerprint: strings.Repeat("0", 64),
+	}, nil)
+
+	if result := client.Connect(); result.OK {
+		t.Fatal("expected tls fingerprint mismatch to fail connection")
+	}
+}
+
+func startTLSStratumServer(t *testing.T) (string, string, func()) {
+	t.Helper()
+
+	cert, fingerprint := mustGenerateSelfSignedCert(t)
+	ln, err := tls.Listen("tcp", "127.0.0.1:0", &tls.Config{Certificates: []tls.Certificate{cert}})
+	if err != nil {
+		t.Fatalf("listen tls: %v", err)
+	}
+	connected := make(chan struct{})
+	done := make(chan struct{})
+	release := make(chan struct{})
+	go func() {
+		defer close(done)
+		conn, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		if tlsConn, ok := conn.(*tls.Conn); ok {
+			_ = tlsConn.Handshake()
+		}
+		close(connected)
+		<-release
+		_ = conn.Close()
+	}()
+
+	return ln.Addr().String(), fingerprint, func() {
+		select {
+		case <-connected:
+		default:
+		}
+		close(release)
+		_ = ln.Close()
+		<-done
+	}
+}
+
+func mustGenerateSelfSignedCert(t *testing.T) (tls.Certificate, string) {
+	t.Helper()
+
+	key, err := rsa.GenerateKey(rand.Reader, 1024)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "pool-test"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+		KeyUsage:     x509.KeyUsageKeyEncipherment | x509.KeyUsageDigitalSignature,
+		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &key.PublicKey, key)
+	if err != nil {
+		t.Fatalf("create certificate: %v", err)
+	}
+	pemCert := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
+	pemKey := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
+	cert, err := tls.X509KeyPair(pemCert, pemKey)
+	if err != nil {
+		t.Fatalf("load x509 key pair: %v", err)
+	}
+	sum := sha256.Sum256(der)
+	return cert, hex.EncodeToString(sum[:])
 }

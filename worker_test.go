@@ -2,6 +2,51 @@ package proxy
 
 import "testing"
 
+func TestWorker_workerNameFor_Good(t *testing.T) {
+	miner := &Miner{
+		user:     "wallet",
+		password: "secret",
+		agent:    "xmrig/6.21.0",
+		rigID:    "rig-1",
+		ip:       "10.0.0.1",
+	}
+
+	cases := map[WorkersMode]string{
+		WorkersByRigID:  "rig-1",
+		WorkersByUser:   "wallet",
+		WorkersByPass:   "secret",
+		WorkersByAgent:  "xmrig/6.21.0",
+		WorkersByIP:     "10.0.0.1",
+		WorkersDisabled: "",
+	}
+
+	for mode, expected := range cases {
+		if got := workerNameFor(mode, miner); got != expected {
+			t.Fatalf("expected worker name %q for mode %q, got %q", expected, mode, got)
+		}
+	}
+}
+
+func TestWorker_workerNameFor_Bad(t *testing.T) {
+	if got := workerNameFor(WorkersByUser, nil); got != "" {
+		t.Fatalf("expected nil miner to yield empty worker name, got %q", got)
+	}
+}
+
+func TestWorker_workerNameFor_Ugly(t *testing.T) {
+	miner := &Miner{
+		user: "wallet",
+		ip:   "10.0.0.9",
+	}
+
+	if got := workerNameFor(WorkersByRigID, miner); got != "wallet" {
+		t.Fatalf("expected missing rig id to fall back to user, got %q", got)
+	}
+	if got := workerNameFor(WorkersMode("mystery"), miner); got != "wallet" {
+		t.Fatalf("expected unknown mode to fall back to user, got %q", got)
+	}
+}
+
 func TestWorker_NewWorkers_Good(t *testing.T) {
 	bus := NewEventBus()
 	workers := NewWorkers(WorkersByRigID, bus)
@@ -188,5 +233,55 @@ func TestWorker_Tick_Ugly(t *testing.T) {
 	workers.Tick()
 	if got := workers.List(); len(got) != 0 {
 		t.Fatalf("expected tick on empty workers to be a no-op, got %d records", len(got))
+	}
+}
+
+func TestWorker_OnReject_Good(t *testing.T) {
+	workers := NewWorkers(WorkersByUser, nil)
+	miner := &Miner{id: 301, user: "reject", ip: "10.0.0.20"}
+	workers.OnLogin(Event{Miner: miner})
+
+	workers.OnReject(Event{Miner: miner, Error: "Low difficulty share"})
+
+	records := workers.List()
+	if len(records) != 1 {
+		t.Fatalf("expected one worker record, got %d", len(records))
+	}
+	if records[0].Rejected != 1 {
+		t.Fatalf("expected one rejected share, got %d", records[0].Rejected)
+	}
+	if records[0].Invalid != 1 {
+		t.Fatalf("expected invalid share reason to increment invalid count, got %d", records[0].Invalid)
+	}
+	if records[0].LastIP != miner.ip {
+		t.Fatalf("expected reject to update last IP, got %q", records[0].LastIP)
+	}
+}
+
+func TestWorker_OnReject_Bad(t *testing.T) {
+	workers := NewWorkers(WorkersByUser, nil)
+	workers.OnReject(Event{})
+
+	if got := workers.List(); len(got) != 0 {
+		t.Fatalf("expected nil reject event to be ignored, got %d records", len(got))
+	}
+}
+
+func TestWorker_OnReject_Ugly(t *testing.T) {
+	workers := NewWorkers(WorkersByUser, nil)
+	miner := &Miner{id: 302, user: "reject-ugly", ip: "10.0.0.21"}
+	workers.OnLogin(Event{Miner: miner})
+
+	workers.OnReject(Event{Miner: miner, Error: "transient upstream failure"})
+
+	records := workers.List()
+	if len(records) != 1 {
+		t.Fatalf("expected one worker record, got %d", len(records))
+	}
+	if records[0].Rejected != 1 {
+		t.Fatalf("expected rejected share to be counted, got %d", records[0].Rejected)
+	}
+	if records[0].Invalid != 0 {
+		t.Fatalf("expected non-invalid rejection reason to leave invalid count at zero, got %d", records[0].Invalid)
 	}
 }

@@ -16,28 +16,69 @@ func TestConfig_Validate_Good(t *testing.T) {
 }
 
 func TestConfig_Validate_Bad(t *testing.T) {
-	cfg := &Config{
-		Workers: WorkersByRigID,
-		Bind:    []BindAddr{{Host: "0.0.0.0", Port: 3333}},
-		Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
-	}
+	t.Run("missing_mode", func(t *testing.T) {
+		cfg := &Config{
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "0.0.0.0", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		}
 
-	if result := cfg.Validate(); result.OK {
-		t.Fatalf("expected missing mode to fail validation")
-	}
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected missing mode to fail validation")
+		}
+	})
+
+	t.Run("unsupported_mode", func(t *testing.T) {
+		cfg := &Config{
+			Mode:    "bogus",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "0.0.0.0", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		}
+
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected unsupported mode to fail validation")
+		}
+	})
+
+	t.Run("empty_bind_list", func(t *testing.T) {
+		cfg := &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		}
+
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected empty bind list to fail validation")
+		}
+	})
+
+	t.Run("empty_pool_list", func(t *testing.T) {
+		cfg := &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "0.0.0.0", Port: 3333}},
+		}
+
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected empty pool list to fail validation")
+		}
+	})
 }
 
 func TestConfig_Validate_Ugly(t *testing.T) {
-	cfg := &Config{
-		Mode:    "nicehash",
-		Workers: WorkersMode("unknown"),
-		Bind:    []BindAddr{{Host: "0.0.0.0", Port: 3333}},
-		Pools:   []PoolConfig{{URL: "", Enabled: true}},
-	}
+	t.Run("enabled_pool_without_url", func(t *testing.T) {
+		cfg := &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "0.0.0.0", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "", Enabled: true}},
+		}
 
-	if result := cfg.Validate(); result.OK {
-		t.Fatalf("expected invalid workers and empty pool url to fail validation")
-	}
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected enabled pool without url to fail validation")
+		}
+	})
 }
 
 func TestConfig_Validate_NoEnabledPool_Good(t *testing.T) {

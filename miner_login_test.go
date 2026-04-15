@@ -96,6 +96,103 @@ func TestMiner_HandleLogin_Good(t *testing.T) {
 	}
 }
 
+func TestMiner_HandleLogin_Bad(t *testing.T) {
+	t.Run("empty_login", func(t *testing.T) {
+		minerConn, clientConn := net.Pipe()
+		defer minerConn.Close()
+		defer clientConn.Close()
+
+		miner := NewMiner(minerConn, 3333, nil)
+		miner.onLogin = func(*Miner) {}
+
+		params, err := json.Marshal(loginParams{
+			Login: "   ",
+			Pass:  "x",
+		})
+		if err != nil {
+			t.Fatalf("marshal login params: %v", err)
+		}
+
+		done := make(chan struct{})
+		go func() {
+			miner.handleLogin(stratumRequest{ID: 10, Method: "login", Params: params})
+			close(done)
+		}()
+
+		line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+		if err != nil {
+			t.Fatalf("read login rejection: %v", err)
+		}
+		<-done
+
+		var payload struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(line, &payload); err != nil {
+			t.Fatalf("unmarshal login rejection: %v", err)
+		}
+		if payload.Error.Message != "Invalid payment address provided" {
+			t.Fatalf("expected empty login to be rejected, got %q", payload.Error.Message)
+		}
+		if miner.State() != MinerStateWaitLogin {
+			t.Fatalf("expected rejected login to keep miner in wait-login state, got %d", miner.State())
+		}
+		if got := miner.sessionID(); got != "" {
+			t.Fatalf("expected rejected login not to assign a session id, got %q", got)
+		}
+	})
+
+	t.Run("bad_password", func(t *testing.T) {
+		minerConn, clientConn := net.Pipe()
+		defer minerConn.Close()
+		defer clientConn.Close()
+
+		miner := NewMiner(minerConn, 3333, nil)
+		miner.accessPassword = "secret"
+		miner.onLogin = func(*Miner) {}
+
+		params, err := json.Marshal(loginParams{
+			Login: "wallet",
+			Pass:  "wrong",
+		})
+		if err != nil {
+			t.Fatalf("marshal login params: %v", err)
+		}
+
+		done := make(chan struct{})
+		go func() {
+			miner.handleLogin(stratumRequest{ID: 11, Method: "login", Params: params})
+			close(done)
+		}()
+
+		line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+		if err != nil {
+			t.Fatalf("read login rejection: %v", err)
+		}
+		<-done
+
+		var payload struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(line, &payload); err != nil {
+			t.Fatalf("unmarshal login rejection: %v", err)
+		}
+		if payload.Error.Message != "Invalid password" {
+			t.Fatalf("expected bad password to be rejected, got %q", payload.Error.Message)
+		}
+		if miner.State() != MinerStateWaitLogin {
+			t.Fatalf("expected rejected login to keep miner in wait-login state, got %d", miner.State())
+		}
+		if got := miner.sessionID(); got != "" {
+			t.Fatalf("expected rejected login not to assign a session id, got %q", got)
+		}
+	})
+}
+
 func TestProxy_New_Watch_Good(t *testing.T) {
 	cfg := &Config{
 		Mode:       "nicehash",
