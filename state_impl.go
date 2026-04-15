@@ -15,15 +15,16 @@ import (
 )
 
 const (
-	maxStratumLineLength  = 16384
-	minerLoginTimeout     = 10 * time.Second
-	minerReadyTimeout     = 600 * time.Second
-	submitDrainTimeout    = 5 * time.Second
-	httpReadHeaderTimeout = 5 * time.Second
-	httpReadTimeout       = 10 * time.Second
-	httpWriteTimeout      = 10 * time.Second
-	httpIdleTimeout       = 60 * time.Second
-	maskedPassword        = "********"
+	maxStratumLineLength     = 16384
+	minerLoginTimeout        = 10 * time.Second
+	minerReadyTimeout        = 600 * time.Second
+	minerTLSHandshakeTimeout = 5 * time.Second
+	submitDrainTimeout       = 5 * time.Second
+	httpReadHeaderTimeout    = 5 * time.Second
+	httpReadTimeout          = 10 * time.Second
+	httpWriteTimeout         = 10 * time.Second
+	httpIdleTimeout          = 60 * time.Second
+	maskedPassword           = "********"
 )
 
 // MinerSnapshot is a serialisable view of one miner connection.
@@ -2293,6 +2294,16 @@ func (s *Server) Start() {
 				_ = conn.Close()
 				continue
 			}
+			if s.tlsConfig != nil {
+				tlsConn := tls.Server(conn, s.tlsConfig)
+				_ = conn.SetDeadline(time.Now().Add(minerTLSHandshakeTimeout))
+				if err := tlsConn.Handshake(); err != nil {
+					_ = conn.Close()
+					continue
+				}
+				_ = tlsConn.SetDeadline(time.Time{})
+				conn = tlsConn
+			}
 			if s.onAccept != nil {
 				s.onAccept(conn, s.addr.Port)
 			}
@@ -2333,9 +2344,6 @@ func (s *Server) listen() Result {
 	ln, err := net.Listen("tcp", net.JoinHostPort(s.addr.Host, strconv.Itoa(int(s.addr.Port))))
 	if err != nil {
 		return newErrorResult(NewScopedError("proxy.server", "listen failed", err))
-	}
-	if s.tlsConfig != nil {
-		ln = tls.NewListener(ln, s.tlsConfig)
 	}
 	s.listener = ln
 	return newSuccessResult()

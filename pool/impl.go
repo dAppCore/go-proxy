@@ -16,6 +16,7 @@ import (
 )
 
 const maxStratumLineLength = 16384
+const poolConnectTimeout = 10 * time.Second
 
 // NewStrategyFactory creates a StrategyFactory for the supplied config.
 //
@@ -73,7 +74,8 @@ func (c *StratumClient) Connect() proxy.Result {
 	if addr == "" {
 		return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.client", "pool url is empty", nil)}
 	}
-	conn, err := net.Dial("tcp", addr)
+	dialer := net.Dialer{Timeout: poolConnectTimeout}
+	conn, err := dialer.Dial("tcp", addr)
 	if err != nil {
 		return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.client", "dial pool failed", err)}
 	}
@@ -87,10 +89,12 @@ func (c *StratumClient) Connect() proxy.Result {
 			tlsCfg.InsecureSkipVerify = true
 		}
 		tlsConn := tls.Client(conn, tlsCfg)
+		_ = tlsConn.SetDeadline(time.Now().Add(poolConnectTimeout))
 		if err := tlsConn.Handshake(); err != nil {
 			_ = conn.Close()
 			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake failed", err)}
 		}
+		_ = tlsConn.SetDeadline(time.Time{})
 		if fp := lowerString(trimString(c.config.TLSFingerprint)); fp != "" {
 			cert := tlsConn.ConnectionState().PeerCertificates
 			if len(cert) == 0 {
