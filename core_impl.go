@@ -93,6 +93,9 @@ func (c *Config) Validate() Result {
 	if !isValidMode(c.Mode) {
 		return newErrorResult(NewScopedError("proxy.config", "mode must be \"nicehash\" or \"simple\"", nil))
 	}
+	if !isValidWorkersMode(c.Workers) {
+		return newErrorResult(NewScopedError("proxy.config", "workers must be one of \"rig-id\", \"user\", \"password\", \"agent\", \"ip\", or \"false\"", nil))
+	}
 	if len(c.Bind) == 0 {
 		return newErrorResult(NewScopedError("proxy.config", "bind list is empty", nil))
 	}
