@@ -93,7 +93,9 @@ func (s *SimpleSplitter) OnSubmit(event *proxy.SubmitEvent) {
 	s.mu.Unlock()
 	if mapper != nil {
 		mapper.Submit(event)
+		return
 	}
+	rejectUnavailableSubmit(s.events, event)
 }
 
 // OnClose moves a mapper to the idle pool or stops it.
@@ -285,6 +287,7 @@ func (s *SimpleSplitter) activeMapperByRouteIDLocked(routeID int64) *SimpleMappe
 // Submit forwards a share to the pool.
 func (m *SimpleMapper) Submit(event *proxy.SubmitEvent) {
 	if m == nil || event == nil || m.strategy == nil {
+		rejectUnavailableSubmit(m.events, event)
 		return
 	}
 	m.mu.Lock()
@@ -302,6 +305,10 @@ func (m *SimpleMapper) Submit(event *proxy.SubmitEvent) {
 		submissionJob = m.prevJob
 	}
 	seq := m.strategy.Submit(jobID, event.Nonce, event.Result, event.Algo)
+	if seq == 0 {
+		m.rejectUnavailableLocked(event, submissionJob)
+		return
+	}
 	m.pending[seq] = submitContext{
 		RequestID: event.RequestID,
 		Diff:      proxy.EffectiveShareDifficulty(submissionJob, event.Miner),
@@ -318,6 +325,37 @@ func (m *SimpleMapper) rejectInvalidJobLocked(event *proxy.SubmitEvent, job prox
 	if m.events != nil {
 		jobCopy := job
 		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: event.Miner, Job: &jobCopy, Error: "Invalid job id"})
+	}
+}
+
+func (m *SimpleMapper) rejectUnavailableLocked(event *proxy.SubmitEvent, job proxy.Job) {
+	if event == nil || event.Miner == nil {
+		return
+	}
+	event.Miner.ReplyWithError(event.RequestID, "Proxy is unavailable, try again later")
+	if m.events != nil {
+		jobCopy := job
+		m.events.Dispatch(proxy.Event{
+			Type:  proxy.EventReject,
+			Miner: event.Miner,
+			Job:   &jobCopy,
+			Diff:  proxy.EffectiveShareDifficulty(job, event.Miner),
+			Error: "Proxy is unavailable, try again later",
+		})
+	}
+}
+
+func rejectUnavailableSubmit(events *proxy.EventBus, event *proxy.SubmitEvent) {
+	if event == nil || event.Miner == nil {
+		return
+	}
+	event.Miner.ReplyWithError(event.RequestID, "Proxy is unavailable, try again later")
+	if events != nil {
+		events.Dispatch(proxy.Event{
+			Type:  proxy.EventReject,
+			Miner: event.Miner,
+			Error: "Proxy is unavailable, try again later",
+		})
 	}
 }
 
