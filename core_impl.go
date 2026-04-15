@@ -103,6 +103,10 @@ func (c *Config) Validate() Result {
 	if len(c.Pools) == 0 {
 		return newErrorResult(NewScopedError("proxy.config", "pool list is empty", nil))
 	}
+	workers := lowerString(trimString(string(c.Workers)))
+	if workers != "" && !isSupportedWorkersMode(workers) {
+		return newErrorResult(NewScopedError("proxy.config", "unsupported workers mode", nil))
+	}
 	for _, pool := range c.Pools {
 		if pool.Enabled && trimString(pool.URL) == "" {
 			return newErrorResult(NewScopedError("proxy.config", "enabled pool url is empty", nil))
@@ -114,6 +118,15 @@ func (c *Config) Validate() Result {
 func isSupportedMode(mode string) bool {
 	switch lowerString(trimString(mode)) {
 	case "nicehash", "simple":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSupportedWorkersMode(mode string) bool {
+	switch lowerString(trimString(mode)) {
+	case "", string(WorkersByRigID), string(WorkersByUser), string(WorkersByPass), string(WorkersByAgent), string(WorkersByIP), string(WorkersDisabled):
 		return true
 	default:
 		return false
