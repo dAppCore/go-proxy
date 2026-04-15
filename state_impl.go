@@ -259,7 +259,7 @@ func (p *Proxy) Start() {
 	if p.watcher != nil {
 		p.watcher.Start()
 	}
-	if p.config.HTTP.Enabled {
+	if httpCfg := p.currentHTTPConfig(); httpCfg.Enabled {
 		if !p.startMonitoringServer() {
 			p.Stop()
 			return
@@ -407,11 +407,10 @@ func (p *Proxy) Reload(config *Config) {
 	if p.customDiffBuckets != nil {
 		p.customDiffBuckets.SetEnabled(config.CustomDiffStats)
 	}
-	p.rateLimit = NewRateLimiter(config.RateLimit)
-	for _, server := range p.servers {
-		if server != nil {
-			server.limiter = p.rateLimit
-		}
+	if p.rateLimit == nil {
+		p.rateLimit = NewRateLimiter(config.RateLimit)
+	} else {
+		p.rateLimit.UpdateConfig(config.RateLimit)
 	}
 	if p.accessLog != nil {
 		p.accessLog.SetPath(config.AccessLogFile)
@@ -758,14 +757,18 @@ func parseTLSVersion(value string) uint16 {
 }
 
 func (p *Proxy) startMonitoringServer() bool {
-	if p == nil || p.config == nil || !p.config.HTTP.Enabled {
+	if p == nil || p.config == nil {
+		return false
+	}
+	httpCfg := p.currentHTTPConfig()
+	if !httpCfg.Enabled {
 		return false
 	}
 	mux := http.NewServeMux()
 	p.registerMonitoringRoute(mux, MonitoringRouteSummary, func() any { return p.SummaryDocument() })
 	p.registerMonitoringRoute(mux, MonitoringRouteWorkers, func() any { return p.WorkersDocument() })
 	p.registerMonitoringRoute(mux, MonitoringRouteMiners, func() any { return p.MinersDocument() })
-	addr := net.JoinHostPort(p.config.HTTP.Host, strconv.Itoa(int(p.config.HTTP.Port)))
+	addr := net.JoinHostPort(httpCfg.Host, strconv.Itoa(int(httpCfg.Port)))
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		return false
@@ -815,13 +818,22 @@ func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 	if r.Method != http.MethodGet {
 		return http.StatusMethodNotAllowed, false
 	}
-	if token := p.config.HTTP.AccessToken; token != "" {
+	if token := p.currentHTTPConfig().AccessToken; token != "" {
 		parts := splitStringN(r.Header.Get("Authorization"), " ", 2)
 		if len(parts) != 2 || !equalFoldString(parts[0], "bearer") || !secureStringEqual(parts[1], token) {
 			return http.StatusUnauthorized, false
 		}
 	}
 	return http.StatusOK, true
+}
+
+func (p *Proxy) currentHTTPConfig() HTTPConfig {
+	if p == nil || p.config == nil {
+		return HTTPConfig{}
+	}
+	p.configMu.RLock()
+	defer p.configMu.RUnlock()
+	return p.config.HTTP
 }
 
 func (p *Proxy) writeJSONResponse(w http.ResponseWriter, payload any) {

@@ -386,6 +386,20 @@ func (rl *RateLimiter) Tick() {
 	}
 }
 
+// UpdateConfig replaces the active rate-limit policy without swapping the limiter pointer.
+//
+//	rl.UpdateConfig(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+func (rl *RateLimiter) UpdateConfig(config RateLimit) {
+	if rl == nil {
+		return
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	rl.limit = config
+	rl.bucketByHost = make(map[string]*tokenBucket)
+	rl.banUntilByHost = make(map[string]time.Time)
+}
+
 //	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
 //	    p.Reload(cfg)
 //	})

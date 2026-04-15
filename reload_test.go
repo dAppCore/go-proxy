@@ -288,8 +288,11 @@ func TestProxy_Reload_UpdatesServers(t *testing.T) {
 	if got := p.servers[0].limiter; got != p.rateLimit {
 		t.Fatalf("expected server limiter to be updated")
 	}
-	if p.rateLimit == originalLimiter {
-		t.Fatalf("expected rate limiter instance to be replaced")
+	if p.rateLimit != originalLimiter {
+		t.Fatalf("expected rate limiter instance to be updated in place")
+	}
+	if got := p.rateLimit.limit.MaxConnectionsPerMinute; got != 10 {
+		t.Fatalf("expected limiter config to be updated, got %d", got)
 	}
 }
 
