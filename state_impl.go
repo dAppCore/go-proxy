@@ -2012,6 +2012,13 @@ func (w *Workers) OnClose(e Event) {
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	index, ok := w.idIndex[e.Miner.id]
+	if ok && index >= 0 && index < len(w.entries) {
+		record := &w.entries[index]
+		if record.Connections > 0 {
+			record.Connections--
+		}
+	}
 	delete(w.idIndex, e.Miner.id)
 }
 
