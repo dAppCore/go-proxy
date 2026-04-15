@@ -60,6 +60,7 @@ type Miner struct {
 	buf                 [16384]byte // per-miner send buffer; avoids per-write allocations
 	onLogin             func(*Miner)
 	onLoginReady        func(*Miner)
+	onLoginEvent        func(*Miner)
 	onSubmit            func(*Miner, *SubmitEvent)
 	onClose             func(*Miner)
 	closeOnce           sync.Once

@@ -606,11 +606,13 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
 		}
 	}
-	miner.onLoginReady = func(m *Miner) {
+	loginEvent := func(m *Miner) {
 		if p.events != nil {
 			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
 		}
 	}
+	miner.onLoginReady = loginEvent
+	miner.onLoginEvent = loginEvent
 	miner.onSubmit = func(m *Miner, event *SubmitEvent) {
 		if p.splitter != nil {
 			if _, ok := p.splitter.(*noopSplitter); !ok {
@@ -1489,7 +1491,9 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		return
 	}
 	m.touchActivity()
-	if pinger := m.onLoginReady; pinger != nil {
+	if pinger := m.onLoginEvent; pinger != nil {
+		pinger(m)
+	} else if pinger := m.onLoginReady; pinger != nil {
 		pinger(m)
 	}
 	if m.State() == MinerStateClosing {
