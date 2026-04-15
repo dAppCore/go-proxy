@@ -230,9 +230,14 @@ func TestWorker_Tick_Bad(t *testing.T) {
 
 func TestWorker_Tick_Ugly(t *testing.T) {
 	workers := NewWorkers(WorkersByUser, nil)
+	workers.entries = []WorkerRecord{{Name: "manual"}}
+
 	workers.Tick()
-	if got := workers.List(); len(got) != 0 {
-		t.Fatalf("expected tick on empty workers to be a no-op, got %d records", len(got))
+	if got := workers.List(); len(got) != 1 {
+		t.Fatalf("expected tick to preserve zero-window records, got %d records", len(got))
+	}
+	if got := workers.List()[0].Name; got != "manual" {
+		t.Fatalf("expected manual worker record to remain intact, got %q", got)
 	}
 }
 
@@ -283,5 +288,55 @@ func TestWorker_OnReject_Ugly(t *testing.T) {
 	}
 	if records[0].Invalid != 0 {
 		t.Fatalf("expected non-invalid rejection reason to leave invalid count at zero, got %d", records[0].Invalid)
+	}
+}
+
+func TestWorker_OnClose_Good(t *testing.T) {
+	workers := NewWorkers(WorkersByUser, nil)
+	miner := &Miner{id: 401, user: "closing", ip: "10.0.0.30"}
+	workers.OnLogin(Event{Miner: miner})
+
+	workers.OnClose(Event{Miner: miner})
+
+	records := workers.List()
+	if len(records) != 1 {
+		t.Fatalf("expected one worker record to remain, got %d", len(records))
+	}
+	if records[0].Connections != 0 {
+		t.Fatalf("expected connection count to decrement on close, got %d", records[0].Connections)
+	}
+	if _, ok := workers.idIndex[miner.id]; ok {
+		t.Fatal("expected miner id to be removed from worker index")
+	}
+}
+
+func TestWorker_OnClose_Bad(t *testing.T) {
+	var workers *Workers
+	workers.OnClose(Event{})
+
+	workers = NewWorkers(WorkersByUser, nil)
+	workers.OnClose(Event{})
+	workers.OnClose(Event{Miner: nil})
+
+	if got := workers.List(); len(got) != 0 {
+		t.Fatalf("expected nil close events to be ignored, got %d records", len(got))
+	}
+}
+
+func TestWorker_OnClose_Ugly(t *testing.T) {
+	workers := NewWorkers(WorkersByUser, nil)
+	miner := &Miner{id: 402, user: "closing-ugly", ip: "10.0.0.31"}
+	workers.OnLogin(Event{Miner: miner})
+	workers.OnClose(Event{Miner: miner})
+
+	unknown := &Miner{id: 999, user: "unknown", ip: "10.0.0.99"}
+	workers.OnClose(Event{Miner: unknown})
+
+	records := workers.List()
+	if len(records) != 1 {
+		t.Fatalf("expected unknown closes not to affect existing records, got %d", len(records))
+	}
+	if records[0].Connections != 0 {
+		t.Fatalf("expected original worker connection count to remain zero, got %d", records[0].Connections)
 	}
 }

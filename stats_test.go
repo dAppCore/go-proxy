@@ -147,6 +147,24 @@ func TestStats_Tick_Good(t *testing.T) {
 	}
 }
 
+// TestStats_Tick_Bad verifies that a nil stats receiver is ignored.
+func TestStats_Tick_Bad(t *testing.T) {
+	var stats *Stats
+	stats.Tick()
+}
+
+// TestStats_Tick_Ugly verifies that a zero-value stats instance can be ticked safely.
+func TestStats_Tick_Ugly(t *testing.T) {
+	var stats Stats
+
+	stats.Tick()
+
+	summary := stats.Summary()
+	if summary.Accepted != 0 || summary.Hashrate[HashrateWindow60s] != 0 {
+		t.Fatalf("expected zero-value stats to remain unchanged after tick, got %+v", summary)
+	}
+}
+
 // TestStats_OnLogin_OnClose_Good verifies miner count tracking.
 //
 //	stats := proxy.NewStats()
@@ -170,6 +188,58 @@ func TestStats_OnLogin_OnClose_Good(t *testing.T) {
 	}
 	if got := stats.maxMiners.Load(); got != 1 {
 		t.Fatalf("expected max miners to remain 1, got %d", got)
+	}
+}
+
+// TestStats_OnClose_Good verifies that closing a miner decrements the active count.
+//
+//	stats := proxy.NewStats()
+//	stats.OnLogin(proxy.Event{Miner: &proxy.Miner{}})
+//	stats.OnClose(proxy.Event{Miner: &proxy.Miner{}})
+func TestStats_OnClose_Good(t *testing.T) {
+	stats := NewStats()
+	miner := &Miner{}
+
+	stats.OnLogin(Event{Miner: miner})
+	stats.OnClose(Event{Miner: miner})
+
+	if got := stats.miners.Load(); got != 0 {
+		t.Fatalf("expected active miner count to drop to zero, got %d", got)
+	}
+	if got := stats.maxMiners.Load(); got != 1 {
+		t.Fatalf("expected peak miner count to remain recorded, got %d", got)
+	}
+}
+
+// TestStats_OnClose_Bad verifies that nil inputs are ignored.
+func TestStats_OnClose_Bad(t *testing.T) {
+	var stats *Stats
+	stats.OnClose(Event{})
+
+	stats = NewStats()
+	stats.OnClose(Event{})
+	stats.OnClose(Event{Miner: nil})
+
+	summary := stats.Summary()
+	if summary.Accepted != 0 || summary.Rejected != 0 {
+		t.Fatalf("expected nil close events to be ignored, got %+v", summary)
+	}
+}
+
+// TestStats_OnClose_Ugly verifies that repeated closes do not underflow the miner counter.
+func TestStats_OnClose_Ugly(t *testing.T) {
+	stats := NewStats()
+	miner := &Miner{}
+
+	stats.OnLogin(Event{Miner: miner})
+	stats.OnClose(Event{Miner: miner})
+	stats.OnClose(Event{Miner: miner})
+
+	if got := stats.miners.Load(); got != 0 {
+		t.Fatalf("expected miner count to stay at zero after repeated closes, got %d", got)
+	}
+	if got := stats.maxMiners.Load(); got != 1 {
+		t.Fatalf("expected peak miner count to remain recorded, got %d", got)
 	}
 }
 

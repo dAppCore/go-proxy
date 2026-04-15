@@ -134,3 +134,63 @@ func TestConfigWatcher_Start_Ugly(t *testing.T) {
 		t.Fatal("expected watcher to reload touched config")
 	}
 }
+
+// TestConfigWatcher_Stop_Good verifies that Stop closes a running watcher cleanly.
+func TestConfigWatcher_Stop_Good(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	initial := []byte(`{"mode":"nicehash","workers":"false","bind":[{"host":"127.0.0.1","port":3333}],"pools":[{"url":"pool.example:3333","enabled":true}]}`)
+	if err := os.WriteFile(path, initial, 0o644); err != nil {
+		t.Fatalf("write initial config file: %v", err)
+	}
+
+	watcher := NewConfigWatcher(path, func(*Config) {})
+	if watcher == nil {
+		t.Fatal("expected watcher")
+	}
+	watcher.Start()
+	watcher.Stop()
+
+	select {
+	case <-watcher.stopCh:
+	default:
+		t.Fatal("expected watcher stop channel to be closed")
+	}
+}
+
+// TestConfigWatcher_Stop_Bad verifies that a nil watcher is ignored.
+func TestConfigWatcher_Stop_Bad(t *testing.T) {
+	var watcher *ConfigWatcher
+	watcher.Stop()
+
+	watcher = &ConfigWatcher{}
+	watcher.Stop()
+}
+
+// TestConfigWatcher_Stop_Ugly verifies that Stop is idempotent across repeated calls.
+func TestConfigWatcher_Stop_Ugly(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	initial := []byte(`{"mode":"nicehash","workers":"false","bind":[{"host":"127.0.0.1","port":3333}],"pools":[{"url":"pool.example:3333","enabled":true}]}`)
+	if err := os.WriteFile(path, initial, 0o644); err != nil {
+		t.Fatalf("write initial config file: %v", err)
+	}
+
+	watcher := NewConfigWatcher(path, func(*Config) {})
+	if watcher == nil {
+		t.Fatal("expected watcher")
+	}
+
+	watcher.Stop()
+	watcher.Stop()
+
+	watcher.Start()
+	watcher.Stop()
+	watcher.Stop()
+
+	select {
+	case <-watcher.stopCh:
+	default:
+		t.Fatal("expected watcher stop channel to remain closed after repeated stops")
+	}
+}

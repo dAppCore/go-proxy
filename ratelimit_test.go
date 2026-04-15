@@ -103,6 +103,25 @@ func TestRateLimiter_Tick_Good(t *testing.T) {
 	}
 }
 
+// TestRateLimiter_Tick_Bad verifies that a nil limiter is ignored.
+func TestRateLimiter_Tick_Bad(t *testing.T) {
+	var rl *RateLimiter
+	rl.Tick()
+}
+
+// TestRateLimiter_Tick_Ugly verifies that a disabled limiter can still be ticked safely.
+func TestRateLimiter_Tick_Ugly(t *testing.T) {
+	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 0})
+
+	rl.Tick()
+
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if len(rl.bucketByHost) != 0 || len(rl.banUntilByHost) != 0 {
+		t.Fatalf("expected disabled limiter tick to remain a no-op, got buckets=%d bans=%d", len(rl.bucketByHost), len(rl.banUntilByHost))
+	}
+}
+
 // TestRateLimiter_Allow_ReplenishesHighLimits verifies token replenishment at high rates.
 //
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 120})
