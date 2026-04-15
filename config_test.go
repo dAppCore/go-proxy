@@ -113,6 +113,19 @@ func TestConfig_Validate_Bad(t *testing.T) {
 		}
 	})
 
+	t.Run("unsupported_workers_mode", func(t *testing.T) {
+		cfg := &Config{
+			Mode:    "nicehash",
+			Workers: WorkersMode("mystery"),
+			Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		}
+
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected unsupported workers mode to fail validation")
+		}
+	})
+
 	t.Run("negative_retry_values", func(t *testing.T) {
 		base := Config{
 			Mode:    "nicehash",
