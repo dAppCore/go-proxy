@@ -243,6 +243,78 @@ func TestMapper_OnResultAccepted_CustomDiffUsesEffectiveDifficulty(t *testing.T)
 	}
 }
 
+func TestMapper_OnResultAccepted_Bad(t *testing.T) {
+	bus := proxy.NewEventBus()
+	rejects := make(chan proxy.Event, 1)
+	bus.Subscribe(proxy.EventReject, func(e proxy.Event) {
+		rejects <- e
+	})
+
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := proxy.NewMiner(minerConn, 3333, nil)
+	miner.SetID(12)
+	mapper := NewNonceMapper(1, &proxy.Config{}, &startCountingStrategy{})
+	mapper.events = bus
+	mapper.storage.job = proxy.Job{JobID: "job-1", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
+	mapper.storage.miners[miner.ID()] = miner
+	mapper.pending[11] = SubmitContext{
+		RequestID: 77,
+		MinerID:   miner.ID(),
+		JobID:     "job-1",
+		StartedAt: time.Now(),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		mapper.OnResultAccepted(11, false, "Low difficulty share")
+		close(done)
+	}()
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read reject reply: %v", err)
+	}
+	<-done
+
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("decode reject reply: %v", err)
+	}
+	if payload.Error.Message != "Low difficulty share" {
+		t.Fatalf("expected pool rejection to be propagated, got %q", payload.Error.Message)
+	}
+	if len(mapper.pending) != 0 {
+		t.Fatalf("expected reject reply to clear pending entry, got %d", len(mapper.pending))
+	}
+
+	select {
+	case event := <-rejects:
+		if event.Error != "Low difficulty share" {
+			t.Fatalf("expected reject event to carry pool error, got %q", event.Error)
+		}
+		if event.Job == nil || event.Job.JobID != "job-1" {
+			t.Fatalf("expected reject event to reference current job, got %+v", event.Job)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("expected reject event")
+	}
+}
+
+func TestMapper_OnResultAccepted_Ugly(t *testing.T) {
+	mapper := NewNonceMapper(1, &proxy.Config{}, &startCountingStrategy{})
+	mapper.OnResultAccepted(99, true, "")
+	if len(mapper.pending) != 0 {
+		t.Fatalf("expected unknown sequence to leave pending map untouched, got %d entries", len(mapper.pending))
+	}
+}
+
 func TestNonceMapper_Submit_UnavailableStrategy_Bad(t *testing.T) {
 	minerConn, clientConn := net.Pipe()
 	defer minerConn.Close()

@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"io"
 	"math/big"
 	"net"
@@ -246,6 +247,45 @@ func TestStratumClient_HandleMessage_Ugly(t *testing.T) {
 	}
 }
 
+func TestStratumClient_HandleMessage_Good(t *testing.T) {
+	spy := &clientListenerSpy{}
+	client := NewStratumClient(proxy.PoolConfig{}, spy)
+
+	client.handleMessage([]byte(`{"method":"job","params":{"blob":"` + strings.Repeat("0", 160) + `","job_id":"job-1","target":"b88d0600","algo":"cn/r","height":7,"seed_hash":"seed","id":"session-2"}}`))
+
+	spy.mu.Lock()
+	defer spy.mu.Unlock()
+	if len(spy.jobs) != 1 {
+		t.Fatalf("expected one job notification, got %d", len(spy.jobs))
+	}
+	job := spy.jobs[0]
+	if job.JobID != "job-1" || job.Algo != "cn/r" || job.ClientID != "session-2" {
+		t.Fatalf("unexpected job notification: %+v", job)
+	}
+	if !client.IsActive() {
+		t.Fatal("expected client to become active after a job notification")
+	}
+}
+
+func TestStratumClient_HandleMessage_Bad(t *testing.T) {
+	spy := &clientListenerSpy{}
+	client := NewStratumClient(proxy.PoolConfig{}, spy)
+
+	client.handleMessage([]byte(`{"id":"session-1","result":{"id":"session-1"}}`))
+
+	if got := client.SessionID(); got != "session-1" {
+		t.Fatalf("expected session id to be recorded, got %q", got)
+	}
+	if client.IsActive() {
+		t.Fatal("expected client to remain inactive until a job arrives")
+	}
+	spy.mu.Lock()
+	defer spy.mu.Unlock()
+	if len(spy.jobs) != 0 || len(spy.results) != 0 || spy.disconnects != 0 {
+		t.Fatalf("expected session-only login reply to be ignored by listener, got jobs=%d results=%d disconnects=%d", len(spy.jobs), len(spy.results), spy.disconnects)
+	}
+}
+
 func TestStratumClient_Connect_Bad_TLSFingerprint(t *testing.T) {
 	addr, _, shutdownTLS := startTLSStratumServer(t)
 	defer shutdownTLS()
@@ -260,6 +300,117 @@ func TestStratumClient_Connect_Bad_TLSFingerprint(t *testing.T) {
 
 	if result := client.Connect(); result.OK {
 		t.Fatal("expected tls fingerprint mismatch to fail connection")
+	}
+}
+
+func TestStratumClient_Submit_Good(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	client := &StratumClient{
+		conn:      clientConn,
+		sessionID: "session-1",
+		pending:   make(map[int64]struct{}),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		line := readLine(t, bufio.NewReader(serverConn))
+		var payload struct {
+			Method string `json:"method"`
+			Params struct {
+				ID     string `json:"id"`
+				JobID  string `json:"job_id"`
+				Nonce  string `json:"nonce"`
+				Result string `json:"result"`
+				Algo   string `json:"algo"`
+			} `json:"params"`
+		}
+		if err := json.Unmarshal(line, &payload); err != nil {
+			t.Fatalf("decode submit request: %v", err)
+		}
+		if payload.Method != "submit" {
+			t.Fatalf("expected submit method, got %q", payload.Method)
+		}
+		if payload.Params.ID != "session-1" || payload.Params.JobID != "job-1" || payload.Params.Nonce != "deadbeef" || payload.Params.Result != "HASH64HEX" || payload.Params.Algo != "cn/r" {
+			t.Fatalf("unexpected submit params: %+v", payload.Params)
+		}
+	}()
+
+	if seq := client.Submit("job-1", "deadbeef", "HASH64HEX", "cn/r"); seq != 1 {
+		t.Fatalf("expected submit sequence 1, got %d", seq)
+	}
+	<-done
+
+	if got := len(client.pending); got != 1 {
+		t.Fatalf("expected one pending request, got %d", got)
+	}
+}
+
+func TestStratumClient_Submit_Bad(t *testing.T) {
+	serverConn, clientConn := net.Pipe()
+	defer serverConn.Close()
+	defer clientConn.Close()
+
+	client := &StratumClient{
+		conn:      clientConn,
+		sessionID: "session-1",
+		pending:   make(map[int64]struct{}),
+	}
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		line := readLine(t, bufio.NewReader(serverConn))
+		var payload struct {
+			Params map[string]any `json:"params"`
+		}
+		if err := json.Unmarshal(line, &payload); err != nil {
+			t.Fatalf("decode submit request: %v", err)
+		}
+		if _, ok := payload.Params["algo"]; ok {
+			t.Fatalf("expected empty algo to be omitted from submit payload, got %#v", payload.Params["algo"])
+		}
+	}()
+
+	if seq := client.Submit("job-1", "deadbeef", "HASH64HEX", ""); seq != 1 {
+		t.Fatalf("expected submit sequence 1, got %d", seq)
+	}
+	<-done
+}
+
+type failingConn struct{}
+
+func (f failingConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (f failingConn) Write([]byte) (int, error)        { return 0, errors.New("write failed") }
+func (f failingConn) Close() error                     { return nil }
+func (f failingConn) LocalAddr() net.Addr              { return nil }
+func (f failingConn) RemoteAddr() net.Addr             { return nil }
+func (f failingConn) SetDeadline(time.Time) error      { return nil }
+func (f failingConn) SetReadDeadline(time.Time) error  { return nil }
+func (f failingConn) SetWriteDeadline(time.Time) error { return nil }
+
+func TestStratumClient_Submit_Ugly(t *testing.T) {
+	spy := &clientListenerSpy{}
+	client := &StratumClient{
+		conn:      failingConn{},
+		listener:  spy,
+		sessionID: "session-1",
+		pending:   make(map[int64]struct{}),
+	}
+
+	if seq := client.Submit("job-1", "deadbeef", "HASH64HEX", "cn/r"); seq != 1 {
+		t.Fatalf("expected submit sequence 1, got %d", seq)
+	}
+	if len(client.pending) != 0 {
+		t.Fatalf("expected failed submit to clear pending entry, got %d", len(client.pending))
+	}
+	spy.mu.Lock()
+	defer spy.mu.Unlock()
+	if spy.disconnects != 1 {
+		t.Fatalf("expected write failure to notify one disconnect, got %d", spy.disconnects)
 	}
 }
 

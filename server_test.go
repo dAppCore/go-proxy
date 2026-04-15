@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"crypto/tls"
 	"net"
 	"testing"
 	"time"
@@ -163,5 +164,73 @@ func TestProxy_buildServers_TLSListenerRequiresEnabled_Bad(t *testing.T) {
 
 	if buildResult := p.buildServers(); buildResult.OK {
 		t.Fatal("expected TLS listener without enabled TLS config to fail")
+	}
+}
+
+func TestServer_Start_Good(t *testing.T) {
+	accepted := make(chan struct{}, 1)
+	srv, result := NewServer(BindAddr{Host: "127.0.0.1", Port: 0}, nil, nil, func(net.Conn, uint16) {
+		accepted <- struct{}{}
+	})
+	if !result.OK {
+		t.Fatalf("expected server construction to succeed, got %v", result.Error)
+	}
+	defer srv.Stop()
+
+	srv.Start()
+	conn, err := net.Dial("tcp", srv.listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial server: %v", err)
+	}
+	defer conn.Close()
+
+	select {
+	case <-accepted:
+	case <-time.After(time.Second):
+		t.Fatal("expected server to accept connection")
+	}
+}
+
+func TestServer_Start_Bad(t *testing.T) {
+	var srv *Server
+	srv.Start()
+}
+
+func TestServer_Start_Ugly(t *testing.T) {
+	dir := t.TempDir()
+	certFile, keyFile := writeTestCertPair(t, dir)
+	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		t.Fatalf("load key pair: %v", err)
+	}
+
+	accepted := 0
+	srv, result := NewServer(BindAddr{Host: "127.0.0.1", Port: 0, TLS: true}, &tls.Config{Certificates: []tls.Certificate{cert}}, nil, func(net.Conn, uint16) {
+		accepted++
+	})
+	if !result.OK {
+		t.Fatalf("expected TLS server construction to succeed, got %v", result.Error)
+	}
+	defer srv.Stop()
+
+	srv.Start()
+	conn, err := net.Dial("tcp", srv.listener.Addr().String())
+	if err != nil {
+		t.Fatalf("dial TLS server: %v", err)
+	}
+	defer conn.Close()
+
+	time.Sleep(minerTLSHandshakeTimeout + 500*time.Millisecond)
+
+	if accepted != 0 {
+		t.Fatalf("expected stalled handshake not to reach accept callback, got %d", accepted)
+	}
+
+	if err := conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+		t.Fatalf("set read deadline: %v", err)
+	}
+	buf := make([]byte, 1)
+	if _, err := conn.Read(buf); err == nil {
+		t.Fatal("expected stalled TLS handshake to be closed by server timeout")
 	}
 }
