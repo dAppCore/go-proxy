@@ -1454,15 +1454,15 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	m.extAlgo = len(m.loginAlgos) > 0
 	m.rpcID = generateUUID()
 	m.mu.Unlock()
-	m.mu.Lock()
-	m.state = MinerStateWaitReady
-	m.mu.Unlock()
 	if m.onLogin != nil {
 		m.onLogin(m)
 	}
 	if m.State() == MinerStateClosing {
 		return
 	}
+	m.mu.Lock()
+	m.state = MinerStateWaitReady
+	m.mu.Unlock()
 	if extNH {
 		if m.MapperID() < 0 {
 			m.rejectLogin(requestID(request.ID), "Proxy is full, try again later")
