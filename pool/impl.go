@@ -501,7 +501,17 @@ func (s *FailoverStrategy) ReloadPools() {
 
 // active := strategy.IsActive()
 func (s *FailoverStrategy) IsActive() bool {
-	return s != nil && s.client != nil && s.client.IsActive()
+	if s == nil {
+		return false
+	}
+	s.mu.Lock()
+	client := s.client
+	closing := s.closing
+	s.mu.Unlock()
+	if closing || client == nil {
+		return false
+	}
+	return client.IsActive()
 }
 
 // Tick keeps an active pool connection alive when configured.

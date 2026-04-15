@@ -28,7 +28,7 @@ func TestFailoverStrategy_Disconnect_Good(t *testing.T) {
 		listener: spy,
 		client:   &StratumClient{listener: nil},
 	}
-	strategy.client.listener = strategy
+	strategy.Client().listener = strategy
 
 	strategy.Disconnect()
 	time.Sleep(10 * time.Millisecond)
@@ -55,7 +55,7 @@ func TestFailoverStrategy_Disconnect_Ugly(t *testing.T) {
 		listener: spy,
 		client:   &StratumClient{listener: nil},
 	}
-	strategy.client.listener = strategy
+	strategy.Client().listener = strategy
 
 	strategy.Disconnect()
 	strategy.Disconnect()
@@ -110,7 +110,7 @@ func TestFailoverStrategy_OnDisconnect_ClearsClient_Bad(t *testing.T) {
 	strategy.OnDisconnect()
 	time.Sleep(10 * time.Millisecond)
 
-	if strategy.client != nil {
+	if strategy.Client() != nil {
 		t.Fatalf("expected strategy to drop the stale client before reconnect")
 	}
 	if strategy.IsActive() {

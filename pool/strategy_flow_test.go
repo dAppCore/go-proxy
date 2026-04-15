@@ -181,13 +181,13 @@ func TestFailoverStrategy_Connect_Ugly(t *testing.T) {
 	}
 	spy.mu.Unlock()
 
-	if strategy.current != 1 {
-		t.Fatalf("expected failover to advance to the second enabled pool, got index %d", strategy.current)
+	if got := strategy.CurrentIndex(); got != 1 {
+		t.Fatalf("expected failover to advance to the second enabled pool, got index %d", got)
 	}
-	if strategy.client == nil {
+	if strategy.Client() == nil {
 		t.Fatal("expected strategy to retain the connected client")
 	}
-	if got := strategy.client.config.URL; got != addr {
+	if got := strategy.Client().config.URL; got != addr {
 		t.Fatalf("expected strategy to connect to %q, got %q", addr, got)
 	}
 }
@@ -243,7 +243,7 @@ func TestFailoverStrategy_ReloadPools_Good(t *testing.T) {
 	<-accepts
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if strategy.client != nil && strategy.client.SessionID() != "" {
+		if client := strategy.Client(); client != nil && client.SessionID() != "" {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)

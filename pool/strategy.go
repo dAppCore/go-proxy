@@ -23,6 +23,26 @@ type FailoverStrategy struct {
 	mu       sync.Mutex
 }
 
+// CurrentIndex returns the active pool index selected by the strategy.
+func (s *FailoverStrategy) CurrentIndex() int {
+	if s == nil {
+		return -1
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.current
+}
+
+// Client returns the current pool client, if any.
+func (s *FailoverStrategy) Client() *StratumClient {
+	if s == nil {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.client
+}
+
 // StrategyFactory creates a FailoverStrategy for a given StratumListener.
 //
 //	factory := pool.NewStrategyFactory(cfg)

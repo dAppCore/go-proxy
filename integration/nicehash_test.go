@@ -310,6 +310,53 @@ func loginMiner(t *testing.T, address, login string) (net.Conn, *bufio.Reader, m
 	if err := json.Unmarshal(line, &response); err != nil {
 		t.Fatalf("decode login response: %v", err)
 	}
+	if response.Error == nil && (response.Result == nil || response.Result.Job.JobID == "") {
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			_ = conn.SetReadDeadline(time.Now().Add(250 * time.Millisecond))
+			line, err := reader.ReadBytes('\n')
+			if err != nil {
+				if netErr, ok := err.(net.Error); ok && netErr.Timeout() {
+					continue
+				}
+				t.Fatalf("read login job notification: %v", err)
+			}
+			var notification struct {
+				Method string `json:"method"`
+				Params struct {
+					Blob   string `json:"blob"`
+					JobID  string `json:"job_id"`
+					Target string `json:"target"`
+				} `json:"params"`
+			}
+			if err := json.Unmarshal(line, &notification); err != nil {
+				continue
+			}
+			if notification.Method == "job" && notification.Params.JobID != "" {
+				if response.Result == nil {
+					response.Result = &struct {
+						ID  string `json:"id"`
+						Job struct {
+							Blob   string `json:"blob"`
+							JobID  string `json:"job_id"`
+							Target string `json:"target"`
+						} `json:"job"`
+					}{}
+				}
+				response.Result.Job = struct {
+					Blob   string `json:"blob"`
+					JobID  string `json:"job_id"`
+					Target string `json:"target"`
+				}{
+					Blob:   notification.Params.Blob,
+					JobID:  notification.Params.JobID,
+					Target: notification.Params.Target,
+				}
+				break
+			}
+		}
+		_ = conn.SetReadDeadline(time.Time{})
+	}
 	return conn, reader, response
 }
 
