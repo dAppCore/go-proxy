@@ -245,6 +245,9 @@ func (p *Proxy) Start() {
 		p.Stop()
 		return
 	}
+	if p.splitter != nil {
+		p.splitter.Connect()
+	}
 	p.lifecycleMu.Lock()
 	servers := append([]*Server(nil), p.servers...)
 	p.lifecycleMu.Unlock()
@@ -252,9 +255,6 @@ func (p *Proxy) Start() {
 		if server != nil {
 			server.Start()
 		}
-	}
-	if p.splitter != nil {
-		p.splitter.Connect()
 	}
 	if p.watcher != nil {
 		p.watcher.Start()
@@ -598,6 +598,9 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner.mu.Unlock()
 	miner.extNH = equalFoldString(mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
+		if p.customDiff != nil {
+			p.customDiff.OnLogin(Event{Miner: m})
+		}
 		if p.splitter != nil {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
 		}
