@@ -1550,17 +1550,7 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 	payload := map[string]any{
 		"jsonrpc": "2.0",
 		"method":  "job",
-		"params": map[string]any{
-			"blob":      renderedJob.Blob,
-			"job_id":    renderedJob.JobID,
-			"target":    renderedJob.Target,
-			"id":        m.sessionID(),
-			"height":    renderedJob.Height,
-			"seed_hash": renderedJob.SeedHash,
-		},
-	}
-	if m.supportsAlgoExtension() && effectiveAlgo != "" {
-		payload["params"].(map[string]any)["algo"] = effectiveAlgo
+		"params":  buildMinerJobPayload(renderedJob, m.sessionID(), m.supportsAlgoExtension(), effectiveAlgo),
 	}
 	_ = m.writeJSON(payload)
 	m.touchActivity()
@@ -1584,18 +1574,7 @@ func (m *Miner) replyLoginSuccess(id int64) {
 	}
 	if job := m.CurrentJob(); job.IsValid() {
 		renderedJob, effectiveAlgo := m.renderJob(job, job.Algo)
-		jobPayload := map[string]any{
-			"blob":      renderedJob.Blob,
-			"job_id":    renderedJob.JobID,
-			"target":    renderedJob.Target,
-			"id":        m.sessionID(),
-			"height":    renderedJob.Height,
-			"seed_hash": renderedJob.SeedHash,
-		}
-		if m.supportsAlgoExtension() && effectiveAlgo != "" {
-			jobPayload["algo"] = effectiveAlgo
-		}
-		result["job"] = jobPayload
+		result["job"] = buildMinerJobPayload(renderedJob, m.sessionID(), m.supportsAlgoExtension(), effectiveAlgo)
 		m.touchActivity()
 		m.mu.Lock()
 		m.state = MinerStateReady
@@ -1635,6 +1614,25 @@ func (m *Miner) renderJob(job Job, algo string) (Job, string) {
 	m.diff = effectiveDiff
 	m.mu.Unlock()
 	return rendered, algo
+}
+
+func buildMinerJobPayload(job Job, sessionID string, includeAlgo bool, algo string) map[string]any {
+	payload := map[string]any{
+		"blob":   job.Blob,
+		"job_id": job.JobID,
+		"target": job.Target,
+		"id":     sessionID,
+	}
+	if includeAlgo && algo != "" {
+		payload["algo"] = algo
+	}
+	if job.Height > 0 {
+		payload["height"] = job.Height
+	}
+	if job.SeedHash != "" {
+		payload["seed_hash"] = job.SeedHash
+	}
+	return payload
 }
 
 func (m *Miner) ReplyWithError(id int64, message string) {

@@ -156,8 +156,10 @@ func (c *StratumClient) Submit(jobID, nonce, result, algo string) int64 {
 			"job_id": jobID,
 			"nonce":  nonce,
 			"result": result,
-			"algo":   algo,
 		},
+	}
+	if algo != "" {
+		req["params"].(map[string]any)["algo"] = algo
 	}
 	if err := c.writeJSON(req); err != nil {
 		c.mu.Lock()
