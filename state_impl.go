@@ -871,6 +871,7 @@ func (p *Proxy) registerMonitoringRoute(mux *http.ServeMux, pattern string, rend
 }
 
 // AllowMonitoringRequest applies the configured monitoring API access checks.
+// Monitoring documents are GET-only regardless of HTTP.Restricted.
 //
 //	status, ok := p.AllowMonitoringRequest(request)
 func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
@@ -881,7 +882,7 @@ func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 		return http.StatusServiceUnavailable, false
 	}
 	httpCfg := p.currentHTTPConfig()
-	if httpCfg.Restricted && r.Method != http.MethodGet {
+	if r.Method != http.MethodGet {
 		return http.StatusMethodNotAllowed, false
 	}
 	if token := httpCfg.AccessToken; token != "" {

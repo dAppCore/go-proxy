@@ -74,11 +74,11 @@ func TestProxy_allowHTTP_Unrestricted_Bad(t *testing.T) {
 	}
 
 	status, ok := p.AllowMonitoringRequest(&http.Request{Method: http.MethodPost})
-	if !ok {
-		t.Fatalf("expected unrestricted non-GET request to pass, got status %d", status)
+	if ok {
+		t.Fatal("expected monitoring POST request to be rejected")
 	}
-	if status != http.StatusOK {
-		t.Fatalf("expected status %d, got %d", http.StatusOK, status)
+	if status != http.StatusMethodNotAllowed {
+		t.Fatalf("expected status %d, got %d", http.StatusMethodNotAllowed, status)
 	}
 }
 
