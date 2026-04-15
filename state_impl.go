@@ -1919,7 +1919,12 @@ func (s *Stats) Summary() StatsSummary {
 	if len(s.latency) > 0 {
 		samples := append([]uint16(nil), s.latency...)
 		sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
-		summary.AvgLatency = uint32(samples[len(samples)/2])
+		middle := len(samples) / 2
+		if len(samples)%2 == 0 {
+			summary.AvgLatency = uint32(samples[middle-1]+samples[middle]) / 2
+		} else {
+			summary.AvgLatency = uint32(samples[middle])
+		}
 	}
 	summary.TopDiff = s.topDiff
 	for i := range s.windows {
