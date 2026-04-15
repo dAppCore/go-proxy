@@ -1934,7 +1934,9 @@ func (s *Stats) Summary() StatsSummary {
 		sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
 		middle := len(samples) / 2
 		if len(samples)%2 == 0 {
-			summary.AvgLatency = uint32(samples[middle-1]+samples[middle]) / 2
+			left := uint32(samples[middle-1])
+			right := uint32(samples[middle])
+			summary.AvgLatency = (left + right) / 2
 		} else {
 			summary.AvgLatency = uint32(samples[middle])
 		}
