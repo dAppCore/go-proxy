@@ -69,8 +69,9 @@ func LoadConfig(path string) (*Config, Result) {
 
 	config := &Config{}
 	data, _ := readResult.Value.(string)
-	if !jsonUnmarshalString(data, config) {
-		return nil, newErrorResult(NewScopedError("proxy.config", "parse failed", nil))
+	if parseResult := core.JSONUnmarshalString(data, config); !parseResult.OK {
+		cause, _ := parseResult.Value.(error)
+		return nil, newErrorResult(NewScopedError("proxy.config", "parse failed", cause))
 	}
 	normalizeConfigValues(config)
 	config.configPath = path
