@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	coreapi "dappco.re/go/core/api"
 	"dappco.re/go/proxy"
 )
 
@@ -21,12 +22,16 @@ func TestRegisterRoutes_GETSummary_Good(t *testing.T) {
 		t.Fatalf("new proxy: %v", result.Error)
 	}
 
-	router := http.NewServeMux()
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
 	RegisterRoutes(router, p)
+	handler := router.Handler()
 
-	request := httptest.NewRequest(http.MethodGet, "/1/summary", nil)
+	request := httptest.NewRequest("GET", "/1/summary", nil)
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, request)
+	handler.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
@@ -59,12 +64,16 @@ func TestRegisterRoutes_POSTSummary_Bad(t *testing.T) {
 		t.Fatalf("new proxy: %v", result.Error)
 	}
 
-	router := http.NewServeMux()
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
 	RegisterRoutes(router, p)
+	handler := router.Handler()
 
-	request := httptest.NewRequest(http.MethodPost, "/1/summary", nil)
+	request := httptest.NewRequest("POST", "/1/summary", nil)
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, request)
+	handler.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("expected %d, got %d", http.StatusMethodNotAllowed, recorder.Code)
@@ -83,12 +92,16 @@ func TestRegisterRoutes_POSTSummary_Unrestricted_Good(t *testing.T) {
 		t.Fatalf("new proxy: %v", result.Error)
 	}
 
-	router := http.NewServeMux()
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
 	RegisterRoutes(router, p)
+	handler := router.Handler()
 
-	request := httptest.NewRequest(http.MethodPost, "/1/summary", nil)
+	request := httptest.NewRequest("POST", "/1/summary", nil)
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, request)
+	handler.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
@@ -115,12 +128,16 @@ func TestRegisterRoutes_GETMiners_Ugly(t *testing.T) {
 		t.Fatalf("new proxy: %v", result.Error)
 	}
 
-	router := http.NewServeMux()
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
 	RegisterRoutes(router, p)
+	handler := router.Handler()
 
-	request := httptest.NewRequest(http.MethodGet, "/1/miners", nil)
+	request := httptest.NewRequest("GET", "/1/miners", nil)
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, request)
+	handler.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
@@ -155,12 +172,16 @@ func TestRegisterRoutes_GETSummaryAuthRequired_Bad(t *testing.T) {
 		t.Fatalf("new proxy: %v", result.Error)
 	}
 
-	router := http.NewServeMux()
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
 	RegisterRoutes(router, p)
+	handler := router.Handler()
 
-	request := httptest.NewRequest(http.MethodGet, "/1/summary", nil)
+	request := httptest.NewRequest("GET", "/1/summary", nil)
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, request)
+	handler.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("expected %d, got %d", http.StatusUnauthorized, recorder.Code)
@@ -187,13 +208,17 @@ func TestRegisterRoutes_GETSummaryAuthGranted_Ugly(t *testing.T) {
 		t.Fatalf("new proxy: %v", result.Error)
 	}
 
-	router := http.NewServeMux()
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
 	RegisterRoutes(router, p)
+	handler := router.Handler()
 
-	request := httptest.NewRequest(http.MethodGet, "/1/summary", nil)
+	request := httptest.NewRequest("GET", "/1/summary", nil)
 	request.Header.Set("Authorization", "Bearer secret")
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, request)
+	handler.ServeHTTP(recorder, request)
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)

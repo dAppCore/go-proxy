@@ -1,54 +1,65 @@
-// Package api mounts the monitoring endpoints on an HTTP mux.
+// Package api mounts the monitoring endpoints on a Core API engine.
 //
-//	mux := http.NewServeMux()
-//	api.RegisterRoutes(mux, proxyInstance)
+//	engine, _ := coreapi.New()
+//	api.RegisterRoutes(engine, proxyInstance)
 package api
 
 import (
-	"encoding/json"
 	"net/http"
 
+	core "dappco.re/go/core"
+	coreapi "dappco.re/go/core/api"
 	"dappco.re/go/proxy"
+	"github.com/gin-gonic/gin"
 )
 
-// Engine accepts HTTP handler registrations.
-//
-//	mux := http.NewServeMux()
-//	api.RegisterRoutes(mux, proxyInstance)
-type Engine interface {
-	HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request))
+type monitoringRoutes struct {
+	proxy *proxy.Proxy
 }
 
-// mux := http.NewServeMux()
-// api.RegisterRoutes(mux, proxyInstance)
-// _ = mux
+// api.RegisterRoutes(engine, proxyInstance)
 //
 // The mounted routes are GET /1/summary, /1/workers, and /1/miners.
-type RouteRegistrar = Engine
-
-func RegisterRoutes(router Engine, p *proxy.Proxy) {
+func RegisterRoutes(router *coreapi.Engine, p *proxy.Proxy) {
 	if router == nil || p == nil {
 		return
 	}
-	registerJSONGetRoute(router, p, proxy.MonitoringRouteSummary, func() any { return p.SummaryDocument() })
-	registerJSONGetRoute(router, p, proxy.MonitoringRouteWorkers, func() any { return p.WorkersDocument() })
-	registerJSONGetRoute(router, p, proxy.MonitoringRouteMiners, func() any { return p.MinersDocument() })
+	router.Register(&monitoringRoutes{proxy: p})
 }
 
-func registerJSONGetRoute(router RouteRegistrar, proxyInstance *proxy.Proxy, pattern string, renderDocument func() any) {
-	router.HandleFunc(pattern, func(w http.ResponseWriter, request *http.Request) {
-		if status, ok := allowMonitoringRequest(proxyInstance, request); !ok {
+func (routes *monitoringRoutes) Name() string {
+	return "proxy-monitoring"
+}
+
+func (routes *monitoringRoutes) BasePath() string {
+	return "/1"
+}
+
+func (routes *monitoringRoutes) RegisterRoutes(group *gin.RouterGroup) {
+	if routes == nil || routes.proxy == nil || group == nil {
+		return
+	}
+	registerJSONRoute(group, routes.proxy, "/summary", func() any { return routes.proxy.SummaryDocument() })
+	registerJSONRoute(group, routes.proxy, "/workers", func() any { return routes.proxy.WorkersDocument() })
+	registerJSONRoute(group, routes.proxy, "/miners", func() any { return routes.proxy.MinersDocument() })
+}
+
+func registerJSONRoute(group *gin.RouterGroup, proxyInstance *proxy.Proxy, path string, renderDocument func() any) {
+	handler := func(context *gin.Context) {
+		if status, ok := allowMonitoringRequest(proxyInstance, context.Request); !ok {
 			switch status {
 			case http.StatusMethodNotAllowed:
-				w.Header().Set("Allow", http.MethodGet)
+				context.Header("Allow", http.MethodGet)
 			case http.StatusUnauthorized:
-				w.Header().Set("WWW-Authenticate", "Bearer")
+				context.Header("WWW-Authenticate", "Bearer")
 			}
-			w.WriteHeader(status)
+			context.Status(status)
 			return
 		}
-		writeJSON(w, renderDocument())
-	})
+		writeJSON(context.Writer, renderDocument())
+	}
+	group.GET(path, handler)
+	group.POST(path, handler)
 }
 
 func allowMonitoringRequest(proxyInstance *proxy.Proxy, request *http.Request) (int, bool) {
@@ -58,7 +69,7 @@ func allowMonitoringRequest(proxyInstance *proxy.Proxy, request *http.Request) (
 	return proxyInstance.AllowMonitoringRequest(request)
 }
 
-func writeJSON(w http.ResponseWriter, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(payload)
+func writeJSON(writer http.ResponseWriter, payload any) {
+	writer.Header().Set("Content-Type", "application/json")
+	_, _ = writer.Write([]byte(core.JSONMarshalString(payload) + "\n"))
 }

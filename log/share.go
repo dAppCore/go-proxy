@@ -1,7 +1,7 @@
 package log
 
 import (
-	"os"
+	"io"
 	"sync"
 )
 
@@ -16,5 +16,5 @@ import (
 type ShareLog struct {
 	path string
 	mu   sync.Mutex
-	file *os.File
+	file io.WriteCloser
 }

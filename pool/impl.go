@@ -5,11 +5,9 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/hex"
-	"encoding/json"
 	"io"
 	"net"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -80,11 +78,11 @@ func (c *StratumClient) Connect() proxy.Result {
 	}
 	if c.config.TLS {
 		host := addr
-		if strings.Contains(addr, ":") {
+		if containsString(addr, ":") {
 			host, _, _ = net.SplitHostPort(addr)
 		}
 		tlsCfg := &tls.Config{ServerName: host}
-		if strings.TrimSpace(c.config.TLSFingerprint) != "" {
+		if trimString(c.config.TLSFingerprint) != "" {
 			tlsCfg.InsecureSkipVerify = true
 		}
 		tlsConn := tls.Client(conn, tlsCfg)
@@ -92,7 +90,7 @@ func (c *StratumClient) Connect() proxy.Result {
 			_ = conn.Close()
 			return proxy.Result{OK: false, Error: proxy.NewScopedError("proxy.pool.tls", "handshake failed", err)}
 		}
-		if fp := strings.TrimSpace(strings.ToLower(c.config.TLSFingerprint)); fp != "" {
+		if fp := lowerString(trimString(c.config.TLSFingerprint)); fp != "" {
 			cert := tlsConn.ConnectionState().PeerCertificates
 			if len(cert) == 0 {
 				_ = tlsConn.Close()
@@ -246,10 +244,8 @@ func (c *StratumClient) writeJSON(payload any) error {
 	if c.conn == nil {
 		return proxy.NewScopedError("proxy.pool.client", "connection is nil", nil)
 	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return proxy.NewScopedError("proxy.pool.client", "marshal request failed", err)
-	}
+	data := []byte(jsonMarshalString(payload))
+	var err error
 	data = append(data, '\n')
 	_, err = c.conn.Write(data)
 	if err != nil {
@@ -261,7 +257,13 @@ func (c *StratumClient) writeJSON(payload any) error {
 
 func (c *StratumClient) readLoop() {
 	defer c.notifyDisconnect()
-	reader := bufio.NewReaderSize(c.conn, maxStratumLineLength+1)
+	c.mu.Lock()
+	conn := c.conn
+	c.mu.Unlock()
+	if conn == nil {
+		return
+	}
+	reader := bufio.NewReaderSize(conn, maxStratumLineLength+1)
 	for {
 		line, isPrefix, err := reader.ReadLine()
 		if err != nil {
@@ -282,52 +284,39 @@ func (c *StratumClient) readLoop() {
 
 func (c *StratumClient) handleMessage(line []byte) {
 	var base struct {
-		ID     any             `json:"id"`
-		Method string          `json:"method"`
-		Result json.RawMessage `json:"result"`
-		Error  json.RawMessage `json:"error"`
-		Params json.RawMessage `json:"params"`
+		ID     any            `json:"id"`
+		Method string         `json:"method"`
+		Result map[string]any `json:"result"`
+		Error  map[string]any `json:"error"`
+		Params map[string]any `json:"params"`
 	}
-	if err := json.Unmarshal(line, &base); err != nil {
+	if !jsonUnmarshalBytes(line, &base) {
 		return
 	}
 
 	if len(base.Result) > 0 {
-		var loginReply struct {
-			ID  string `json:"id"`
-			Job *struct {
-				Blob     string `json:"blob"`
-				JobID    string `json:"job_id"`
-				Target   string `json:"target"`
-				Algo     string `json:"algo"`
-				Height   uint64 `json:"height"`
-				SeedHash string `json:"seed_hash"`
-				ID       string `json:"id"`
-			} `json:"job"`
+		sessionID := valueString(base.Result["id"])
+		if sessionID != "" {
+			c.mu.Lock()
+			c.sessionID = sessionID
+			c.mu.Unlock()
 		}
-		if err := json.Unmarshal(base.Result, &loginReply); err == nil {
-			if loginReply.ID != "" {
-				c.mu.Lock()
-				c.sessionID = loginReply.ID
-				c.mu.Unlock()
+		if jobMap, ok := base.Result["job"].(map[string]any); ok && valueString(jobMap["job_id"]) != "" {
+			c.mu.Lock()
+			c.active = true
+			c.mu.Unlock()
+			if c.listener != nil {
+				c.listener.OnJob(proxy.Job{
+					Blob:     valueString(jobMap["blob"]),
+					JobID:    valueString(jobMap["job_id"]),
+					Target:   valueString(jobMap["target"]),
+					Algo:     valueString(jobMap["algo"]),
+					Height:   valueUint64(jobMap["height"]),
+					SeedHash: valueString(jobMap["seed_hash"]),
+					ClientID: valueString(jobMap["id"]),
+				})
 			}
-			if loginReply.Job != nil && loginReply.Job.JobID != "" {
-				c.mu.Lock()
-				c.active = true
-				c.mu.Unlock()
-				if c.listener != nil {
-					c.listener.OnJob(proxy.Job{
-						Blob:     loginReply.Job.Blob,
-						JobID:    loginReply.Job.JobID,
-						Target:   loginReply.Job.Target,
-						Algo:     loginReply.Job.Algo,
-						Height:   loginReply.Job.Height,
-						SeedHash: loginReply.Job.SeedHash,
-						ClientID: loginReply.Job.ID,
-					})
-				}
-				return
-			}
+			return
 		}
 	}
 
@@ -337,30 +326,18 @@ func (c *StratumClient) handleMessage(line []byte) {
 	}
 
 	if base.Method == "job" {
-		var params struct {
-			Blob     string `json:"blob"`
-			JobID    string `json:"job_id"`
-			Target   string `json:"target"`
-			Algo     string `json:"algo"`
-			Height   uint64 `json:"height"`
-			SeedHash string `json:"seed_hash"`
-			ID       string `json:"id"`
-		}
-		if err := json.Unmarshal(base.Params, &params); err != nil {
-			return
-		}
 		c.mu.Lock()
 		c.active = true
 		c.mu.Unlock()
 		if c.listener != nil {
 			c.listener.OnJob(proxy.Job{
-				Blob:     params.Blob,
-				JobID:    params.JobID,
-				Target:   params.Target,
-				Algo:     params.Algo,
-				Height:   params.Height,
-				SeedHash: params.SeedHash,
-				ClientID: params.ID,
+				Blob:     valueString(base.Params["blob"]),
+				JobID:    valueString(base.Params["job_id"]),
+				Target:   valueString(base.Params["target"]),
+				Algo:     valueString(base.Params["algo"]),
+				Height:   valueUint64(base.Params["height"]),
+				SeedHash: valueString(base.Params["seed_hash"]),
+				ClientID: valueString(base.Params["id"]),
 			})
 		}
 		return
@@ -380,23 +357,13 @@ func (c *StratumClient) handleMessage(line []byte) {
 		return
 	}
 
-	var payload struct {
-		Status string `json:"status"`
-	}
-	if len(base.Result) > 0 {
-		_ = json.Unmarshal(base.Result, &payload)
-	}
 	accepted := len(base.Error) == 0
-	if payload.Status != "" && strings.EqualFold(payload.Status, "OK") {
+	if status := valueString(base.Result["status"]); status != "" && equalFoldString(status, "OK") {
 		accepted = true
 	}
 	errorMessage := ""
 	if !accepted && len(base.Error) > 0 {
-		var errPayload struct {
-			Message string `json:"message"`
-		}
-		_ = json.Unmarshal(base.Error, &errPayload)
-		errorMessage = errPayload.Message
+		errorMessage = valueString(base.Error["message"])
 	}
 	if c.listener != nil {
 		c.listener.OnResultAccepted(seq, accepted, errorMessage)

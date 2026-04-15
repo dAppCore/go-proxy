@@ -1,15 +1,14 @@
 package proxy
 
 import (
-	"os"
-	"strings"
+	"io"
 	"sync"
 	"time"
 )
 
 type shareLogSink struct {
 	path string
-	file *os.File
+	file io.WriteCloser
 	mu   sync.Mutex
 }
 
@@ -62,17 +61,17 @@ func (l *shareLogSink) OnReject(e Event) {
 func (l *shareLogSink) writeLine(kind, user string, diff uint64, latency uint16, reason string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if strings.TrimSpace(l.path) == "" {
+	if trimString(l.path) == "" {
 		return
 	}
 	if l.file == nil {
-		file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		if err != nil {
+		file := openAppendFile(l.path)
+		if file == nil {
 			return
 		}
 		l.file = file
 	}
-	var builder strings.Builder
+	builder := newBuilder()
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteByte(' ')
 	builder.WriteString(kind)
@@ -91,5 +90,5 @@ func (l *shareLogSink) writeLine(kind, user string, diff uint64, latency uint16,
 		builder.WriteString("\"")
 	}
 	builder.WriteByte('\n')
-	_, _ = l.file.WriteString(builder.String())
+	_, _ = l.file.Write([]byte(builder.String()))
 }

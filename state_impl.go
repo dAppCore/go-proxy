@@ -5,13 +5,11 @@ import (
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
-	"encoding/json"
 	"net"
 	"net/http"
 	"reflect"
 	"sort"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -584,7 +582,7 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner.mu.Lock()
 	miner.globalDiff = customDiff
 	miner.mu.Unlock()
-	miner.extNH = strings.EqualFold(mode, "nicehash")
+	miner.extNH = equalFoldString(mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
 		if p.splitter != nil {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
@@ -638,7 +636,7 @@ func buildTLSConfig(cfg TLSConfig) (*tls.Config, Result) {
 }
 
 func applyTLSProtocols(tlsConfig *tls.Config, protocols string) {
-	if tlsConfig == nil || strings.TrimSpace(protocols) == "" {
+	if tlsConfig == nil || trimString(protocols) == "" {
 		return
 	}
 	parts := splitTLSConfigList(protocols)
@@ -648,8 +646,8 @@ func applyTLSProtocols(tlsConfig *tls.Config, protocols string) {
 		if part == "" {
 			continue
 		}
-		if strings.Contains(part, "-") {
-			bounds := strings.SplitN(part, "-", 2)
+		if containsString(part, "-") {
+			bounds := splitStringN(part, "-", 2)
 			low := parseTLSVersion(bounds[0])
 			high := parseTLSVersion(bounds[1])
 			if low == 0 || high == 0 {
@@ -683,7 +681,7 @@ func applyTLSProtocols(tlsConfig *tls.Config, protocols string) {
 }
 
 func applyTLSCiphers(tlsConfig *tls.Config, ciphers string) {
-	if tlsConfig == nil || strings.TrimSpace(ciphers) == "" {
+	if tlsConfig == nil || trimString(ciphers) == "" {
 		return
 	}
 	parts := splitTLSConfigList(ciphers)
@@ -695,24 +693,24 @@ func applyTLSCiphers(tlsConfig *tls.Config, ciphers string) {
 }
 
 func lookupTLSCipherSuite(value string) (uint16, bool) {
-	name := strings.ToLower(strings.TrimSpace(value))
+	name := lowerString(trimString(value))
 	if name == "" {
 		return 0, false
 	}
 
 	allowed := map[string]uint16{}
 	for _, suite := range tls.CipherSuites() {
-		allowed[strings.ToLower(suite.Name)] = suite.ID
+		allowed[lowerString(suite.Name)] = suite.ID
 	}
 	for _, suite := range tls.InsecureCipherSuites() {
-		allowed[strings.ToLower(suite.Name)] = suite.ID
+		allowed[lowerString(suite.Name)] = suite.ID
 	}
 	if id, ok := allowed[name]; ok {
 		return id, true
 	}
 
 	if alias, ok := tlsCipherSuiteAliases[name]; ok {
-		if id, ok := allowed[strings.ToLower(alias)]; ok {
+		if id, ok := allowed[lowerString(alias)]; ok {
 			return id, true
 		}
 	}
@@ -740,18 +738,11 @@ var tlsCipherSuiteAliases = map[string]string{
 }
 
 func splitTLSConfigList(value string) []string {
-	return strings.FieldsFunc(value, func(r rune) bool {
-		switch r {
-		case ',', ';', ':', '|', ' ':
-			return true
-		default:
-			return false
-		}
-	})
+	return splitFieldsBySeparators(value)
 }
 
 func parseTLSVersion(value string) uint16 {
-	switch strings.ToLower(strings.TrimSpace(value)) {
+	switch lowerString(trimString(value)) {
 	case "tls1.0", "tlsv1.0", "tls1", "tlsv1", "1.0", "1", "tls10", "tlsv10":
 		return tls.VersionTLS10
 	case "tls1.1", "tlsv1.1", "1.1", "tls11", "tlsv11":
@@ -824,8 +815,8 @@ func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 		return http.StatusMethodNotAllowed, false
 	}
 	if token := p.config.HTTP.AccessToken; token != "" {
-		parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") || !secureStringEqual(parts[1], token) {
+		parts := splitStringN(r.Header.Get("Authorization"), " ", 2)
+		if len(parts) != 2 || !equalFoldString(parts[0], "bearer") || !secureStringEqual(parts[1], token) {
 			return http.StatusUnauthorized, false
 		}
 	}
@@ -834,7 +825,7 @@ func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 
 func (p *Proxy) writeJSONResponse(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(payload)
+	_, _ = w.Write([]byte(jsonMarshalString(payload) + "\n"))
 }
 
 // SummaryDocument builds the RFC-shaped /1/summary response body.
@@ -1268,15 +1259,15 @@ func (m *Miner) readTimeout() time.Duration {
 }
 
 type stratumRequest struct {
-	ID      any             `json:"id"`
-	JSONRPC string          `json:"jsonrpc"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params"`
+	ID      any    `json:"id"`
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  any    `json:"params"`
 }
 
 func (m *Miner) handleLine(line []byte) bool {
 	var request stratumRequest
-	if err := json.Unmarshal(line, &request); err != nil {
+	if !jsonUnmarshalBytes(line, &request) {
 		return false
 	}
 	switch request.Method {
@@ -1302,8 +1293,27 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	if m.State() != MinerStateWaitLogin {
 		return
 	}
-	var params loginParams
-	if err := json.Unmarshal(request.Params, &params); err != nil || strings.TrimSpace(params.Login) == "" {
+	paramsMap := valueMap(request.Params)
+	if paramsMap == nil {
+		var params loginParams
+		if data, ok := request.Params.([]byte); ok && jsonUnmarshalBytes(data, &params) {
+			paramsMap = map[string]any{
+				"login": params.Login,
+				"pass":  params.Pass,
+				"agent": params.Agent,
+				"algo":  params.Algo,
+				"rigid": params.RigID,
+			}
+		}
+	}
+	params := loginParams{
+		Login: valueString(paramsMap["login"]),
+		Pass:  valueString(paramsMap["pass"]),
+		Agent: valueString(paramsMap["agent"]),
+		Algo:  valueStringSlice(paramsMap["algo"]),
+		RigID: valueString(paramsMap["rigid"]),
+	}
+	if trimString(params.Login) == "" {
 		m.ReplyWithError(requestID(request.ID), "Invalid payment address provided")
 		return
 	}
@@ -1368,7 +1378,7 @@ type resolvedCustomDiff struct {
 }
 
 func resolveLoginCustomDiff(login string, globalDiff uint64) resolvedCustomDiff {
-	plus := strings.LastIndex(login, "+")
+	plus := lastIndexByte(login, '+')
 	if plus >= 0 && plus < len(login)-1 {
 		suffix := login[plus+1:]
 		if isDecimalDigits(suffix) {
@@ -1408,9 +1418,17 @@ func (m *Miner) handleSubmit(request stratumRequest) {
 		Result string `json:"result"`
 		Algo   string `json:"algo"`
 	}
-	if err := json.Unmarshal(request.Params, &params); err != nil {
-		m.ReplyWithError(requestID(request.ID), "Invalid nonce")
-		return
+	paramsMap := valueMap(request.Params)
+	if paramsMap == nil {
+		if data, ok := request.Params.([]byte); ok {
+			_ = jsonUnmarshalBytes(data, &params)
+		}
+	} else {
+		params.ID = valueString(paramsMap["id"])
+		params.JobID = valueString(paramsMap["job_id"])
+		params.Nonce = valueString(paramsMap["nonce"])
+		params.Result = valueString(paramsMap["result"])
+		params.Algo = valueString(paramsMap["algo"])
 	}
 	m.mu.RLock()
 	rpcID := m.rpcID
@@ -1619,12 +1637,10 @@ func (m *Miner) writeJSON(payload any) error {
 	if m.conn == nil {
 		return nil
 	}
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
+	data := []byte(jsonMarshalString(payload))
 	data = append(data, '\n')
 	var written int
+	var err error
 	if len(data) <= len(m.buf) {
 		copy(m.buf[:], data)
 		written, err = m.conn.Write(m.buf[:len(data)])

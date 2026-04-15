@@ -1,12 +1,11 @@
 package log
 
 import (
-	"os"
 	"strconv"
-	"strings"
 	"time"
 	"unicode"
 
+	core "dappco.re/go/core"
 	"dappco.re/go/proxy"
 )
 
@@ -108,7 +107,7 @@ func (accessLog *AccessLog) writeConnectLine(ip, user, agent string) {
 	if err := accessLog.ensureFile(); err != nil {
 		return
 	}
-	var builder strings.Builder
+	builder := core.NewBuilder()
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteByte(' ')
 	builder.WriteString("CONNECT")
@@ -119,7 +118,7 @@ func (accessLog *AccessLog) writeConnectLine(ip, user, agent string) {
 	builder.WriteString("  ")
 	builder.WriteString(sanitizeLogField(agent))
 	builder.WriteByte('\n')
-	_, _ = accessLog.file.WriteString(builder.String())
+	_, _ = accessLog.file.Write([]byte(builder.String()))
 }
 
 func (accessLog *AccessLog) writeCloseLine(ip, user string, rx, tx uint64) {
@@ -128,7 +127,7 @@ func (accessLog *AccessLog) writeCloseLine(ip, user string, rx, tx uint64) {
 	if err := accessLog.ensureFile(); err != nil {
 		return
 	}
-	var builder strings.Builder
+	builder := core.NewBuilder()
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteByte(' ')
 	builder.WriteString("CLOSE")
@@ -141,7 +140,7 @@ func (accessLog *AccessLog) writeCloseLine(ip, user string, rx, tx uint64) {
 	builder.WriteString("  tx=")
 	builder.WriteString(strconv.FormatUint(tx, 10))
 	builder.WriteByte('\n')
-	_, _ = accessLog.file.WriteString(builder.String())
+	_, _ = accessLog.file.Write([]byte(builder.String()))
 }
 
 func (shareLog *ShareLog) writeAcceptLine(user string, diff uint64, latency uint64) {
@@ -150,7 +149,7 @@ func (shareLog *ShareLog) writeAcceptLine(user string, diff uint64, latency uint
 	if err := shareLog.ensureFile(); err != nil {
 		return
 	}
-	var builder strings.Builder
+	builder := core.NewBuilder()
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteString(" ACCEPT")
 	builder.WriteString("  ")
@@ -161,7 +160,7 @@ func (shareLog *ShareLog) writeAcceptLine(user string, diff uint64, latency uint
 	builder.WriteString(strconv.FormatUint(latency, 10))
 	builder.WriteString("ms")
 	builder.WriteByte('\n')
-	_, _ = shareLog.file.WriteString(builder.String())
+	_, _ = shareLog.file.Write([]byte(builder.String()))
 }
 
 func (shareLog *ShareLog) writeRejectLine(user, reason string) {
@@ -170,25 +169,31 @@ func (shareLog *ShareLog) writeRejectLine(user, reason string) {
 	if err := shareLog.ensureFile(); err != nil {
 		return
 	}
-	var builder strings.Builder
+	builder := core.NewBuilder()
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteString(" REJECT  ")
 	builder.WriteString(sanitizeLogField(user))
 	builder.WriteString("  reason=\"")
 	builder.WriteString(sanitizeLogField(reason))
 	builder.WriteString("\"\n")
-	_, _ = shareLog.file.WriteString(builder.String())
+	_, _ = shareLog.file.Write([]byte(builder.String()))
 }
 
 func (accessLog *AccessLog) ensureFile() error {
 	if accessLog.file != nil {
 		return nil
 	}
-	f, err := os.OpenFile(accessLog.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
+	file := core.New().Fs().Append(accessLog.path)
+	if !file.OK || file.Value == nil {
+		if err, ok := file.Value.(error); ok {
+			return err
+		}
+		return nil
 	}
-	accessLog.file = f
+	accessLog.file = file.Value.(interface {
+		Write([]byte) (int, error)
+		Close() error
+	})
 	return nil
 }
 
@@ -196,11 +201,17 @@ func (shareLog *ShareLog) ensureFile() error {
 	if shareLog.file != nil {
 		return nil
 	}
-	f, err := os.OpenFile(shareLog.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-	if err != nil {
-		return err
+	file := core.New().Fs().Append(shareLog.path)
+	if !file.OK || file.Value == nil {
+		if err, ok := file.Value.(error); ok {
+			return err
+		}
+		return nil
 	}
-	shareLog.file = f
+	shareLog.file = file.Value.(interface {
+		Write([]byte) (int, error)
+		Close() error
+	})
 	return nil
 }
 
@@ -208,7 +219,7 @@ func sanitizeLogField(value string) string {
 	if value == "" {
 		return ""
 	}
-	var builder strings.Builder
+	builder := core.NewBuilder()
 	builder.Grow(len(value))
 	for _, r := range value {
 		switch {

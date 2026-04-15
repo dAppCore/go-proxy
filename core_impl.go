@@ -5,13 +5,10 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
 	"io"
 	"math"
 	"net"
-	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -47,13 +44,13 @@ var splitterFactoriesByMode = map[string]func(*Config, *EventBus) Splitter{}
 func RegisterSplitterFactory(mode string, factory func(*Config, *EventBus) Splitter) {
 	splitterFactoriesMu.Lock()
 	defer splitterFactoriesMu.Unlock()
-	splitterFactoriesByMode[strings.ToLower(strings.TrimSpace(mode))] = factory
+	splitterFactoriesByMode[lowerString(trimString(mode))] = factory
 }
 
 func splitterFactoryForMode(mode string) (func(*Config, *EventBus) Splitter, bool) {
 	splitterFactoriesMu.RLock()
 	defer splitterFactoriesMu.RUnlock()
-	factory, ok := splitterFactoriesByMode[strings.ToLower(strings.TrimSpace(mode))]
+	factory, ok := splitterFactoriesByMode[lowerString(trimString(mode))]
 	return factory, ok
 }
 
@@ -63,14 +60,16 @@ func splitterFactoryForMode(mode string) (func(*Config, *EventBus) Splitter, boo
 //	    return result.Error
 //	}
 func LoadConfig(path string) (*Config, Result) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, newErrorResult(NewScopedError("proxy.config", "read config failed", err))
+	readResult := proxyFileSystem().Read(path)
+	if !readResult.OK {
+		cause, _ := readResult.Value.(error)
+		return nil, newErrorResult(NewScopedError("proxy.config", "read config failed", cause))
 	}
 
 	config := &Config{}
-	if err := json.Unmarshal(data, config); err != nil {
-		return nil, newErrorResult(NewScopedError("proxy.config", "parse config failed", err))
+	data, _ := readResult.Value.(string)
+	if !jsonUnmarshalString(data, config) {
+		return nil, newErrorResult(NewScopedError("proxy.config", "parse config failed", nil))
 	}
 	config.configPath = path
 	return config, Result{Value: config, OK: true}
@@ -90,7 +89,7 @@ func (c *Config) Validate() Result {
 	if c == nil {
 		return newErrorResult(NewScopedError("proxy.config", "config is nil", nil))
 	}
-	mode := strings.ToLower(strings.TrimSpace(c.Mode))
+	mode := lowerString(trimString(c.Mode))
 	if mode == "" {
 		return newErrorResult(NewScopedError("proxy.config", "mode is empty", nil))
 	}
@@ -104,7 +103,7 @@ func (c *Config) Validate() Result {
 		return newErrorResult(NewScopedError("proxy.config", "pool list is empty", nil))
 	}
 	for _, pool := range c.Pools {
-		if pool.Enabled && strings.TrimSpace(pool.URL) == "" {
+		if pool.Enabled && trimString(pool.URL) == "" {
 			return newErrorResult(NewScopedError("proxy.config", "enabled pool url is empty", nil))
 		}
 	}
@@ -112,7 +111,7 @@ func (c *Config) Validate() Result {
 }
 
 func isSupportedMode(mode string) bool {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
+	switch lowerString(trimString(mode)) {
 	case "nicehash", "simple":
 		return true
 	default:
@@ -394,8 +393,10 @@ func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher 
 		onConfigChange: onChange,
 		stopCh:         make(chan struct{}),
 	}
-	if info, err := os.Stat(configPath); err == nil {
-		watcher.lastModifiedAt = info.ModTime()
+	if infoResult := proxyFileSystem().Stat(configPath); infoResult.OK {
+		if info, ok := infoResult.Value.(interface{ ModTime() time.Time }); ok {
+			watcher.lastModifiedAt = info.ModTime()
+		}
 	}
 	return watcher
 }
@@ -431,7 +432,11 @@ func (w *ConfigWatcher) Start() {
 		for {
 			select {
 			case <-ticker.C:
-				if info, err := os.Stat(configPath); err == nil {
+				if infoResult := proxyFileSystem().Stat(configPath); infoResult.OK {
+					info, ok := infoResult.Value.(interface{ ModTime() time.Time })
+					if !ok {
+						continue
+					}
 					w.mu.Lock()
 					changed := info.ModTime() != w.lastModifiedAt
 					if changed {

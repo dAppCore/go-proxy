@@ -1,9 +1,6 @@
 package proxy
 
-import (
-	"strings"
-	"sync"
-)
+import "sync"
 
 // CustomDiffBucketStats tracks per-custom-difficulty share outcomes.
 type CustomDiffBucketStats struct {
@@ -108,15 +105,15 @@ func (b *CustomDiffBuckets) bucketLocked(diff uint64) *CustomDiffBucketStats {
 }
 
 func isInvalidShareReason(reason string) bool {
-	reason = strings.ToLower(reason)
+	reason = lowerString(reason)
 	if reason == "" {
 		return false
 	}
-	return strings.Contains(reason, "low diff") ||
-		strings.Contains(reason, "lowdifficulty") ||
-		strings.Contains(reason, "low difficulty") ||
-		strings.Contains(reason, "malformed") ||
-		strings.Contains(reason, "difficulty") ||
-		strings.Contains(reason, "invalid") ||
-		strings.Contains(reason, "nonce")
+	return containsString(reason, "low diff") ||
+		containsString(reason, "lowdifficulty") ||
+		containsString(reason, "low difficulty") ||
+		containsString(reason, "malformed") ||
+		containsString(reason, "difficulty") ||
+		containsString(reason, "invalid") ||
+		containsString(reason, "nonce")
 }

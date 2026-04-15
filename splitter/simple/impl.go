@@ -142,8 +142,8 @@ func (s *SimpleSplitter) Tick(ticks uint64) {
 	if s == nil {
 		return
 	}
-	strategies := make([]pool.Strategy, 0, len(s.active)+len(s.idle))
 	s.mu.Lock()
+	strategies := make([]pool.Strategy, 0, len(s.active)+len(s.idle))
 	for _, mapper := range s.active {
 		if mapper != nil && mapper.strategy != nil {
 			strategies = append(strategies, mapper.strategy)

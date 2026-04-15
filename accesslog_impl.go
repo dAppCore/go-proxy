@@ -1,9 +1,8 @@
 package proxy
 
 import (
-	"os"
+	"io"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 	"unicode"
@@ -11,7 +10,7 @@ import (
 
 type accessLogSink struct {
 	path string
-	file *os.File
+	file io.WriteCloser
 	mu   sync.Mutex
 }
 
@@ -64,17 +63,17 @@ func (l *accessLogSink) OnClose(e Event) {
 func (l *accessLogSink) writeConnectLine(ip, user, agent string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if strings.TrimSpace(l.path) == "" {
+	if trimString(l.path) == "" {
 		return
 	}
 	if l.file == nil {
-		file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		if err != nil {
+		file := openAppendFile(l.path)
+		if file == nil {
 			return
 		}
 		l.file = file
 	}
-	var builder strings.Builder
+	builder := newBuilder()
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteByte(' ')
 	builder.WriteString("CONNECT")
@@ -85,23 +84,23 @@ func (l *accessLogSink) writeConnectLine(ip, user, agent string) {
 	builder.WriteString("  ")
 	builder.WriteString(sanitizeLogField(agent))
 	builder.WriteByte('\n')
-	_, _ = l.file.WriteString(builder.String())
+	_, _ = l.file.Write([]byte(builder.String()))
 }
 
 func (l *accessLogSink) writeCloseLine(ip, user string, rx, tx uint64) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if strings.TrimSpace(l.path) == "" {
+	if trimString(l.path) == "" {
 		return
 	}
 	if l.file == nil {
-		file, err := os.OpenFile(l.path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
-		if err != nil {
+		file := openAppendFile(l.path)
+		if file == nil {
 			return
 		}
 		l.file = file
 	}
-	var builder strings.Builder
+	builder := newBuilder()
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteByte(' ')
 	builder.WriteString("CLOSE")
@@ -114,7 +113,7 @@ func (l *accessLogSink) writeCloseLine(ip, user string, rx, tx uint64) {
 	builder.WriteString("  tx=")
 	builder.WriteString(formatUint(tx))
 	builder.WriteByte('\n')
-	_, _ = l.file.WriteString(builder.String())
+	_, _ = l.file.Write([]byte(builder.String()))
 }
 
 func formatUint(value uint64) string {
@@ -125,7 +124,7 @@ func sanitizeLogField(value string) string {
 	if value == "" {
 		return ""
 	}
-	var builder strings.Builder
+	builder := newBuilder()
 	builder.Grow(len(value))
 	for _, r := range value {
 		switch {
