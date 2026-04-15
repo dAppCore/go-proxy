@@ -1229,13 +1229,19 @@ func (m *Miner) readLoop() {
 		}
 	}()
 
-	reader := bufio.NewReaderSize(m.conn, maxStratumLineLength+1)
+	m.mu.RLock()
+	conn := m.conn
+	m.mu.RUnlock()
+	if conn == nil {
+		return
+	}
+	reader := bufio.NewReaderSize(conn, maxStratumLineLength+1)
 	for {
 		if m.State() == MinerStateClosing {
 			return
 		}
 		if timeout := m.readTimeout(); timeout > 0 {
-			_ = m.conn.SetReadDeadline(time.Now().Add(timeout))
+			_ = conn.SetReadDeadline(time.Now().Add(timeout))
 		}
 		line, isPrefix, err := reader.ReadLine()
 		if err != nil {
@@ -1328,6 +1334,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	}
 	if trimString(params.Login) == "" {
 		m.ReplyWithError(requestID(request.ID), "Invalid payment address provided")
+		m.closeTransport()
 		return
 	}
 	m.mu.RLock()
@@ -1337,6 +1344,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	m.mu.RUnlock()
 	if accessPassword != "" && !secureStringEqual(params.Pass, accessPassword) {
 		m.ReplyWithError(requestID(request.ID), "Invalid password")
+		m.closeTransport()
 		return
 	}
 	resolved := resolveLoginCustomDiff(params.Login, globalDiff)
@@ -1638,16 +1646,20 @@ func (m *Miner) touchActivity() {
 	}
 	m.mu.Lock()
 	m.lastActivityAt = time.Now().UTC()
+	conn := m.conn
 	m.mu.Unlock()
-	if m.conn != nil {
-		_ = m.conn.SetReadDeadline(time.Now().Add(minerReadyTimeout))
+	if conn != nil {
+		_ = conn.SetReadDeadline(time.Now().Add(minerReadyTimeout))
 	}
 }
 
 func (m *Miner) writeJSON(payload any) error {
 	m.sendMu.Lock()
 	defer m.sendMu.Unlock()
-	if m.conn == nil {
+	m.mu.RLock()
+	conn := m.conn
+	m.mu.RUnlock()
+	if conn == nil {
 		return nil
 	}
 	data := []byte(jsonMarshalString(payload))
@@ -1656,9 +1668,9 @@ func (m *Miner) writeJSON(payload any) error {
 	var err error
 	if len(data) <= len(m.buf) {
 		copy(m.buf[:], data)
-		written, err = m.conn.Write(m.buf[:len(data)])
+		written, err = conn.Write(m.buf[:len(data)])
 	} else {
-		written, err = m.conn.Write(data)
+		written, err = conn.Write(data)
 	}
 	m.mu.Lock()
 	m.tx += uint64(written)
@@ -1677,10 +1689,22 @@ func (m *Miner) Close() {
 		m.mu.Lock()
 		m.state = MinerStateClosing
 		m.mu.Unlock()
-		if m.conn != nil {
-			_ = m.conn.Close()
-		}
+		m.closeTransport()
 	})
+}
+
+func (m *Miner) closeTransport() {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	conn := m.conn
+	m.conn = nil
+	m.tlsConn = nil
+	m.mu.Unlock()
+	if conn != nil {
+		_ = conn.Close()
+	}
 }
 
 // NewStats creates zeroed global metrics.

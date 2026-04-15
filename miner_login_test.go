@@ -142,6 +142,9 @@ func TestMiner_HandleLogin_Bad(t *testing.T) {
 		if got := miner.sessionID(); got != "" {
 			t.Fatalf("expected rejected login not to assign a session id, got %q", got)
 		}
+		if _, err := clientConn.Read(make([]byte, 1)); err == nil {
+			t.Fatal("expected rejected login to close the connection")
+		}
 	})
 
 	t.Run("bad_password", func(t *testing.T) {
@@ -189,6 +192,9 @@ func TestMiner_HandleLogin_Bad(t *testing.T) {
 		}
 		if got := miner.sessionID(); got != "" {
 			t.Fatalf("expected rejected login not to assign a session id, got %q", got)
+		}
+		if _, err := clientConn.Read(make([]byte, 1)); err == nil {
+			t.Fatal("expected rejected login to close the connection")
 		}
 	})
 }
