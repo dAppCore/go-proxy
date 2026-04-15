@@ -601,9 +601,6 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner.mu.Unlock()
 	miner.extNH = equalFoldString(mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
-		if p.customDiff != nil {
-			p.customDiff.OnLogin(Event{Miner: m})
-		}
 		if p.splitter != nil {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
 		}
