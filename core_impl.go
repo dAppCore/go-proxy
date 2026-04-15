@@ -90,8 +90,12 @@ func (c *Config) Validate() Result {
 	if c == nil {
 		return newErrorResult(NewScopedError("proxy.config", "config is nil", nil))
 	}
-	if strings.TrimSpace(c.Mode) == "" {
+	mode := strings.ToLower(strings.TrimSpace(c.Mode))
+	if mode == "" {
 		return newErrorResult(NewScopedError("proxy.config", "mode is empty", nil))
+	}
+	if !isSupportedMode(mode) {
+		return newErrorResult(NewScopedError("proxy.config", "unsupported mode", nil))
 	}
 	if len(c.Bind) == 0 {
 		return newErrorResult(NewScopedError("proxy.config", "bind list is empty", nil))
@@ -105,6 +109,15 @@ func (c *Config) Validate() Result {
 		}
 	}
 	return newSuccessResult()
+}
+
+func isSupportedMode(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "nicehash", "simple":
+		return true
+	default:
+		return false
+	}
 }
 
 // bus := proxy.NewEventBus()

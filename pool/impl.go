@@ -105,6 +105,7 @@ func (c *StratumClient) Login() {
 	if c == nil || c.conn == nil {
 		return
 	}
+	loginID := c.reserveRequestID(1)
 	params := map[string]any{
 		"login": c.config.User,
 		"pass":  c.config.Pass,
@@ -116,7 +117,7 @@ func (c *StratumClient) Login() {
 		params["algo"] = []string{c.config.Algo}
 	}
 	req := map[string]any{
-		"id":      1,
+		"id":      loginID,
 		"jsonrpc": "2.0",
 		"method":  "login",
 		"params":  params,
@@ -168,6 +169,21 @@ func (c *StratumClient) Keepalive() {
 		},
 	}
 	_ = c.writeJSON(req)
+}
+
+func (c *StratumClient) reserveRequestID(minimum int64) int64 {
+	if c == nil || minimum <= 0 {
+		return minimum
+	}
+	for {
+		current := atomic.LoadInt64(&c.seq)
+		if current >= minimum {
+			return current
+		}
+		if atomic.CompareAndSwapInt64(&c.seq, current, minimum) {
+			return minimum
+		}
+	}
 }
 
 // client.Disconnect()

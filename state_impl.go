@@ -99,7 +99,11 @@ func New(config *Config) (*Proxy, Result) {
 		p.watcher = NewConfigWatcher(config.configPath, p.Reload)
 	}
 
-	if factory, ok := splitterFactoryForMode(config.Mode); ok {
+	factory, ok := splitterFactoryForMode(config.Mode)
+	if !ok && !isSupportedMode(config.Mode) {
+		return nil, newErrorResult(NewScopedError("proxy", "unsupported mode", nil))
+	}
+	if ok {
 		p.splitter = factory(config, p.events)
 	} else {
 		p.splitter = &noopSplitter{}
