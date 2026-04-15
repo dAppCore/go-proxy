@@ -44,6 +44,10 @@ func (routes *monitoringRoutes) RegisterRoutes(group *gin.RouterGroup) {
 	registerJSONRoute(group, routes.proxy, "/miners", func() any { return routes.proxy.MinersDocument() })
 }
 
+// registerJSONRoute(group, proxyInstance, "/summary", func() any { return proxyInstance.SummaryDocument() })
+//
+// POST is routed to the same handler so non-GET requests get a consistent 405
+// response with an Allow header at the API boundary.
 func registerJSONRoute(group *gin.RouterGroup, proxyInstance *proxy.Proxy, path string, renderDocument func() any) {
 	handler := func(context *gin.Context) {
 		if status, ok := allowMonitoringRequest(proxyInstance, context.Request); !ok {
