@@ -81,6 +81,9 @@ func TestMiner_HandleLogin_Good(t *testing.T) {
 	if got := miner.LoginAlgos(); len(got) != 1 || got[0] != "cn/r" {
 		t.Fatalf("expected login algo list to be stored, got %#v", got)
 	}
+	if got := miner.RigID(); got != "rig-1" {
+		t.Fatalf("expected rigid to be stored, got %q", got)
+	}
 	if got := payload.Result.Job["job_id"]; got != "job-1" {
 		t.Fatalf("expected embedded job, got %#v", got)
 	}
@@ -445,6 +448,7 @@ func TestMiner_HandleKeepalived_Good(t *testing.T) {
 	defer clientConn.Close()
 
 	miner := NewMiner(minerConn, 3333, nil)
+	before := time.Now().UTC()
 
 	done := make(chan struct{})
 	go func() {
@@ -476,6 +480,12 @@ func TestMiner_HandleKeepalived_Good(t *testing.T) {
 	}
 	if result.Status != "KEEPALIVED" {
 		t.Fatalf("expected KEEPALIVED status, got %q", result.Status)
+	}
+	if miner.lastActivityAt.IsZero() {
+		t.Fatal("expected keepalived to update last activity")
+	}
+	if miner.lastActivityAt.Before(before) {
+		t.Fatalf("expected keepalived to refresh activity after %s, got %s", before, miner.lastActivityAt)
 	}
 }
 

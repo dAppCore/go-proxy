@@ -29,6 +29,29 @@ func TestConfig_LoadConfig_Good(t *testing.T) {
 	}
 }
 
+func TestConfig_LoadConfig_NormalizesValues_Good(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	data := []byte(`{"mode":" NiceHash ","workers":" Rig-ID ","bind":[{"host":"0.0.0.0","port":3333}],"pools":[{"url":"pool.example:3333","enabled":true}]}`)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatalf("expected config file write to succeed: %v", err)
+	}
+
+	cfg, result := LoadConfig(path)
+	if !result.OK {
+		t.Fatalf("expected normalized config to load, got error: %v", result.Error)
+	}
+	if cfg == nil {
+		t.Fatal("expected config to be returned")
+	}
+	if got := cfg.Mode; got != "nicehash" {
+		t.Fatalf("expected mode to be normalized to nicehash, got %q", got)
+	}
+	if got := cfg.Workers; got != WorkersByRigID {
+		t.Fatalf("expected workers mode to be normalized to rig-id, got %q", got)
+	}
+}
+
 func TestConfig_LoadConfig_Bad(t *testing.T) {
 	t.Run("missing_file", func(t *testing.T) {
 		cfg, result := LoadConfig(filepath.Join(t.TempDir(), "missing.json"))

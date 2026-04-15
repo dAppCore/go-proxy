@@ -49,6 +49,45 @@ func TestRegisterRoutes_GETSummary_Good(t *testing.T) {
 	}
 }
 
+func TestRegisterRoutes_GETWorkers_Good(t *testing.T) {
+	config := &proxy.Config{
+		Mode:    "simple",
+		Workers: proxy.WorkersByRigID,
+		Bind:    []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+	}
+	p, result := proxy.New(config)
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	RegisterRoutes(router, p)
+	handler := router.Handler()
+
+	request := httptest.NewRequest("GET", "/1/workers", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	var document proxy.WorkersDocument
+	if err := json.Unmarshal(recorder.Body.Bytes(), &document); err != nil {
+		t.Fatalf("decode workers document: %v", err)
+	}
+	if document.Mode != string(proxy.WorkersByRigID) {
+		t.Fatalf("expected workers mode %q, got %q", proxy.WorkersByRigID, document.Mode)
+	}
+	if len(document.Workers) != 0 {
+		t.Fatalf("expected no workers in a new proxy, got %d", len(document.Workers))
+	}
+}
+
 func TestRegisterRoutes_POSTSummary_Bad(t *testing.T) {
 	config := &proxy.Config{
 		Mode:    "nicehash",
@@ -100,6 +139,37 @@ func TestRegisterRoutes_POSTSummary_Unrestricted_Bad(t *testing.T) {
 	handler := router.Handler()
 
 	request := httptest.NewRequest("POST", "/1/summary", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected %d, got %d", http.StatusMethodNotAllowed, recorder.Code)
+	}
+}
+
+func TestRegisterRoutes_POSTWorkers_Bad(t *testing.T) {
+	config := &proxy.Config{
+		Mode:    "simple",
+		Workers: proxy.WorkersByRigID,
+		Bind:    []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		HTTP: proxy.HTTPConfig{
+			Restricted: true,
+		},
+	}
+	p, result := proxy.New(config)
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	RegisterRoutes(router, p)
+	handler := router.Handler()
+
+	request := httptest.NewRequest("POST", "/1/workers", nil)
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
@@ -214,5 +284,42 @@ func TestRegisterRoutes_GETSummaryAuthGranted_Ugly(t *testing.T) {
 
 	if recorder.Code != http.StatusOK {
 		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
+	}
+}
+
+func TestRegisterRoutes_GETWorkersAuthRequired_Ugly(t *testing.T) {
+	config := &proxy.Config{
+		Mode:    "simple",
+		Workers: proxy.WorkersByRigID,
+		Bind:    []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		HTTP: proxy.HTTPConfig{
+			Enabled:     true,
+			Restricted:  true,
+			AccessToken: "secret",
+		},
+	}
+	p, result := proxy.New(config)
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	RegisterRoutes(router, p)
+	handler := router.Handler()
+
+	request := httptest.NewRequest("GET", "/1/workers", nil)
+	request.Header.Set("Authorization", "Bearer wrong")
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusUnauthorized {
+		t.Fatalf("expected %d, got %d", http.StatusUnauthorized, recorder.Code)
+	}
+	if got := recorder.Header().Get("WWW-Authenticate"); got != "Bearer" {
+		t.Fatalf("expected bearer challenge, got %q", got)
 	}
 }
