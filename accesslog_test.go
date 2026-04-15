@@ -241,6 +241,30 @@ func TestAccessLogSink_sanitizeLogColumnField_Ugly(t *testing.T) {
 	}
 }
 
+func TestAccessLogSink_OpenAppendFile_Bad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "access.log")
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatalf("create directory path: %v", err)
+	}
+	sink := newAccessLogSink(path)
+
+	sink.writeConnectLine("10.0.0.1", "WALLET", "XMRig")
+	sink.writeCloseLine("10.0.0.1", "WALLET", 1, 2)
+	sink.Close()
+
+	if sink.file != nil {
+		t.Fatal("expected directory path to remain unopened")
+	}
+}
+
+func TestAccessLogSink_EmptyPath_Ugly(t *testing.T) {
+	sink := newAccessLogSink("")
+
+	sink.writeConnectLine("10.0.0.1", "WALLET", "XMRig")
+	sink.writeCloseLine("10.0.0.1", "WALLET", 1, 2)
+	sink.Close()
+}
+
 func TestAccessLogSink_sanitizeLogField_Good(t *testing.T) {
 	if got := sanitizeLogField("reason text"); got != "reason text" {
 		t.Fatalf("expected plain message to remain unchanged, got %q", got)

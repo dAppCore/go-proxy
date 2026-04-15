@@ -10,6 +10,52 @@ import (
 	"dappco.re/go/proxy"
 )
 
+func TestApiRouter_RegisterRoutes_Bad(t *testing.T) {
+	config := &proxy.Config{
+		Mode:    "nicehash",
+		Workers: proxy.WorkersByRigID,
+		Bind:    []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+	}
+	p, result := proxy.New(config)
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+
+	RegisterRoutes(nil, p)
+
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	RegisterRoutes(router, nil)
+	handler := router.Handler()
+
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, httptest.NewRequest("GET", "/1/summary", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("expected unregistered route to return %d, got %d", http.StatusNotFound, recorder.Code)
+	}
+}
+
+func TestApiRouter_AllowMonitoringRequest_Bad(t *testing.T) {
+	status, ok := allowMonitoringRequest(nil, httptest.NewRequest("GET", "/1/summary", nil))
+	if ok {
+		t.Fatal("expected nil proxy to be rejected")
+	}
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, status)
+	}
+}
+
+func TestApiRouter_MonitoringRoutes_RegisterRoutes_Ugly(t *testing.T) {
+	var routes *monitoringRoutes
+	routes.RegisterRoutes(nil)
+
+	routes = &monitoringRoutes{}
+	routes.RegisterRoutes(nil)
+}
+
 func TestRegisterRoutes_GETSummary_Good(t *testing.T) {
 	config := &proxy.Config{
 		Mode:    "nicehash",

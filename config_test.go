@@ -261,3 +261,39 @@ func TestProxy_New_Ugly(t *testing.T) {
 		t.Fatalf("expected malformed config to fail construction, got p=%#v result=%+v", p, result)
 	}
 }
+
+func TestConfig_normalizeConfigValues_Good(t *testing.T) {
+	cfg := &Config{
+		Mode:    " NiceHash ",
+		Workers: " Rig-ID ",
+	}
+
+	normalizeConfigValues(cfg)
+
+	if cfg.Mode != "nicehash" {
+		t.Fatalf("expected mode to be normalised, got %q", cfg.Mode)
+	}
+	if cfg.Workers != WorkersByRigID {
+		t.Fatalf("expected workers mode to be normalised, got %q", cfg.Workers)
+	}
+}
+
+func TestConfig_normalizeConfigValues_Bad(t *testing.T) {
+	normalizeConfigValues(nil)
+}
+
+func TestConfig_normalizeConfigValues_Ugly(t *testing.T) {
+	cfg := &Config{
+		Mode:    "  SIMPLE  ",
+		Workers: "  FALSE  ",
+	}
+
+	normalizeConfigValues(cfg)
+
+	if cfg.Mode != "simple" {
+		t.Fatalf("expected mode to be trimmed and lower-cased, got %q", cfg.Mode)
+	}
+	if cfg.Workers != WorkersDisabled {
+		t.Fatalf("expected workers mode to be trimmed and lower-cased, got %q", cfg.Workers)
+	}
+}

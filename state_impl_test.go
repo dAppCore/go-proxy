@@ -109,3 +109,46 @@ func TestStateImpl_NewMiner_Ugly(t *testing.T) {
 		t.Fatalf("expected IP to remain available after TLS wrapping, got %q", got)
 	}
 }
+
+func TestStateImpl_noopSplitter_Good(t *testing.T) {
+	splitter := &noopSplitter{}
+
+	splitter.Connect()
+	splitter.OnLogin(nil)
+	splitter.OnSubmit(nil)
+	splitter.OnClose(nil)
+	splitter.Tick(0)
+	splitter.GC()
+
+	if got := splitter.Upstreams(); got != (UpstreamStats{}) {
+		t.Fatalf("expected zero upstream stats, got %+v", got)
+	}
+}
+
+func TestStateImpl_noopSplitter_Bad(t *testing.T) {
+	var splitter *noopSplitter
+
+	splitter.Connect()
+	splitter.OnLogin(nil)
+	splitter.OnSubmit(nil)
+	splitter.OnClose(nil)
+	splitter.Tick(0)
+	splitter.GC()
+
+	if got := splitter.Upstreams(); got != (UpstreamStats{}) {
+		t.Fatalf("expected zero upstream stats from nil receiver, got %+v", got)
+	}
+}
+
+func TestStateImpl_noopSplitter_Ugly(t *testing.T) {
+	splitter := &noopSplitter{}
+
+	splitter.Tick(123)
+	splitter.OnLogin(&LoginEvent{Miner: &Miner{}})
+	splitter.OnSubmit(&SubmitEvent{Miner: &Miner{}})
+	splitter.OnClose(&CloseEvent{Miner: &Miner{}})
+
+	if got := splitter.Upstreams(); got != (UpstreamStats{}) {
+		t.Fatalf("expected noop splitter to remain empty after mixed calls, got %+v", got)
+	}
+}

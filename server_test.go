@@ -6,6 +6,51 @@ import (
 	"time"
 )
 
+func TestProxy_buildServers_Good(t *testing.T) {
+	dir := t.TempDir()
+	certFile, keyFile := writeTestCertPair(t, dir)
+
+	p := &Proxy{
+		config: &Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind: []BindAddr{
+				{Host: "127.0.0.1", Port: 0},
+				{Host: "127.0.0.1", Port: 0, TLS: true},
+			},
+			Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			TLS: TLSConfig{
+				Enabled:  true,
+				CertFile: certFile,
+				KeyFile:  keyFile,
+			},
+		},
+		done: make(chan struct{}),
+	}
+
+	if result := p.buildServers(); !result.OK {
+		t.Fatalf("expected buildServers to succeed, got %v", result.Error)
+	}
+	if got := len(p.servers); got != 2 {
+		t.Fatalf("expected two servers, got %d", got)
+	}
+	if addr := p.ServerListenerAddr(0); addr == "" {
+		t.Fatal("expected first server listener address to be recorded")
+	}
+	if addr := p.ServerListenerAddr(1); addr == "" {
+		t.Fatal("expected second server listener address to be recorded")
+	}
+
+	p.Stop()
+}
+
+func TestProxy_buildServers_Bad(t *testing.T) {
+	var p *Proxy
+	if result := p.buildServers(); !result.OK {
+		t.Fatalf("expected nil proxy to be treated as a no-op success, got %v", result.Error)
+	}
+}
+
 func TestProxy_Start_Good(t *testing.T) {
 	cfg := &Config{
 		Mode:    "simple",

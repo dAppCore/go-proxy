@@ -163,6 +163,22 @@ func TestProxy_allowHTTP_NilConfig_Ugly(t *testing.T) {
 	}
 }
 
+func TestProxy_allowHTTP_NilRequest_Bad(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{Enabled: true, AccessToken: "secret"},
+		},
+	}
+
+	status, ok := p.AllowMonitoringRequest(nil)
+	if ok {
+		t.Fatal("expected nil request to be rejected")
+	}
+	if status != http.StatusServiceUnavailable {
+		t.Fatalf("expected status %d, got %d", http.StatusServiceUnavailable, status)
+	}
+}
+
 func TestProxy_startHTTP_Good(t *testing.T) {
 	p := &Proxy{
 		config: &Config{
@@ -237,6 +253,17 @@ func TestProxy_startHTTP_Bad(t *testing.T) {
 	if ok := p.startMonitoringServer(); ok {
 		t.Fatal("expected HTTP server start to fail when the port is already in use")
 	}
+}
+
+func TestProxy_registerMonitoringRoute_NilInputs_Ugly(t *testing.T) {
+	p := &Proxy{
+		config: &Config{
+			HTTP: HTTPConfig{Enabled: true, AccessToken: "secret"},
+		},
+	}
+
+	p.registerMonitoringRoute(nil, MonitoringRouteSummary, func() any { return nil })
+	p.registerMonitoringRoute(http.NewServeMux(), MonitoringRouteSummary, nil)
 }
 
 func TestProxy_startHTTP_BlankHost_Bad(t *testing.T) {

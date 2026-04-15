@@ -115,3 +115,70 @@ func TestProxy_CustomDiffStats_SetEnabled_Ugly(t *testing.T) {
 		t.Fatalf("expected existing bucket to survive toggling, got %#v", snapshot)
 	}
 }
+
+func TestProxy_CustomDiffStats_Snapshot_Good(t *testing.T) {
+	buckets := NewCustomDiffBuckets(true)
+	miner := &Miner{customDiff: 7500}
+
+	buckets.OnAccept(Event{Miner: miner, Diff: 42, Expired: true})
+	buckets.OnReject(Event{Miner: miner, Error: "Invalid nonce"})
+
+	snapshot := buckets.Snapshot()
+	if len(snapshot) != 1 {
+		t.Fatalf("expected one snapshot bucket, got %#v", snapshot)
+	}
+	bucket := snapshot[7500]
+	if bucket.Accepted != 1 || bucket.Rejected != 1 || bucket.Invalid != 1 || bucket.Expired != 1 || bucket.HashesTotal != 42 {
+		t.Fatalf("unexpected snapshot totals: %+v", bucket)
+	}
+}
+
+func TestProxy_CustomDiffStats_Snapshot_Bad(t *testing.T) {
+	var buckets *CustomDiffBuckets
+	if snapshot := buckets.Snapshot(); snapshot != nil {
+		t.Fatalf("expected nil snapshot from nil buckets, got %#v", snapshot)
+	}
+
+	buckets = NewCustomDiffBuckets(false)
+	if snapshot := buckets.Snapshot(); snapshot != nil {
+		t.Fatalf("expected nil snapshot while disabled, got %#v", snapshot)
+	}
+}
+
+func TestProxy_CustomDiffStats_Snapshot_Ugly(t *testing.T) {
+	cases := map[string]struct {
+		reason string
+		want   bool
+	}{
+		"empty":            {reason: "", want: false},
+		"low diff":         {reason: "low diff", want: true},
+		"lowdifficulty":     {reason: "lowdifficulty", want: true},
+		"low difficulty":    {reason: "low difficulty share", want: true},
+		"malformed":         {reason: "malformed share", want: true},
+		"difficulty":        {reason: "difficulty target mismatch", want: true},
+		"invalid":           {reason: "invalid nonce", want: true},
+		"nonce":             {reason: "bad nonce", want: true},
+		"unrelated":         {reason: "job rejected by pool", want: false},
+		"case-folding":      {reason: "LOW DIFFICULTY SHARE", want: true},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			if got := isInvalidShareReason(tc.reason); got != tc.want {
+				t.Fatalf("expected %q to map to %v, got %v", tc.reason, tc.want, got)
+			}
+		})
+	}
+}
+
+func TestProxy_CustomDiffStats_bucketLocked_Ugly(t *testing.T) {
+	var buckets CustomDiffBuckets
+	buckets.enabled = true
+
+	miner := &Miner{customDiff: 91000}
+	buckets.OnAccept(Event{Miner: miner, Diff: 11})
+
+	if snapshot := buckets.Snapshot(); len(snapshot) != 1 {
+		t.Fatalf("expected zero-value bucket map to be initialised, got %#v", snapshot)
+	}
+}

@@ -133,3 +133,40 @@ func TestRateLimiter_Disabled_Good(t *testing.T) {
 		}
 	}
 }
+
+func TestRateLimiter_UpdateConfig_Good(t *testing.T) {
+	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 60})
+	if !rl.Allow("1.2.3.4:3333") {
+		t.Fatal("expected first call to pass")
+	}
+	if rl.Allow("1.2.3.4:3333") {
+		t.Fatal("expected bucket to be exhausted before update")
+	}
+
+	rl.UpdateConfig(RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 60})
+
+	if !rl.Allow("1.2.3.4:3333") {
+		t.Fatal("expected reset limiter to start from a fresh policy")
+	}
+	if rl.Allow("1.2.3.4:3333") {
+		t.Fatal("expected new policy to exhaust again after one token")
+	}
+}
+
+func TestRateLimiter_UpdateConfig_Bad(t *testing.T) {
+	var rl *RateLimiter
+	rl.UpdateConfig(RateLimit{MaxConnectionsPerMinute: 10, BanDurationSeconds: 1})
+}
+
+func TestRateLimiter_UpdateConfig_Ugly(t *testing.T) {
+	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 60})
+	rl.Allow("1.2.3.4:3333")
+
+	rl.UpdateConfig(RateLimit{MaxConnectionsPerMinute: 0, BanDurationSeconds: 0})
+
+	for i := 0; i < 10; i++ {
+		if !rl.Allow("1.2.3.4:3333") {
+			t.Fatalf("expected disabled limiter after update to allow call %d", i+1)
+		}
+	}
+}
