@@ -584,15 +584,14 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner.mu.Unlock()
 	miner.extNH = equalFoldString(mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
+		if p.events != nil {
+			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
+		}
 		if p.splitter != nil {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
 		}
 	}
-	miner.onLoginReady = func(m *Miner) {
-		if p.events != nil {
-			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
-		}
-	}
+	miner.onLoginReady = nil
 	miner.onSubmit = func(m *Miner, event *SubmitEvent) {
 		if p.splitter != nil {
 			if _, ok := p.splitter.(*noopSplitter); !ok {
