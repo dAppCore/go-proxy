@@ -278,15 +278,19 @@ func (m *NonceMapper) Submit(event *proxy.SubmitEvent) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	jobID := event.JobID
+	if jobID == "" {
+		m.storage.mu.Lock()
+		job := m.storage.job
+		m.storage.mu.Unlock()
+		m.rejectInvalidJobLocked(event, job)
+		return
+	}
 	m.storage.mu.Lock()
 	job := m.storage.job
 	prevJob := m.storage.prevJob
 	m.storage.mu.Unlock()
-	if jobID == "" {
-		jobID = job.JobID
-	}
 	valid := m.storage.IsValidJobID(jobID)
-	if jobID == "" || !valid {
+	if !valid {
 		m.rejectInvalidJobLocked(event, job)
 		return
 	}

@@ -294,9 +294,10 @@ func (m *SimpleMapper) Submit(event *proxy.SubmitEvent) {
 	defer m.mu.Unlock()
 	jobID := event.JobID
 	if jobID == "" {
-		jobID = m.currentJob.JobID
+		m.rejectInvalidJobLocked(event, m.currentJob)
+		return
 	}
-	if jobID == "" || (jobID != m.currentJob.JobID && jobID != m.prevJob.JobID) {
+	if jobID != m.currentJob.JobID && jobID != m.prevJob.JobID {
 		m.rejectInvalidJobLocked(event, m.currentJob)
 		return
 	}
