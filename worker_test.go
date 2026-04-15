@@ -162,3 +162,31 @@ func TestWorker_CustomDiffOrdering_Good(t *testing.T) {
 		t.Fatalf("expected miner user to be stripped before downstream consumers, got %q", miner.User())
 	}
 }
+
+func TestWorker_Tick_Good(t *testing.T) {
+	workers := NewWorkers(WorkersByUser, nil)
+	miner := &Miner{id: 201, user: "tick", ip: "10.0.0.13"}
+	workers.OnLogin(Event{Miner: miner})
+	workers.OnAccept(Event{Miner: miner, Diff: 100})
+
+	before := workers.List()[0].Hashrate(60)
+	workers.Tick()
+	after := workers.List()[0].Hashrate(60)
+
+	if before == 0 || after == 0 {
+		t.Fatalf("expected tick to preserve a nonzero hashrate sample, before=%f after=%f", before, after)
+	}
+}
+
+func TestWorker_Tick_Bad(t *testing.T) {
+	var workers *Workers
+	workers.Tick()
+}
+
+func TestWorker_Tick_Ugly(t *testing.T) {
+	workers := NewWorkers(WorkersByUser, nil)
+	workers.Tick()
+	if got := workers.List(); len(got) != 0 {
+		t.Fatalf("expected tick on empty workers to be a no-op, got %d records", len(got))
+	}
+}

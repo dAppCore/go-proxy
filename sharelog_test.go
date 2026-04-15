@@ -81,3 +81,55 @@ func TestProxy_ShareLog_SanitizesReason(t *testing.T) {
 		t.Fatalf("expected log fields to be sanitized, got %q", text)
 	}
 }
+
+func TestShareLogSink_SetPath_Good(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.log")
+	second := filepath.Join(dir, "second.log")
+
+	sink := newShareLogSink(first)
+	sink.writeLine("ACCEPT", "WALLET", 10, 2, "")
+	sink.SetPath(second)
+	sink.writeLine("REJECT", "WALLET2", 0, 0, "Invalid job id")
+	sink.Close()
+
+	firstData, err := os.ReadFile(first)
+	if err != nil {
+		t.Fatalf("read first log: %v", err)
+	}
+	secondData, err := os.ReadFile(second)
+	if err != nil {
+		t.Fatalf("read second log: %v", err)
+	}
+	if strings.Count(string(firstData), "ACCEPT") != 1 {
+		t.Fatalf("expected one ACCEPT line in first log, got %q", string(firstData))
+	}
+	if strings.Count(string(secondData), "REJECT") != 1 {
+		t.Fatalf("expected one REJECT line in second log, got %q", string(secondData))
+	}
+}
+
+func TestShareLogSink_SetPath_Bad(t *testing.T) {
+	var sink *shareLogSink
+	sink.SetPath("ignored")
+}
+
+func TestShareLogSink_SetPath_Ugly(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "shares.log")
+
+	sink := newShareLogSink(path)
+	sink.writeLine("ACCEPT", "WALLET", 10, 2, "")
+	sink.SetPath(path)
+	sink.writeLine("REJECT", "WALLET", 0, 0, "Invalid nonce")
+	sink.Close()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read share log: %v", err)
+	}
+	text := string(data)
+	if strings.Count(text, "ACCEPT") != 1 || strings.Count(text, "REJECT") != 1 {
+		t.Fatalf("expected both lines to be preserved when path is unchanged, got %q", text)
+	}
+}

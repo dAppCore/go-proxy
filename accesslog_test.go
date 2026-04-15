@@ -128,6 +128,58 @@ func TestProxy_AccessLog_SanitizesFields(t *testing.T) {
 	}
 }
 
+func TestAccessLogSink_SetPath_Good(t *testing.T) {
+	dir := t.TempDir()
+	first := filepath.Join(dir, "first.log")
+	second := filepath.Join(dir, "second.log")
+
+	sink := newAccessLogSink(first)
+	sink.writeConnectLine("10.0.0.1", "WALLET", "XMRig")
+	sink.SetPath(second)
+	sink.writeConnectLine("10.0.0.2", "WALLET2", "XMRig/2")
+	sink.Close()
+
+	firstData, err := os.ReadFile(first)
+	if err != nil {
+		t.Fatalf("read first log: %v", err)
+	}
+	secondData, err := os.ReadFile(second)
+	if err != nil {
+		t.Fatalf("read second log: %v", err)
+	}
+	if strings.Count(string(firstData), "CONNECT") != 1 {
+		t.Fatalf("expected one line in first log, got %q", string(firstData))
+	}
+	if strings.Count(string(secondData), "CONNECT") != 1 {
+		t.Fatalf("expected one line in second log, got %q", string(secondData))
+	}
+}
+
+func TestAccessLogSink_SetPath_Bad(t *testing.T) {
+	var sink *accessLogSink
+	sink.SetPath("ignored")
+}
+
+func TestAccessLogSink_SetPath_Ugly(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "access.log")
+
+	sink := newAccessLogSink(path)
+	sink.writeConnectLine("10.0.0.1", "WALLET", "XMRig")
+	sink.SetPath(path)
+	sink.writeCloseLine("10.0.0.1", "WALLET", 1, 2)
+	sink.Close()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read access log: %v", err)
+	}
+	text := string(data)
+	if strings.Count(text, "CONNECT") != 1 || strings.Count(text, "CLOSE") != 1 {
+		t.Fatalf("expected both lines to be preserved when path is unchanged, got %q", text)
+	}
+}
+
 type noopConn struct{}
 
 func (noopConn) Read([]byte) (int, error)         { return 0, os.ErrClosed }

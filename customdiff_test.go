@@ -81,3 +81,36 @@ func TestEffectiveShareDifficulty_CustomDiffCapsPoolDifficulty(t *testing.T) {
 		t.Fatalf("expected capped difficulty 25000, got %d", got)
 	}
 }
+
+func TestCustomDiff_ApplyMethod_Good(t *testing.T) {
+	cd := NewCustomDiff(5000)
+	miner := &Miner{user: "WALLET+7500"}
+
+	cd.Apply(miner)
+
+	if miner.User() != "WALLET" {
+		t.Fatalf("expected Apply to strip suffix, got %q", miner.User())
+	}
+	if miner.customDiff != 7500 {
+		t.Fatalf("expected Apply to set custom diff, got %d", miner.customDiff)
+	}
+}
+
+func TestCustomDiff_ApplyMethod_Bad(t *testing.T) {
+	cd := NewCustomDiff(5000)
+	var miner *Miner
+
+	cd.Apply(miner)
+}
+
+func TestCustomDiff_ApplyMethod_Ugly(t *testing.T) {
+	cd := NewCustomDiff(5000)
+	miner := &Miner{user: "WALLET"}
+
+	cd.Apply(miner)
+	cd.Apply(miner)
+
+	if miner.customDiff != 5000 {
+		t.Fatalf("expected global diff to remain stable across repeated Apply calls, got %d", miner.customDiff)
+	}
+}

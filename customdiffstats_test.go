@@ -76,3 +76,42 @@ func TestProxy_CustomDiffStats_Ugly(t *testing.T) {
 		t.Fatalf("expected custom diff stats to remain disabled, got %+v", summary.CustomDiffStats)
 	}
 }
+
+func TestProxy_CustomDiffStats_SetEnabled_Good(t *testing.T) {
+	buckets := NewCustomDiffBuckets(false)
+	miner := &Miner{customDiff: 10000}
+
+	buckets.SetEnabled(true)
+	buckets.OnAccept(Event{Miner: miner, Diff: 10})
+
+	snapshot := buckets.Snapshot()
+	if len(snapshot) != 1 {
+		t.Fatalf("expected one bucket after enabling, got %#v", snapshot)
+	}
+	if got := snapshot[10000].Accepted; got != 1 {
+		t.Fatalf("expected accepted count to be recorded after enabling, got %d", got)
+	}
+}
+
+func TestProxy_CustomDiffStats_SetEnabled_Bad(t *testing.T) {
+	var buckets *CustomDiffBuckets
+	buckets.SetEnabled(true)
+}
+
+func TestProxy_CustomDiffStats_SetEnabled_Ugly(t *testing.T) {
+	buckets := NewCustomDiffBuckets(true)
+	miner := &Miner{customDiff: 5000}
+
+	buckets.OnAccept(Event{Miner: miner, Diff: 5})
+	buckets.SetEnabled(false)
+
+	if snapshot := buckets.Snapshot(); snapshot != nil {
+		t.Fatalf("expected snapshot to be nil while disabled, got %#v", snapshot)
+	}
+
+	buckets.SetEnabled(true)
+	snapshot := buckets.Snapshot()
+	if len(snapshot) != 1 {
+		t.Fatalf("expected existing bucket to survive toggling, got %#v", snapshot)
+	}
+}
