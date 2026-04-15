@@ -27,8 +27,8 @@ func TestProxy_Start_Good(t *testing.T) {
 	deadline := time.Now().Add(2 * time.Second)
 	var listenerAddr string
 	for time.Now().Before(deadline) {
-		if len(p.servers) > 0 && p.servers[0] != nil && p.servers[0].listener != nil {
-			listenerAddr = p.servers[0].listener.Addr().String()
+		if addr := p.ServerListenerAddr(0); addr != "" {
+			listenerAddr = addr
 			break
 		}
 		time.Sleep(10 * time.Millisecond)

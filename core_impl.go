@@ -270,10 +270,16 @@ func targetFromDifficulty(diff uint64) string {
 //	diff := proxy.EffectiveShareDifficulty(job, miner) // 25000 when customDiff < poolDiff
 func EffectiveShareDifficulty(job Job, miner *Miner) uint64 {
 	diff := job.DifficultyFromTarget()
-	if miner == nil || miner.customDiff == 0 || diff == 0 || diff <= miner.customDiff {
+	if miner == nil {
 		return diff
 	}
-	return miner.customDiff
+	miner.mu.RLock()
+	customDiff := miner.customDiff
+	miner.mu.RUnlock()
+	if customDiff == 0 || diff == 0 || diff <= customDiff {
+		return diff
+	}
+	return customDiff
 }
 
 // NewCustomDiff creates a login-time custom difficulty resolver.

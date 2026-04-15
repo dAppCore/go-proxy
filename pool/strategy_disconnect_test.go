@@ -89,8 +89,8 @@ func TestStratumClient_NotifyDisconnect_ClearsState_Good(t *testing.T) {
 	if client.conn != nil {
 		t.Fatalf("expected pooled connection to be cleared")
 	}
-	if client.sessionID != "" {
-		t.Fatalf("expected session id to be cleared, got %q", client.sessionID)
+	if got := client.SessionID(); got != "" {
+		t.Fatalf("expected session id to be cleared, got %q", got)
 	}
 	if client.IsActive() {
 		t.Fatalf("expected client to stop reporting active after disconnect")

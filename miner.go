@@ -53,6 +53,7 @@ type Miner struct {
 	currentJob          Job
 	connectedAt         time.Time
 	lastActivityAt      time.Time
+	mu                  sync.RWMutex
 	conn                net.Conn
 	tlsConn             *tls.Conn   // nil if plain TCP
 	sendMu              sync.Mutex  // serialises writes to conn

@@ -55,6 +55,16 @@ func (c *StratumClient) IsActive() bool {
 	return c.active
 }
 
+// SessionID returns the current pool session identifier.
+func (c *StratumClient) SessionID() string {
+	if c == nil {
+		return ""
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.sessionID
+}
+
 // result := client.Connect()
 func (c *StratumClient) Connect() proxy.Result {
 	if c == nil {
@@ -138,14 +148,13 @@ func (c *StratumClient) Submit(jobID, nonce, result, algo string) int64 {
 	seq := atomic.AddInt64(&c.seq, 1)
 	c.mu.Lock()
 	c.pending[seq] = struct{}{}
-	sessionID := c.sessionID
 	c.mu.Unlock()
 	req := map[string]any{
 		"id":      seq,
 		"jsonrpc": "2.0",
 		"method":  "submit",
 		"params": map[string]any{
-			"id":     sessionID,
+			"id":     c.SessionID(),
 			"job_id": jobID,
 			"nonce":  nonce,
 			"result": result,
@@ -170,7 +179,7 @@ func (c *StratumClient) Keepalive() {
 		"jsonrpc": "2.0",
 		"method":  "keepalived",
 		"params": map[string]any{
-			"id": c.sessionID,
+			"id": c.SessionID(),
 		},
 	}
 	_ = c.writeJSON(req)

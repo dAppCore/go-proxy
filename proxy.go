@@ -29,6 +29,7 @@ import (
 type Proxy struct {
 	config            *Config
 	configMu          sync.RWMutex
+	lifecycleMu       sync.RWMutex
 	splitter          Splitter
 	shareSink         ShareSink
 	stats             *Stats

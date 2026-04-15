@@ -180,16 +180,16 @@ func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 			ip = miner.IP()
 		}
 		rows = append(rows, MinerSnapshot{
-			ID:       miner.id,
+			ID:       miner.ID(),
 			IP:       ip,
-			TX:       miner.tx,
-			RX:       miner.rx,
-			State:    miner.state,
-			Diff:     miner.diff,
-			User:     miner.user,
+			TX:       miner.TX(),
+			RX:       miner.RX(),
+			State:    miner.State(),
+			Diff:     miner.Diff(),
+			User:     miner.User(),
 			Password: maskedPassword,
-			RigID:    miner.rigID,
-			Agent:    miner.agent,
+			RigID:    miner.RigID(),
+			Agent:    miner.Agent(),
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
@@ -242,27 +242,17 @@ func (p *Proxy) Start() {
 	if p.config == nil {
 		return
 	}
-	for _, bind := range p.config.Bind {
-		var tlsConfig *tls.Config
-		if bind.TLS {
-			if !p.config.TLS.Enabled {
-				p.Stop()
-				return
-			}
-			var result Result
-			tlsConfig, result = buildTLSConfig(p.config.TLS)
-			if !result.OK {
-				p.Stop()
-				return
-			}
+	if result := p.buildServers(); !result.OK {
+		p.Stop()
+		return
+	}
+	p.lifecycleMu.Lock()
+	servers := append([]*Server(nil), p.servers...)
+	p.lifecycleMu.Unlock()
+	for _, server := range servers {
+		if server != nil {
+			server.Start()
 		}
-		server, result := NewServer(bind, tlsConfig, p.rateLimit, p.acceptMiner)
-		if !result.OK {
-			p.Stop()
-			return
-		}
-		p.servers = append(p.servers, server)
-		server.Start()
 	}
 	if p.splitter != nil {
 		p.splitter.Connect()
@@ -276,12 +266,13 @@ func (p *Proxy) Start() {
 			return
 		}
 	}
-	p.ticker = time.NewTicker(time.Second)
 	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
 		var ticks uint64
 		for {
 			select {
-			case <-p.ticker.C:
+			case <-ticker.C:
 				ticks++
 				if p.stats != nil {
 					p.stats.Tick()
@@ -316,19 +307,23 @@ func (p *Proxy) Stop() {
 	}
 	p.stopOnce.Do(func() {
 		close(p.done)
-		if p.ticker != nil {
-			p.ticker.Stop()
-		}
-		for _, server := range p.servers {
+		p.lifecycleMu.RLock()
+		servers := append([]*Server(nil), p.servers...)
+		httpServer := p.httpServer
+		accessLog := p.accessLog
+		shareLog := p.shareLog
+		watcher := p.watcher
+		p.lifecycleMu.RUnlock()
+		for _, server := range servers {
 			server.Stop()
 		}
-		if p.watcher != nil {
-			p.watcher.Stop()
+		if watcher != nil {
+			watcher.Stop()
 		}
-		if p.httpServer != nil {
+		if httpServer != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), submitDrainTimeout)
 			defer cancel()
-			_ = p.httpServer.Shutdown(ctx)
+			_ = httpServer.Shutdown(ctx)
 		}
 		deadline := time.Now().Add(submitDrainTimeout)
 		for p.submitCount.Load() > 0 && time.Now().Before(deadline) {
@@ -338,11 +333,11 @@ func (p *Proxy) Stop() {
 		if splitter, ok := p.splitter.(interface{ Disconnect() }); ok {
 			splitter.Disconnect()
 		}
-		if p.accessLog != nil {
-			p.accessLog.Close()
+		if accessLog != nil {
+			accessLog.Close()
 		}
-		if p.shareLog != nil {
-			p.shareLog.Close()
+		if shareLog != nil {
+			shareLog.Close()
 		}
 	})
 }
@@ -440,12 +435,18 @@ func (p *Proxy) reloadCustomDiff(globalDiff uint64) {
 		if miner == nil {
 			continue
 		}
+		miner.mu.Lock()
 		miner.globalDiff = globalDiff
-		if miner.customDiffFromLogin {
+		customDiffFromLogin := miner.customDiffFromLogin
+		if !customDiffFromLogin {
+			miner.customDiff = globalDiff
+		}
+		state := miner.state
+		miner.mu.Unlock()
+		if customDiffFromLogin {
 			continue
 		}
-		miner.customDiff = globalDiff
-		switch miner.state {
+		switch state {
 		case MinerStateWaitReady, MinerStateReady:
 			job := miner.CurrentJob()
 			if job.IsValid() {
@@ -460,18 +461,86 @@ func (p *Proxy) reloadWatcher(enabled bool) {
 		return
 	}
 	if enabled {
-		if p.watcher != nil {
+		p.lifecycleMu.RLock()
+		watcher := p.watcher
+		p.lifecycleMu.RUnlock()
+		if watcher != nil {
 			return
 		}
-		p.watcher = NewConfigWatcher(p.config.configPath, p.Reload)
-		p.watcher.Start()
+		watcher = NewConfigWatcher(p.config.configPath, p.Reload)
+		p.lifecycleMu.Lock()
+		p.watcher = watcher
+		p.lifecycleMu.Unlock()
+		watcher.Start()
 		return
 	}
-	if p.watcher == nil {
+	p.lifecycleMu.RLock()
+	watcher := p.watcher
+	p.lifecycleMu.RUnlock()
+	if watcher == nil {
 		return
 	}
-	p.watcher.Stop()
+	watcher.Stop()
+	p.lifecycleMu.Lock()
 	p.watcher = nil
+	p.lifecycleMu.Unlock()
+}
+
+func (p *Proxy) buildServers() Result {
+	if p == nil || p.config == nil {
+		return newSuccessResult()
+	}
+	servers := make([]*Server, 0, len(p.config.Bind))
+	for _, bind := range p.config.Bind {
+		var tlsConfig *tls.Config
+		if bind.TLS {
+			if !p.config.TLS.Enabled {
+				for _, server := range servers {
+					if server != nil {
+						server.Stop()
+					}
+				}
+				return newErrorResult(NewScopedError("proxy.server", "tls listener requires tls to be enabled", nil))
+			}
+			result := Result{}
+			tlsConfig, result = buildTLSConfig(p.config.TLS)
+			if !result.OK {
+				for _, server := range servers {
+					if server != nil {
+						server.Stop()
+					}
+				}
+				return result
+			}
+		}
+		server, result := NewServer(bind, tlsConfig, p.rateLimit, p.acceptMiner)
+		if !result.OK {
+			for _, server := range servers {
+				if server != nil {
+					server.Stop()
+				}
+			}
+			return result
+		}
+		servers = append(servers, server)
+	}
+	p.lifecycleMu.Lock()
+	p.servers = servers
+	p.lifecycleMu.Unlock()
+	return newSuccessResult()
+}
+
+// ServerListenerAddr returns the bound listener address for one configured server.
+func (p *Proxy) ServerListenerAddr(index int) string {
+	if p == nil || index < 0 {
+		return ""
+	}
+	p.lifecycleMu.RLock()
+	defer p.lifecycleMu.RUnlock()
+	if index >= len(p.servers) || p.servers[index] == nil || p.servers[index].listener == nil {
+		return ""
+	}
+	return p.servers[index].listener.Addr().String()
 }
 
 func (p *Proxy) onShareSettled(Event) {
@@ -512,7 +581,9 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner := NewMiner(conn, localPort, nil)
 	miner.accessPassword = accessPassword
 	miner.algoEnabled = algoExtension
+	miner.mu.Lock()
 	miner.globalDiff = customDiff
+	miner.mu.Unlock()
 	miner.extNH = strings.EqualFold(mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
 		if p.splitter != nil {
@@ -707,9 +778,12 @@ func (p *Proxy) startMonitoringServer() bool {
 	if err != nil {
 		return false
 	}
-	p.httpServer = &http.Server{Addr: addr, Handler: mux}
+	httpServer := &http.Server{Addr: addr, Handler: mux}
+	p.lifecycleMu.Lock()
+	p.httpServer = httpServer
+	p.lifecycleMu.Unlock()
 	go func() {
-		err := p.httpServer.Serve(listener)
+		err := httpServer.Serve(listener)
 		if err != nil && err != http.ErrServerClosed {
 			p.Stop()
 		}
@@ -908,24 +982,36 @@ func NewMiner(conn net.Conn, localPort uint16, tlsCfg *tls.Config) *Miner {
 // SetID assigns the miner's internal ID. Used by NonceStorage tests.
 //
 //	m.SetID(42)
-func (m *Miner) SetID(id int64) { m.id = id }
+func (m *Miner) SetID(id int64) {
+	m.mu.Lock()
+	m.id = id
+	m.mu.Unlock()
+}
 
 // ID returns the miner's monotonically increasing per-process identifier.
 //
 //	id := m.ID() // 42
-func (m *Miner) ID() int64 { return m.id }
+func (m *Miner) ID() int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.id
+}
 
 // SetMapperID assigns which NonceMapper owns this miner in NiceHash mode.
 //
 //	m.SetMapperID(0) // assigned to mapper 0
 func (m *Miner) SetMapperID(id int64) {
+	m.mu.Lock()
 	m.mapperID = id
+	m.mu.Unlock()
 }
 
 // MapperID returns the owning NonceMapper's ID, or -1 if unassigned.
 //
 //	if m.MapperID() < 0 { /* miner not assigned to any mapper */ }
 func (m *Miner) MapperID() int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.mapperID
 }
 
@@ -933,13 +1019,17 @@ func (m *Miner) MapperID() int64 {
 //
 //	m.SetRouteID(3)
 func (m *Miner) SetRouteID(id int64) {
+	m.mu.Lock()
 	m.routeID = id
+	m.mu.Unlock()
 }
 
 // RouteID returns the SimpleMapper ID, or -1 if unassigned.
 //
 //	if m.RouteID() < 0 { /* miner not routed */ }
 func (m *Miner) RouteID() int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.routeID
 }
 
@@ -947,13 +1037,17 @@ func (m *Miner) RouteID() int64 {
 //
 //	m.SetExtendedNiceHash(true)
 func (m *Miner) SetExtendedNiceHash(enabled bool) {
+	m.mu.Lock()
 	m.extNH = enabled
+	m.mu.Unlock()
 }
 
 // ExtendedNiceHash reports whether this miner is in NiceHash nonce-splitting mode.
 //
 //	if m.ExtendedNiceHash() { /* blob byte 39 is patched */ }
 func (m *Miner) ExtendedNiceHash() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.extNH
 }
 
@@ -961,7 +1055,9 @@ func (m *Miner) ExtendedNiceHash() bool {
 //
 //	m.SetCurrentJob(proxy.Job{Blob: "...", JobID: "job-1"})
 func (m *Miner) SetCurrentJob(job Job) {
+	m.mu.Lock()
 	m.currentJob = job
+	m.mu.Unlock()
 }
 
 // CurrentJob returns the last job forwarded to this miner.
@@ -969,6 +1065,8 @@ func (m *Miner) SetCurrentJob(job Job) {
 //	job := m.CurrentJob()
 //	if job.IsValid() { /* miner has a valid job */ }
 func (m *Miner) CurrentJob() Job {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.currentJob
 }
 
@@ -976,7 +1074,12 @@ func (m *Miner) CurrentJob() Job {
 //
 //	algos := m.LoginAlgos() // ["cn/r", "rx/0"]
 func (m *Miner) LoginAlgos() []string {
-	if m == nil || len(m.loginAlgos) == 0 {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if len(m.loginAlgos) == 0 {
 		return nil
 	}
 	return append([]string(nil), m.loginAlgos...)
@@ -986,6 +1089,8 @@ func (m *Miner) LoginAlgos() []string {
 //
 //	slot := m.FixedByte() // 0x2A
 func (m *Miner) FixedByte() uint8 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.fixedByte
 }
 
@@ -993,7 +1098,9 @@ func (m *Miner) FixedByte() uint8 {
 //
 //	m.SetFixedByte(0x2A)
 func (m *Miner) SetFixedByte(value uint8) {
+	m.mu.Lock()
 	m.fixedByte = value
+	m.mu.Unlock()
 }
 
 // IP returns the remote IP address (without port) for logging.
@@ -1017,6 +1124,8 @@ func (m *Miner) RemoteAddr() string {
 //
 //	user := m.User() // "WALLET" (even if login was "WALLET+50000")
 func (m *Miner) User() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.user
 }
 
@@ -1024,6 +1133,8 @@ func (m *Miner) User() string {
 //
 //	pass := m.Password() // "x"
 func (m *Miner) Password() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.password
 }
 
@@ -1031,6 +1142,8 @@ func (m *Miner) Password() string {
 //
 //	agent := m.Agent() // "XMRig/6.21.0"
 func (m *Miner) Agent() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.agent
 }
 
@@ -1038,6 +1151,8 @@ func (m *Miner) Agent() string {
 //
 //	rigid := m.RigID() // "rig-alpha"
 func (m *Miner) RigID() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.rigID
 }
 
@@ -1045,6 +1160,8 @@ func (m *Miner) RigID() string {
 //
 //	rx := m.RX() // 4096
 func (m *Miner) RX() uint64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.rx
 }
 
@@ -1052,6 +1169,8 @@ func (m *Miner) RX() uint64 {
 //
 //	tx := m.TX() // 8192
 func (m *Miner) TX() uint64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.tx
 }
 
@@ -1059,6 +1178,8 @@ func (m *Miner) TX() uint64 {
 //
 //	diff := m.Diff() // 100000
 func (m *Miner) Diff() uint64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.diff
 }
 
@@ -1066,11 +1187,27 @@ func (m *Miner) Diff() uint64 {
 //
 //	if m.State() == proxy.MinerStateReady { /* miner is active */ }
 func (m *Miner) State() MinerState {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.state
 }
 
+func (m *Miner) sessionID() string {
+	if m == nil {
+		return ""
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.rpcID
+}
+
 func (m *Miner) supportsAlgoExtension() bool {
-	return m != nil && m.algoEnabled && m.extAlgo
+	if m == nil {
+		return false
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.algoEnabled && m.extAlgo
 }
 
 // Start launches the read loop.
@@ -1090,7 +1227,7 @@ func (m *Miner) readLoop() {
 
 	reader := bufio.NewReaderSize(m.conn, maxStratumLineLength+1)
 	for {
-		if m.state == MinerStateClosing {
+		if m.State() == MinerStateClosing {
 			return
 		}
 		if timeout := m.readTimeout(); timeout > 0 {
@@ -1108,8 +1245,10 @@ func (m *Miner) readLoop() {
 		if len(line) == 0 {
 			continue
 		}
+		m.mu.Lock()
 		m.rx += uint64(len(line) + 1)
 		m.lastActivityAt = time.Now().UTC()
+		m.mu.Unlock()
 		if !m.handleLine(line) {
 			m.Close()
 			return
@@ -1118,7 +1257,7 @@ func (m *Miner) readLoop() {
 }
 
 func (m *Miner) readTimeout() time.Duration {
-	switch m.state {
+	switch m.State() {
 	case MinerStateWaitLogin:
 		return minerLoginTimeout
 	case MinerStateWaitReady, MinerStateReady:
@@ -1160,7 +1299,7 @@ type loginParams struct {
 }
 
 func (m *Miner) handleLogin(request stratumRequest) {
-	if m.state != MinerStateWaitLogin {
+	if m.State() != MinerStateWaitLogin {
 		return
 	}
 	var params loginParams
@@ -1168,11 +1307,17 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		m.ReplyWithError(requestID(request.ID), "Invalid payment address provided")
 		return
 	}
-	if m.accessPassword != "" && !secureStringEqual(params.Pass, m.accessPassword) {
+	m.mu.RLock()
+	accessPassword := m.accessPassword
+	globalDiff := m.globalDiff
+	extNH := m.extNH
+	m.mu.RUnlock()
+	if accessPassword != "" && !secureStringEqual(params.Pass, accessPassword) {
 		m.ReplyWithError(requestID(request.ID), "Invalid password")
 		return
 	}
-	resolved := resolveLoginCustomDiff(params.Login, m.globalDiff)
+	resolved := resolveLoginCustomDiff(params.Login, globalDiff)
+	m.mu.Lock()
 	m.user = resolved.user
 	m.customDiff = resolved.diff
 	m.customDiffFromLogin = resolved.fromLogin
@@ -1183,23 +1328,30 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	m.loginAlgos = append([]string(nil), params.Algo...)
 	m.extAlgo = len(m.loginAlgos) > 0
 	m.rpcID = generateUUID()
+	m.mu.Unlock()
 	if m.onLogin != nil {
 		m.onLogin(m)
 	}
-	if m.state == MinerStateClosing {
+	if m.State() == MinerStateClosing {
 		return
 	}
+	m.mu.Lock()
 	m.state = MinerStateWaitReady
-	if m.extNH {
+	m.mu.Unlock()
+	if extNH {
 		if m.MapperID() < 0 {
+			m.mu.Lock()
 			m.state = MinerStateWaitLogin
 			m.rpcID = ""
+			m.mu.Unlock()
 			m.ReplyWithError(requestID(request.ID), "Proxy is full, try again later")
 			return
 		}
 	} else if m.RouteID() < 0 {
+		m.mu.Lock()
 		m.state = MinerStateWaitLogin
 		m.rpcID = ""
+		m.mu.Unlock()
 		m.ReplyWithError(requestID(request.ID), "Proxy is unavailable, try again later")
 		return
 	}
@@ -1245,7 +1397,7 @@ func isDecimalDigits(value string) bool {
 }
 
 func (m *Miner) handleSubmit(request stratumRequest) {
-	if m.state != MinerStateReady {
+	if m.State() != MinerStateReady {
 		m.ReplyWithError(requestID(request.ID), "Unauthenticated")
 		return
 	}
@@ -1260,7 +1412,10 @@ func (m *Miner) handleSubmit(request stratumRequest) {
 		m.ReplyWithError(requestID(request.ID), "Invalid nonce")
 		return
 	}
-	if params.ID != m.rpcID {
+	m.mu.RLock()
+	rpcID := m.rpcID
+	m.mu.RUnlock()
+	if params.ID != rpcID {
 		m.ReplyWithError(requestID(request.ID), "Unauthenticated")
 		return
 	}
@@ -1322,7 +1477,9 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 	if m == nil || !job.IsValid() {
 		return
 	}
+	m.mu.Lock()
 	m.currentJob = job
+	m.mu.Unlock()
 	renderedJob, effectiveAlgo := m.renderJob(job, algo)
 	payload := map[string]any{
 		"jsonrpc": "2.0",
@@ -1331,7 +1488,7 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 			"blob":      renderedJob.Blob,
 			"job_id":    renderedJob.JobID,
 			"target":    renderedJob.Target,
-			"id":        m.rpcID,
+			"id":        m.sessionID(),
 			"height":    renderedJob.Height,
 			"seed_hash": renderedJob.SeedHash,
 		},
@@ -1341,9 +1498,11 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 	}
 	_ = m.writeJSON(payload)
 	m.touchActivity()
+	m.mu.Lock()
 	if m.state == MinerStateWaitReady {
 		m.state = MinerStateReady
 	}
+	m.mu.Unlock()
 }
 
 func (m *Miner) replyLoginSuccess(id int64) {
@@ -1351,7 +1510,7 @@ func (m *Miner) replyLoginSuccess(id int64) {
 		return
 	}
 	result := map[string]any{
-		"id":     m.rpcID,
+		"id":     m.sessionID(),
 		"status": "OK",
 	}
 	if m.supportsAlgoExtension() {
@@ -1363,7 +1522,7 @@ func (m *Miner) replyLoginSuccess(id int64) {
 			"blob":      renderedJob.Blob,
 			"job_id":    renderedJob.JobID,
 			"target":    renderedJob.Target,
-			"id":        m.rpcID,
+			"id":        m.sessionID(),
 			"height":    renderedJob.Height,
 			"seed_hash": renderedJob.SeedHash,
 		}
@@ -1372,7 +1531,9 @@ func (m *Miner) replyLoginSuccess(id int64) {
 		}
 		result["job"] = jobPayload
 		m.touchActivity()
+		m.mu.Lock()
 		m.state = MinerStateReady
+		m.mu.Unlock()
 	}
 	payload := map[string]any{
 		"id":      id,
@@ -1388,18 +1549,25 @@ func (m *Miner) renderJob(job Job, algo string) (Job, string) {
 		return job, algo
 	}
 	rendered := job
+	m.mu.RLock()
+	fixedByte := m.fixedByte
+	customDiff := m.customDiff
+	extNH := m.extNH
+	m.mu.RUnlock()
 	if algo == "" {
 		algo = job.Algo
 	}
-	if m.extNH {
-		rendered.Blob = job.BlobWithFixedByte(m.fixedByte)
+	if extNH {
+		rendered.Blob = job.BlobWithFixedByte(fixedByte)
 	}
 	effectiveDiff := job.DifficultyFromTarget()
-	if m.customDiff > 0 && effectiveDiff > 0 && effectiveDiff > m.customDiff {
-		rendered.Target = targetFromDifficulty(m.customDiff)
+	if customDiff > 0 && effectiveDiff > 0 && effectiveDiff > customDiff {
+		rendered.Target = targetFromDifficulty(customDiff)
 		effectiveDiff = rendered.DifficultyFromTarget()
 	}
+	m.mu.Lock()
 	m.diff = effectiveDiff
+	m.mu.Unlock()
 	return rendered, algo
 }
 
@@ -1437,7 +1605,9 @@ func (m *Miner) touchActivity() {
 	if m == nil {
 		return
 	}
+	m.mu.Lock()
 	m.lastActivityAt = time.Now().UTC()
+	m.mu.Unlock()
 	if m.conn != nil {
 		_ = m.conn.SetReadDeadline(time.Now().Add(minerReadyTimeout))
 	}
@@ -1461,7 +1631,9 @@ func (m *Miner) writeJSON(payload any) error {
 	} else {
 		written, err = m.conn.Write(data)
 	}
+	m.mu.Lock()
 	m.tx += uint64(written)
+	m.mu.Unlock()
 	if err != nil {
 		m.Close()
 	}
@@ -1473,7 +1645,9 @@ func (m *Miner) Close() {
 		return
 	}
 	m.closeOnce.Do(func() {
+		m.mu.Lock()
 		m.state = MinerStateClosing
+		m.mu.Unlock()
 		if m.conn != nil {
 			_ = m.conn.Close()
 		}
@@ -1678,22 +1852,22 @@ func workerNameFor(mode WorkersMode, miner *Miner) string {
 	}
 	switch mode {
 	case WorkersByRigID:
-		if miner.rigID != "" {
-			return miner.rigID
+		if rigID := miner.RigID(); rigID != "" {
+			return rigID
 		}
-		return miner.user
+		return miner.User()
 	case WorkersByUser:
-		return miner.user
+		return miner.User()
 	case WorkersByPass:
-		return miner.password
+		return miner.Password()
 	case WorkersByAgent:
-		return miner.agent
+		return miner.Agent()
 	case WorkersByIP:
-		return miner.ip
+		return miner.IP()
 	case WorkersDisabled:
 		return ""
 	default:
-		return miner.user
+		return miner.User()
 	}
 }
 

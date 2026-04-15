@@ -177,7 +177,7 @@ func TestFailoverStrategy_ReloadPools_Good(t *testing.T) {
 	<-accepts
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		if strategy.client != nil && strategy.client.sessionID != "" {
+		if strategy.client != nil && strategy.client.SessionID() != "" {
 			break
 		}
 		time.Sleep(10 * time.Millisecond)
