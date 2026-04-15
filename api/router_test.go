@@ -188,8 +188,8 @@ func TestRegisterRoutes_POSTSummary_Unrestricted_Bad(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("expected %d, got %d", http.StatusMethodNotAllowed, recorder.Code)
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
 	}
 }
 

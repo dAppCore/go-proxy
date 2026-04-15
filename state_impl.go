@@ -880,10 +880,11 @@ func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 	if r == nil {
 		return http.StatusServiceUnavailable, false
 	}
-	if r.Method != http.MethodGet {
+	httpCfg := p.currentHTTPConfig()
+	if httpCfg.Restricted && r.Method != http.MethodGet {
 		return http.StatusMethodNotAllowed, false
 	}
-	if token := p.currentHTTPConfig().AccessToken; token != "" {
+	if token := httpCfg.AccessToken; token != "" {
 		parts := splitStringN(r.Header.Get("Authorization"), " ", 2)
 		if len(parts) != 2 || !equalFoldString(parts[0], "bearer") || !secureStringEqual(parts[1], token) {
 			return http.StatusUnauthorized, false
