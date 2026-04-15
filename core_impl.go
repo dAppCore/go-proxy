@@ -90,11 +90,8 @@ func (c *Config) Validate() Result {
 	if c == nil {
 		return newErrorResult(NewScopedError("proxy.config", "config is nil", nil))
 	}
-	if !isValidMode(c.Mode) {
-		return newErrorResult(NewScopedError("proxy.config", "mode must be \"nicehash\" or \"simple\"", nil))
-	}
-	if !isValidWorkersMode(c.Workers) {
-		return newErrorResult(NewScopedError("proxy.config", "workers must be one of \"rig-id\", \"user\", \"password\", \"agent\", \"ip\", or \"false\"", nil))
+	if strings.TrimSpace(c.Mode) == "" {
+		return newErrorResult(NewScopedError("proxy.config", "mode is empty", nil))
 	}
 	if len(c.Bind) == 0 {
 		return newErrorResult(NewScopedError("proxy.config", "bind list is empty", nil))
@@ -108,24 +105,6 @@ func (c *Config) Validate() Result {
 		}
 	}
 	return newSuccessResult()
-}
-
-func isValidMode(mode string) bool {
-	switch strings.ToLower(strings.TrimSpace(mode)) {
-	case "nicehash", "simple":
-		return true
-	default:
-		return false
-	}
-}
-
-func isValidWorkersMode(mode WorkersMode) bool {
-	switch WorkersMode(strings.TrimSpace(string(mode))) {
-	case WorkersByRigID, WorkersByUser, WorkersByPass, WorkersByAgent, WorkersByIP, WorkersDisabled:
-		return true
-	default:
-		return false
-	}
 }
 
 // bus := proxy.NewEventBus()
