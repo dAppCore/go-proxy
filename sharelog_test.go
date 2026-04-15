@@ -44,3 +44,40 @@ func TestProxy_ShareLog_WritesOutcomeLines(t *testing.T) {
 		t.Fatalf("expected REJECT line, got %q", text)
 	}
 }
+
+func TestProxy_ShareLog_SanitizesReason(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "shares.log")
+
+	cfg := &Config{
+		Mode:         "nicehash",
+		Workers:      WorkersByRigID,
+		ShareLogFile: path,
+		Bind:         []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:        []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+	}
+	p, result := New(cfg)
+	if !result.OK {
+		t.Fatalf("expected valid proxy, got error: %v", result.Error)
+	}
+
+	miner := &Miner{
+		user:  "WALLET\nINJECT",
+		conn:  noopConn{},
+		state: MinerStateReady,
+	}
+	p.events.Dispatch(Event{Type: EventReject, Miner: miner, Error: "bad\"\nreason"})
+	p.Stop()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read share log: %v", err)
+	}
+	text := string(data)
+	if strings.Count(text, "\n") != 1 {
+		t.Fatalf("expected a single log line, got %q", text)
+	}
+	if strings.Contains(text, "bad\"\nreason") || strings.Contains(text, "\nINJECT") {
+		t.Fatalf("expected log fields to be sanitized, got %q", text)
+	}
+}

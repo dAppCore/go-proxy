@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 )
 
 type accessLogSink struct {
@@ -78,11 +79,11 @@ func (l *accessLogSink) writeConnectLine(ip, user, agent string) {
 	builder.WriteByte(' ')
 	builder.WriteString("CONNECT")
 	builder.WriteString("  ")
-	builder.WriteString(ip)
+	builder.WriteString(sanitizeLogField(ip))
 	builder.WriteString("  ")
-	builder.WriteString(user)
+	builder.WriteString(sanitizeLogField(user))
 	builder.WriteString("  ")
-	builder.WriteString(agent)
+	builder.WriteString(sanitizeLogField(agent))
 	builder.WriteByte('\n')
 	_, _ = l.file.WriteString(builder.String())
 }
@@ -105,9 +106,9 @@ func (l *accessLogSink) writeCloseLine(ip, user string, rx, tx uint64) {
 	builder.WriteByte(' ')
 	builder.WriteString("CLOSE")
 	builder.WriteString("  ")
-	builder.WriteString(ip)
+	builder.WriteString(sanitizeLogField(ip))
 	builder.WriteString("  ")
-	builder.WriteString(user)
+	builder.WriteString(sanitizeLogField(user))
 	builder.WriteString("  rx=")
 	builder.WriteString(formatUint(rx))
 	builder.WriteString("  tx=")
@@ -118,4 +119,24 @@ func (l *accessLogSink) writeCloseLine(ip, user string, rx, tx uint64) {
 
 func formatUint(value uint64) string {
 	return strconv.FormatUint(value, 10)
+}
+
+func sanitizeLogField(value string) string {
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	builder.Grow(len(value))
+	for _, r := range value {
+		switch {
+		case r == '\\' || r == '"':
+			builder.WriteByte('\\')
+			builder.WriteRune(r)
+		case r == '\n' || r == '\r' || r == '\t' || unicode.IsControl(r):
+			builder.WriteByte(' ')
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
 }

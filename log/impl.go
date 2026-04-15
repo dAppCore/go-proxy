@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"dappco.re/go/proxy"
 )
@@ -112,11 +113,11 @@ func (accessLog *AccessLog) writeConnectLine(ip, user, agent string) {
 	builder.WriteByte(' ')
 	builder.WriteString("CONNECT")
 	builder.WriteString("  ")
-	builder.WriteString(ip)
+	builder.WriteString(sanitizeLogField(ip))
 	builder.WriteString("  ")
-	builder.WriteString(user)
+	builder.WriteString(sanitizeLogField(user))
 	builder.WriteString("  ")
-	builder.WriteString(agent)
+	builder.WriteString(sanitizeLogField(agent))
 	builder.WriteByte('\n')
 	_, _ = accessLog.file.WriteString(builder.String())
 }
@@ -132,9 +133,9 @@ func (accessLog *AccessLog) writeCloseLine(ip, user string, rx, tx uint64) {
 	builder.WriteByte(' ')
 	builder.WriteString("CLOSE")
 	builder.WriteString("  ")
-	builder.WriteString(ip)
+	builder.WriteString(sanitizeLogField(ip))
 	builder.WriteString("  ")
-	builder.WriteString(user)
+	builder.WriteString(sanitizeLogField(user))
 	builder.WriteString("  rx=")
 	builder.WriteString(strconv.FormatUint(rx, 10))
 	builder.WriteString("  tx=")
@@ -153,7 +154,7 @@ func (shareLog *ShareLog) writeAcceptLine(user string, diff uint64, latency uint
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteString(" ACCEPT")
 	builder.WriteString("  ")
-	builder.WriteString(user)
+	builder.WriteString(sanitizeLogField(user))
 	builder.WriteString("  diff=")
 	builder.WriteString(strconv.FormatUint(diff, 10))
 	builder.WriteString("  latency=")
@@ -172,9 +173,9 @@ func (shareLog *ShareLog) writeRejectLine(user, reason string) {
 	var builder strings.Builder
 	builder.WriteString(time.Now().UTC().Format(time.RFC3339))
 	builder.WriteString(" REJECT  ")
-	builder.WriteString(user)
+	builder.WriteString(sanitizeLogField(user))
 	builder.WriteString("  reason=\"")
-	builder.WriteString(reason)
+	builder.WriteString(sanitizeLogField(reason))
 	builder.WriteString("\"\n")
 	_, _ = shareLog.file.WriteString(builder.String())
 }
@@ -201,4 +202,24 @@ func (shareLog *ShareLog) ensureFile() error {
 	}
 	shareLog.file = f
 	return nil
+}
+
+func sanitizeLogField(value string) string {
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	builder.Grow(len(value))
+	for _, r := range value {
+		switch {
+		case r == '\\' || r == '"':
+			builder.WriteByte('\\')
+			builder.WriteRune(r)
+		case r == '\n' || r == '\r' || r == '\t' || unicode.IsControl(r):
+			builder.WriteByte(' ')
+		default:
+			builder.WriteRune(r)
+		}
+	}
+	return builder.String()
 }

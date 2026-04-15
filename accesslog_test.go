@@ -90,6 +90,44 @@ func TestProxy_AccessLog_WritesFixedColumns(t *testing.T) {
 	}
 }
 
+func TestProxy_AccessLog_SanitizesFields(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "access.log")
+
+	cfg := &Config{
+		Mode:          "nicehash",
+		Workers:       WorkersByRigID,
+		AccessLogFile: path,
+		Bind:          []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:         []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+	}
+	p, result := New(cfg)
+	if !result.OK {
+		t.Fatalf("expected valid proxy, got error: %v", result.Error)
+	}
+
+	miner := &Miner{
+		ip:    "10.0.0.1",
+		user:  "WALLET\nINJECT",
+		agent: "XMRig\r\nBAD",
+		conn:  noopConn{},
+	}
+	p.events.Dispatch(Event{Type: EventLogin, Miner: miner})
+	p.Stop()
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read access log: %v", err)
+	}
+	text := string(data)
+	if strings.Count(text, "\n") != 1 {
+		t.Fatalf("expected a single log line, got %q", text)
+	}
+	if strings.ContainsAny(text, "\r\t") {
+		t.Fatalf("expected control characters to be stripped or escaped, got %q", text)
+	}
+}
+
 type noopConn struct{}
 
 func (noopConn) Read([]byte) (int, error)         { return 0, os.ErrClosed }

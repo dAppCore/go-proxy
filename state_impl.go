@@ -3,6 +3,7 @@ package proxy
 import (
 	"bufio"
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
 	"encoding/json"
 	"net"
@@ -742,12 +743,15 @@ func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
 	if p == nil || p.config == nil {
 		return http.StatusServiceUnavailable, false
 	}
+	if r == nil {
+		return http.StatusServiceUnavailable, false
+	}
 	if p.config.HTTP.Restricted && r.Method != http.MethodGet {
 		return http.StatusMethodNotAllowed, false
 	}
 	if token := p.config.HTTP.AccessToken; token != "" {
 		parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") || parts[1] != token {
+		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") || !secureStringEqual(parts[1], token) {
 			return http.StatusUnauthorized, false
 		}
 	}
@@ -866,6 +870,13 @@ func unixOrZero(value time.Time) int64 {
 		return 0
 	}
 	return value.Unix()
+}
+
+func secureStringEqual(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 func NewMiner(conn net.Conn, localPort uint16, tlsCfg *tls.Config) *Miner {
@@ -1157,7 +1168,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		m.ReplyWithError(requestID(request.ID), "Invalid payment address provided")
 		return
 	}
-	if m.accessPassword != "" && params.Pass != m.accessPassword {
+	if m.accessPassword != "" && !secureStringEqual(params.Pass, m.accessPassword) {
 		m.ReplyWithError(requestID(request.ID), "Invalid password")
 		return
 	}

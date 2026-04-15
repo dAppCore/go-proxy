@@ -334,8 +334,8 @@ type pipeConn struct {
 	*os.File
 }
 
-func (p *pipeConn) RemoteAddr() net.Addr                { return pipeAddr{} }
-func (p *pipeConn) LocalAddr() net.Addr                 { return pipeAddr{} }
-func (p *pipeConn) SetDeadline(_ time.Time) error       { return nil }
-func (p *pipeConn) SetReadDeadline(_ time.Time) error   { return nil }
-func (p *pipeConn) SetWriteDeadline(_ time.Time) error  { return nil }
+func (p *pipeConn) RemoteAddr() net.Addr               { return pipeAddr{} }
+func (p *pipeConn) LocalAddr() net.Addr                { return pipeAddr{} }
+func (p *pipeConn) SetDeadline(_ time.Time) error      { return nil }
+func (p *pipeConn) SetReadDeadline(_ time.Time) error  { return nil }
+func (p *pipeConn) SetWriteDeadline(_ time.Time) error { return nil }

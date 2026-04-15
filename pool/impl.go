@@ -16,6 +16,8 @@ import (
 	"dappco.re/go/proxy"
 )
 
+const maxStratumLineLength = 16384
+
 // NewStrategyFactory creates a StrategyFactory for the supplied config.
 //
 //	factory := pool.NewStrategyFactory(&proxy.Config{Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
@@ -71,7 +73,10 @@ func (c *StratumClient) Connect() proxy.Result {
 		if strings.Contains(addr, ":") {
 			host, _, _ = net.SplitHostPort(addr)
 		}
-		tlsCfg := &tls.Config{InsecureSkipVerify: true, ServerName: host}
+		tlsCfg := &tls.Config{ServerName: host}
+		if strings.TrimSpace(c.config.TLSFingerprint) != "" {
+			tlsCfg.InsecureSkipVerify = true
+		}
 		tlsConn := tls.Client(conn, tlsCfg)
 		if err := tlsConn.Handshake(); err != nil {
 			_ = conn.Close()
@@ -247,7 +252,7 @@ func (c *StratumClient) writeJSON(payload any) error {
 
 func (c *StratumClient) readLoop() {
 	defer c.notifyDisconnect()
-	reader := bufio.NewReader(c.conn)
+	reader := bufio.NewReaderSize(c.conn, maxStratumLineLength+1)
 	for {
 		line, isPrefix, err := reader.ReadLine()
 		if err != nil {
@@ -256,7 +261,7 @@ func (c *StratumClient) readLoop() {
 			}
 			return
 		}
-		if isPrefix {
+		if isPrefix || len(line) > maxStratumLineLength {
 			return
 		}
 		if len(line) == 0 {
