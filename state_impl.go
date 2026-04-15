@@ -56,6 +56,7 @@ func New(config *Config) (*Proxy, Result) {
 	if result := config.Validate(); !result.OK {
 		return nil, result
 	}
+	normalizeConfigValues(config)
 
 	p := &Proxy{
 		config:            config,
@@ -377,6 +378,7 @@ func (p *Proxy) Reload(config *Config) {
 	if result := config.Validate(); !result.OK {
 		return
 	}
+	normalizeConfigValues(config)
 	p.configMu.Lock()
 	poolsChanged := p.config == nil || !reflect.DeepEqual(p.config.Pools, config.Pools)
 	workersChanged := p.config == nil || p.config.Workers != config.Workers

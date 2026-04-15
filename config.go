@@ -100,3 +100,11 @@ const (
 	WorkersByIP     WorkersMode = "ip"
 	WorkersDisabled WorkersMode = "false"
 )
+
+func normalizeConfigValues(config *Config) {
+	if config == nil {
+		return
+	}
+	config.Mode = lowerString(trimString(config.Mode))
+	config.Workers = WorkersMode(lowerString(trimString(string(config.Workers))))
+}
