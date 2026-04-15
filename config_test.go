@@ -16,6 +16,13 @@ func TestConfig_Validate_Good(t *testing.T) {
 }
 
 func TestConfig_Validate_Bad(t *testing.T) {
+	t.Run("nil_config", func(t *testing.T) {
+		var cfg *Config
+		if result := cfg.Validate(); result.OK {
+			t.Fatalf("expected nil config to fail validation")
+		}
+	})
+
 	t.Run("missing_mode", func(t *testing.T) {
 		cfg := &Config{
 			Workers: WorkersByRigID,
@@ -127,5 +134,24 @@ func TestProxy_New_WhitespaceMode_Good(t *testing.T) {
 	}
 	if _, ok := p.splitter.(*noopSplitter); !ok {
 		t.Fatalf("expected test splitter to be wired, got %#v", p.splitter)
+	}
+}
+
+func TestProxy_New_Bad(t *testing.T) {
+	if p, result := New(nil); result.OK || p != nil {
+		t.Fatalf("expected nil config to fail construction, got p=%#v result=%+v", p, result)
+	}
+}
+
+func TestProxy_New_Ugly(t *testing.T) {
+	cfg := &Config{
+		Mode:    "nicehash",
+		Workers: WorkersByRigID,
+		Bind:    []BindAddr{{Host: "0.0.0.0", Port: 3333}},
+		Pools:   []PoolConfig{{URL: "", Enabled: true}},
+	}
+
+	if p, result := New(cfg); result.OK || p != nil {
+		t.Fatalf("expected malformed config to fail construction, got p=%#v result=%+v", p, result)
 	}
 }

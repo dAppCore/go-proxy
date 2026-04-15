@@ -2,6 +2,55 @@ package proxy
 
 import "testing"
 
+func TestCustomDiff_OnLogin_Good(t *testing.T) {
+	cd := NewCustomDiff(10000)
+	miner := &Miner{user: "WALLET"}
+
+	cd.OnLogin(Event{Miner: miner})
+
+	if miner.User() != "WALLET" {
+		t.Fatalf("expected wallet to remain unchanged, got %q", miner.User())
+	}
+	if miner.customDiff != 10000 {
+		t.Fatalf("expected global custom diff fallback, got %d", miner.customDiff)
+	}
+	if !miner.customDiffResolved {
+		t.Fatalf("expected login custom diff to be marked resolved")
+	}
+}
+
+func TestCustomDiff_OnLogin_Bad(t *testing.T) {
+	cd := NewCustomDiff(10000)
+	miner := &Miner{user: "WALLET"}
+
+	cd.OnLogin(Event{})
+	cd.OnLogin(Event{Miner: nil})
+	cd.OnLogin(Event{Miner: miner})
+
+	if miner.customDiff != 10000 {
+		t.Fatalf("expected valid miner to still resolve after nil events, got %d", miner.customDiff)
+	}
+}
+
+func TestCustomDiff_OnLogin_Ugly(t *testing.T) {
+	cd := NewCustomDiff(10000)
+	miner := &Miner{user: "WALLET+50000"}
+
+	cd.OnLogin(Event{Miner: miner})
+	cd.globalDiff.Store(20000)
+	cd.OnLogin(Event{Miner: miner})
+
+	if miner.User() != "WALLET" {
+		t.Fatalf("expected custom diff suffix to be stripped once, got %q", miner.User())
+	}
+	if miner.customDiff != 50000 {
+		t.Fatalf("expected explicit custom diff to win over later global diff, got %d", miner.customDiff)
+	}
+	if !miner.customDiffFromLogin {
+		t.Fatalf("expected login suffix to be recorded as from-login")
+	}
+}
+
 // TestCustomDiff_Apply_Good verifies a user suffix "+50000" sets customDiff and strips the suffix.
 //
 //	cd := proxy.NewCustomDiff(10000)

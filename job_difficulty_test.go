@@ -18,9 +18,16 @@ func TestJob_DifficultyFromTarget_Good(t *testing.T) {
 //	job := proxy.Job{Target: "00000000"}
 //	diff := job.DifficultyFromTarget() // 0 (no divide-by-zero)
 func TestJob_DifficultyFromTarget_Bad(t *testing.T) {
-	job := Job{Target: "00000000"}
-	if got := job.DifficultyFromTarget(); got != 0 {
-		t.Fatalf("expected difficulty 0 for zero target, got %d", got)
+	cases := []Job{
+		{Target: ""},
+		{Target: "123"},
+		{Target: "zzzzzzzz"},
+		{Target: "00000000"},
+	}
+	for _, job := range cases {
+		if got := job.DifficultyFromTarget(); got != 0 {
+			t.Fatalf("expected difficulty 0 for malformed target %q, got %d", job.Target, got)
+		}
 	}
 }
 

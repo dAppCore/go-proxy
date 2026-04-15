@@ -3,6 +3,7 @@ package proxy
 import (
 	"sync"
 	"testing"
+	"time"
 )
 
 // TestStats_OnAccept_Good verifies that accepted counter, hashes, and topDiff are updated.
@@ -169,5 +170,55 @@ func TestStats_OnLogin_OnClose_Good(t *testing.T) {
 	}
 	if got := stats.maxMiners.Load(); got != 1 {
 		t.Fatalf("expected max miners to remain 1, got %d", got)
+	}
+}
+
+func TestStats_Summary_Good(t *testing.T) {
+	stats := NewStats()
+	stats.startTime = time.Now().Add(-30 * time.Second)
+
+	stats.OnAccept(Event{Diff: 10, Latency: 30})
+	stats.OnAccept(Event{Diff: 20, Latency: 10})
+	stats.OnAccept(Event{Diff: 40, Latency: 20})
+
+	summary := stats.Summary()
+	if summary.Accepted != 3 {
+		t.Fatalf("expected 3 accepted shares, got %d", summary.Accepted)
+	}
+	if summary.AvgTime != 10 {
+		t.Fatalf("expected avg time 10 seconds/share, got %d", summary.AvgTime)
+	}
+	if summary.AvgLatency != 20 {
+		t.Fatalf("expected median latency 20ms, got %d", summary.AvgLatency)
+	}
+	if summary.Hashrate[HashrateWindowAll] <= 0 {
+		t.Fatalf("expected all-time hashrate to be populated, got %f", summary.Hashrate[HashrateWindowAll])
+	}
+	if summary.TopDiff[0] != 40 {
+		t.Fatalf("expected top diff to be sorted descending, got %d", summary.TopDiff[0])
+	}
+}
+
+func TestStats_Summary_Bad(t *testing.T) {
+	var stats *Stats
+
+	summary := stats.Summary()
+	if summary.Accepted != 0 || summary.Rejected != 0 || summary.Invalid != 0 || summary.Expired != 0 || summary.Hashes != 0 {
+		t.Fatalf("expected nil stats to yield zero counts, got %+v", summary)
+	}
+	if summary.AvgTime != 0 || summary.AvgLatency != 0 {
+		t.Fatalf("expected nil stats to yield zero averages, got %+v", summary)
+	}
+}
+
+func TestStats_Summary_Ugly(t *testing.T) {
+	var stats Stats
+
+	summary := stats.Summary()
+	if summary.Accepted != 0 || summary.Rejected != 0 || summary.Hashes != 0 {
+		t.Fatalf("expected zero-value stats to produce zero counts, got %+v", summary)
+	}
+	if summary.AvgLatency != 0 || summary.AvgTime != 0 {
+		t.Fatalf("expected zero-value stats to have zero averages, got %+v", summary)
 	}
 }
