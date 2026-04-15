@@ -1671,8 +1671,12 @@ func (m *Miner) touchActivity() {
 	}
 	m.mu.Lock()
 	m.lastActivityAt = time.Now().UTC()
+	state := m.state
 	conn := m.conn
 	m.mu.Unlock()
+	if state == MinerStateWaitLogin {
+		return
+	}
 	if conn != nil {
 		_ = conn.SetReadDeadline(time.Now().Add(minerReadyTimeout))
 	}
