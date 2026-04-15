@@ -1484,9 +1484,6 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	if m.State() == MinerStateClosing {
 		return
 	}
-	m.mu.Lock()
-	m.state = MinerStateWaitReady
-	m.mu.Unlock()
 	if extNH {
 		if m.MapperID() < 0 {
 			m.rejectLogin(requestID(request.ID), "Proxy is full, try again later")
@@ -1496,6 +1493,9 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		m.rejectLogin(requestID(request.ID), "Proxy is unavailable, try again later")
 		return
 	}
+	m.mu.Lock()
+	m.state = MinerStateWaitReady
+	m.mu.Unlock()
 	m.touchActivity()
 	if pinger := m.onLoginEvent; pinger != nil {
 		pinger(m)
