@@ -102,3 +102,21 @@ func TestServer_listen_BlankHost_Bad(t *testing.T) {
 		t.Fatalf("expected blank host to fail listener construction, got srv=%#v result=%+v", srv, result)
 	}
 }
+
+func TestProxy_buildServers_TLSListenerRequiresEnabled_Bad(t *testing.T) {
+	cfg := &Config{
+		Mode:    "simple",
+		Workers: WorkersByRigID,
+		Bind:    []BindAddr{{Host: "127.0.0.1", Port: 0, TLS: true}},
+		Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		TLS:     TLSConfig{Enabled: false},
+	}
+	p, result := New(cfg)
+	if !result.OK {
+		t.Fatalf("expected proxy construction to succeed before buildServers check, got %v", result.Error)
+	}
+
+	if buildResult := p.buildServers(); buildResult.OK {
+		t.Fatal("expected TLS listener without enabled TLS config to fail")
+	}
+}

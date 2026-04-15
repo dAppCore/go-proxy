@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -292,6 +293,99 @@ func TestSimpleMapper_OnResultAccepted_CustomDiffUsesEffectiveDifficulty(t *test
 		t.Fatal("expected accept event")
 	}
 }
+
+func TestSimpleMapper_Submit_UnavailableStrategy_Bad(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := proxy.NewMiner(minerConn, 3333, nil)
+	miner.SetID(31)
+	mapper := NewSimpleMapper(7, unavailableSubmitStrategy{})
+	mapper.currentJob = proxy.Job{JobID: "job-1", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
+	mapper.miner = miner
+
+	done := make(chan struct{})
+	go func() {
+		mapper.Submit(&proxy.SubmitEvent{
+			Miner:     miner,
+			JobID:     "job-1",
+			Nonce:     "deadbeef",
+			Result:    "hash",
+			RequestID: 77,
+		})
+		close(done)
+	}()
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read unavailable reply: %v", err)
+	}
+	<-done
+
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("decode unavailable reply: %v", err)
+	}
+	if payload.Error.Message != "Proxy is unavailable, try again later" {
+		t.Fatalf("expected unavailable reply, got %q", payload.Error.Message)
+	}
+	if len(mapper.pending) != 0 {
+		t.Fatalf("expected unavailable submit not to create pending work, got %d", len(mapper.pending))
+	}
+}
+
+func TestSimpleSplitter_OnSubmit_Unavailable_Bad(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := proxy.NewMiner(minerConn, 3333, nil)
+	miner.SetID(32)
+	miner.SetRouteID(7)
+	splitter := NewSimpleSplitter(&proxy.Config{}, nil, nil)
+
+	done := make(chan struct{})
+	go func() {
+		splitter.OnSubmit(&proxy.SubmitEvent{
+			Miner:     miner,
+			JobID:     "job-1",
+			Nonce:     "deadbeef",
+			Result:    "hash",
+			RequestID: 78,
+		})
+		close(done)
+	}()
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read unavailable reply: %v", err)
+	}
+	<-done
+
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("decode unavailable reply: %v", err)
+	}
+	if payload.Error.Message != "Proxy is unavailable, try again later" {
+		t.Fatalf("expected unavailable reply, got %q", payload.Error.Message)
+	}
+}
+
+type unavailableSubmitStrategy struct{}
+
+func (unavailableSubmitStrategy) Connect()                                    {}
+func (unavailableSubmitStrategy) Submit(string, string, string, string) int64 { return 0 }
+func (unavailableSubmitStrategy) Disconnect()                                 {}
+func (unavailableSubmitStrategy) IsActive() bool                              { return false }
 
 func TestSimpleMapper_OnJob_PreservesPreviousJobForSamePoolSession_Good(t *testing.T) {
 	mapper := &SimpleMapper{

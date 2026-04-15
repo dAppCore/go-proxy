@@ -217,6 +217,17 @@ func TestRegisterRoutes_GETMiners_Ugly(t *testing.T) {
 	}
 }
 
+func TestMonitoringRoutes_NameAndBasePath_Good(t *testing.T) {
+	routes := &monitoringRoutes{}
+
+	if got := routes.Name(); got != "proxy-monitoring" {
+		t.Fatalf("expected route name %q, got %q", "proxy-monitoring", got)
+	}
+	if got := routes.BasePath(); got != "/1" {
+		t.Fatalf("expected base path %q, got %q", "/1", got)
+	}
+}
+
 func TestRegisterRoutes_GETSummaryAuthRequired_Bad(t *testing.T) {
 	config := &proxy.Config{
 		Mode:    "nicehash",

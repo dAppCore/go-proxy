@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -241,3 +242,95 @@ func TestMapper_OnResultAccepted_CustomDiffUsesEffectiveDifficulty(t *testing.T)
 		t.Fatal("expected accept event")
 	}
 }
+
+func TestNonceMapper_Submit_UnavailableStrategy_Bad(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := proxy.NewMiner(minerConn, 3333, nil)
+	miner.SetID(11)
+	mapper := NewNonceMapper(1, &proxy.Config{}, unavailableSubmitStrategy{})
+	mapper.storage.job = proxy.Job{JobID: "job-1", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
+	mapper.storage.miners[miner.ID()] = miner
+
+	done := make(chan struct{})
+	go func() {
+		mapper.Submit(&proxy.SubmitEvent{
+			Miner:     miner,
+			JobID:     "job-1",
+			Nonce:     "deadbeef",
+			Result:    "hash",
+			RequestID: 99,
+		})
+		close(done)
+	}()
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read unavailable reply: %v", err)
+	}
+	<-done
+
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("decode unavailable reply: %v", err)
+	}
+	if payload.Error.Message != "Proxy is unavailable, try again later" {
+		t.Fatalf("expected unavailable reply, got %q", payload.Error.Message)
+	}
+	if len(mapper.pending) != 0 {
+		t.Fatalf("expected unavailable submit not to create pending work, got %d", len(mapper.pending))
+	}
+}
+
+func TestNonceSplitter_OnSubmit_Unavailable_Bad(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := proxy.NewMiner(minerConn, 3333, nil)
+	miner.SetID(12)
+	splitter := NewNonceSplitter(&proxy.Config{}, proxy.NewEventBus(), nil)
+
+	done := make(chan struct{})
+	go func() {
+		splitter.OnSubmit(&proxy.SubmitEvent{
+			Miner:     miner,
+			JobID:     "job-1",
+			Nonce:     "deadbeef",
+			Result:    "hash",
+			RequestID: 100,
+		})
+		close(done)
+	}()
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read unavailable reply: %v", err)
+	}
+	<-done
+
+	var payload struct {
+		Error struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("decode unavailable reply: %v", err)
+	}
+	if payload.Error.Message != "Proxy is unavailable, try again later" {
+		t.Fatalf("expected unavailable reply, got %q", payload.Error.Message)
+	}
+}
+
+type unavailableSubmitStrategy struct{}
+
+func (unavailableSubmitStrategy) Connect()                                    {}
+func (unavailableSubmitStrategy) Submit(string, string, string, string) int64 { return 0 }
+func (unavailableSubmitStrategy) Disconnect()                                 {}
+func (unavailableSubmitStrategy) IsActive() bool                              { return false }

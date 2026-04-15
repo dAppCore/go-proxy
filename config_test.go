@@ -112,6 +112,30 @@ func TestConfig_Validate_Bad(t *testing.T) {
 			t.Fatalf("expected negative reuse timeout to fail validation")
 		}
 	})
+
+	t.Run("negative_retry_values", func(t *testing.T) {
+		base := Config{
+			Mode:    "nicehash",
+			Workers: WorkersByRigID,
+			Bind:    []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools:   []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		}
+
+		for name, mutate := range map[string]func(*Config){
+			"retries":      func(cfg *Config) { cfg.Retries = -1 },
+			"retry_pause":  func(cfg *Config) { cfg.RetryPause = -1 },
+			"rate_limit":   func(cfg *Config) { cfg.RateLimit.MaxConnectionsPerMinute = -1 },
+			"ban_duration": func(cfg *Config) { cfg.RateLimit.BanDurationSeconds = -1 },
+		} {
+			t.Run(name, func(t *testing.T) {
+				cfg := base
+				mutate(&cfg)
+				if result := cfg.Validate(); result.OK {
+					t.Fatalf("expected %s to fail validation", name)
+				}
+			})
+		}
+	})
 }
 
 func TestConfig_Validate_Ugly(t *testing.T) {
