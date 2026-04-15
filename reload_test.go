@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"net"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -404,4 +405,141 @@ func TestProxy_Reload_PoolsUnchanged_DoesNotReloadSplitter_Ugly(t *testing.T) {
 	if splitter.reloads != 0 {
 		t.Fatalf("expected unchanged pool config to skip reconnect, got %d", splitter.reloads)
 	}
+}
+
+func TestProxy_Reload_HTTPEnabled_Good(t *testing.T) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+
+	p := &Proxy{
+		config: &Config{
+			Mode: "nicehash",
+			Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			HTTP: HTTPConfig{},
+		},
+		ticker: ticker,
+	}
+
+	p.Reload(&Config{
+		Mode: "nicehash",
+		Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		HTTP: HTTPConfig{
+			Enabled: true,
+			Host:    "127.0.0.1",
+			Port:    0,
+		},
+	})
+	defer p.stopMonitoringServer()
+
+	p.lifecycleMu.RLock()
+	httpServer := p.httpServer
+	p.lifecycleMu.RUnlock()
+	if httpServer == nil {
+		t.Fatal("expected reload to start the monitoring server when HTTP is enabled")
+	}
+}
+
+func TestProxy_Reload_HTTPDisabled_Bad(t *testing.T) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+
+	p := &Proxy{
+		config: &Config{
+			Mode: "nicehash",
+			Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			HTTP: HTTPConfig{
+				Enabled: true,
+				Host:    "127.0.0.1",
+				Port:    0,
+			},
+		},
+		ticker: ticker,
+	}
+	if ok := p.startMonitoringServer(); !ok {
+		t.Fatal("expected initial monitoring server to start")
+	}
+
+	p.Reload(&Config{
+		Mode: "nicehash",
+		Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		HTTP: HTTPConfig{},
+	})
+
+	p.lifecycleMu.RLock()
+	httpServer := p.httpServer
+	p.lifecycleMu.RUnlock()
+	if httpServer != nil {
+		t.Fatal("expected reload to stop the monitoring server when HTTP is disabled")
+	}
+}
+
+func TestProxy_Reload_HTTPAddress_Ugly(t *testing.T) {
+	ticker := time.NewTicker(time.Hour)
+	defer ticker.Stop()
+	port := freeTCPPort(t)
+
+	p := &Proxy{
+		config: &Config{
+			Mode: "nicehash",
+			Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+			HTTP: HTTPConfig{
+				Enabled: true,
+				Host:    "127.0.0.1",
+				Port:    0,
+			},
+		},
+		ticker: ticker,
+	}
+	if ok := p.startMonitoringServer(); !ok {
+		t.Fatal("expected initial monitoring server to start")
+	}
+	defer p.stopMonitoringServer()
+
+	p.lifecycleMu.RLock()
+	before := p.httpServer
+	p.lifecycleMu.RUnlock()
+
+	p.Reload(&Config{
+		Mode: "nicehash",
+		Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+		HTTP: HTTPConfig{
+			Enabled: true,
+			Host:    "127.0.0.1",
+			Port:    port,
+		},
+	})
+
+	p.lifecycleMu.RLock()
+	after := p.httpServer
+	p.lifecycleMu.RUnlock()
+	if after == nil {
+		t.Fatal("expected reload to keep a monitoring server after an address change")
+	}
+	if before == after {
+		t.Fatal("expected reload to replace the monitoring server when the address changes")
+	}
+}
+
+func freeTCPPort(t *testing.T) uint16 {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen on ephemeral port: %v", err)
+	}
+	defer listener.Close()
+	_, port, err := net.SplitHostPort(listener.Addr().String())
+	if err != nil {
+		t.Fatalf("split listener addr: %v", err)
+	}
+	value, err := strconv.Atoi(port)
+	if err != nil {
+		t.Fatalf("parse listener port: %v", err)
+	}
+	return uint16(value)
 }

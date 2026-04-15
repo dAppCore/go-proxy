@@ -316,7 +316,6 @@ func (p *Proxy) Stop() {
 		close(p.done)
 		p.lifecycleMu.RLock()
 		servers := append([]*Server(nil), p.servers...)
-		httpServer := p.httpServer
 		ticker := p.ticker
 		accessLog := p.accessLog
 		shareLog := p.shareLog
@@ -336,11 +335,7 @@ func (p *Proxy) Stop() {
 		if watcher != nil {
 			watcher.Stop()
 		}
-		if httpServer != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), submitDrainTimeout)
-			defer cancel()
-			_ = httpServer.Shutdown(ctx)
-		}
+		p.stopMonitoringServer()
 		deadline := time.Now().Add(submitDrainTimeout)
 		for p.submitCount.Load() > 0 && time.Now().Before(deadline) {
 			time.Sleep(10 * time.Millisecond)
@@ -399,6 +394,7 @@ func (p *Proxy) Reload(config *Config) {
 	p.configMu.Lock()
 	poolsChanged := p.config == nil || !reflect.DeepEqual(p.config.Pools, config.Pools)
 	workersChanged := p.config == nil || p.config.Workers != config.Workers
+	httpChanged := p.config == nil || monitoringConfigChanged(p.config.HTTP, config.HTTP)
 	nextWorkersMode := config.Workers
 	if p.config == nil {
 		p.config = config
@@ -436,6 +432,9 @@ func (p *Proxy) Reload(config *Config) {
 		p.shareLog.SetPath(config.ShareLogFile)
 	}
 	p.reloadWatcher(config.Watch)
+	if httpChanged {
+		p.reloadMonitoringServer()
+	}
 	if poolsChanged {
 		if reloadable, ok := p.splitter.(interface{ ReloadPools() }); ok {
 			reloadable.ReloadPools()
@@ -817,6 +816,44 @@ func (p *Proxy) startMonitoringServer() bool {
 	return true
 }
 
+func (p *Proxy) reloadMonitoringServer() {
+	if p == nil || !p.isRunning() {
+		return
+	}
+	httpCfg := p.currentHTTPConfig()
+	if !httpCfg.Enabled {
+		p.stopMonitoringServer()
+		return
+	}
+	p.stopMonitoringServer()
+	_ = p.startMonitoringServer()
+}
+
+func (p *Proxy) stopMonitoringServer() {
+	if p == nil {
+		return
+	}
+	p.lifecycleMu.Lock()
+	httpServer := p.httpServer
+	p.httpServer = nil
+	p.lifecycleMu.Unlock()
+	if httpServer == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), submitDrainTimeout)
+	defer cancel()
+	_ = httpServer.Shutdown(ctx)
+}
+
+func (p *Proxy) isRunning() bool {
+	if p == nil {
+		return false
+	}
+	p.lifecycleMu.RLock()
+	defer p.lifecycleMu.RUnlock()
+	return p.ticker != nil
+}
+
 func (p *Proxy) registerMonitoringRoute(mux *http.ServeMux, pattern string, renderDocument func() any) {
 	if p == nil || mux == nil || renderDocument == nil {
 		return
@@ -979,6 +1016,16 @@ func unixOrZero(value time.Time) int64 {
 		return 0
 	}
 	return value.Unix()
+}
+
+func monitoringConfigChanged(current, next HTTPConfig) bool {
+	if current.Enabled != next.Enabled {
+		return true
+	}
+	if !current.Enabled && !next.Enabled {
+		return false
+	}
+	return current.Host != next.Host || current.Port != next.Port
 }
 
 func secureStringEqual(a, b string) bool {
