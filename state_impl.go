@@ -15,11 +15,15 @@ import (
 )
 
 const (
-	maxStratumLineLength = 16384
-	minerLoginTimeout    = 10 * time.Second
-	minerReadyTimeout    = 600 * time.Second
-	submitDrainTimeout   = 5 * time.Second
-	maskedPassword       = "********"
+	maxStratumLineLength  = 16384
+	minerLoginTimeout     = 10 * time.Second
+	minerReadyTimeout     = 600 * time.Second
+	submitDrainTimeout    = 5 * time.Second
+	httpReadHeaderTimeout = 5 * time.Second
+	httpReadTimeout       = 10 * time.Second
+	httpWriteTimeout      = 10 * time.Second
+	httpIdleTimeout       = 60 * time.Second
+	maskedPassword        = "********"
 )
 
 // MinerSnapshot is a serialisable view of one miner connection.
@@ -793,7 +797,14 @@ func (p *Proxy) startMonitoringServer() bool {
 	if err != nil {
 		return false
 	}
-	httpServer := &http.Server{Addr: addr, Handler: mux}
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		ReadTimeout:       httpReadTimeout,
+		WriteTimeout:      httpWriteTimeout,
+		IdleTimeout:       httpIdleTimeout,
+	}
 	p.lifecycleMu.Lock()
 	p.httpServer = httpServer
 	p.lifecycleMu.Unlock()

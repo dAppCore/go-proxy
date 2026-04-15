@@ -132,6 +132,24 @@ func TestProxy_startHTTP_Good(t *testing.T) {
 	if ok := p.startMonitoringServer(); !ok {
 		t.Fatal("expected HTTP server to start on a free port")
 	}
+	p.lifecycleMu.RLock()
+	httpServer := p.httpServer
+	p.lifecycleMu.RUnlock()
+	if httpServer == nil {
+		t.Fatal("expected HTTP server instance to be recorded")
+	}
+	if httpServer.ReadHeaderTimeout == 0 {
+		t.Fatal("expected monitoring server to set a read-header timeout")
+	}
+	if httpServer.ReadTimeout == 0 {
+		t.Fatal("expected monitoring server to set a read timeout")
+	}
+	if httpServer.WriteTimeout == 0 {
+		t.Fatal("expected monitoring server to set a write timeout")
+	}
+	if httpServer.IdleTimeout == 0 {
+		t.Fatal("expected monitoring server to set an idle timeout")
+	}
 	p.Stop()
 }
 
