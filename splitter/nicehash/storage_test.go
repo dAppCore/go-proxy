@@ -1,10 +1,36 @@
 package nicehash
 
 import (
+	"encoding/json"
+	"io"
+	"net"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"dappco.re/go/proxy"
 )
+
+type recordingConn struct {
+	mu     sync.Mutex
+	writes [][]byte
+	closed bool
+}
+
+func (c *recordingConn) Read([]byte) (int, error) { return 0, io.EOF }
+func (c *recordingConn) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.writes = append(c.writes, append([]byte(nil), p...))
+	return len(p), nil
+}
+func (c *recordingConn) Close() error                     { c.mu.Lock(); c.closed = true; c.mu.Unlock(); return nil }
+func (c *recordingConn) LocalAddr() net.Addr              { return nil }
+func (c *recordingConn) RemoteAddr() net.Addr             { return nil }
+func (c *recordingConn) SetDeadline(time.Time) error      { return nil }
+func (c *recordingConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *recordingConn) SetWriteDeadline(time.Time) error { return nil }
 
 // TestStorage_Add_Good verifies 256 sequential Add calls fill all slots with unique FixedByte values.
 //
@@ -144,6 +170,119 @@ func TestStorage_IsValidJobID_Ugly(t *testing.T) {
 	}
 	if storage.expired != 1 {
 		t.Fatalf("expected one expired job validation, got %d", storage.expired)
+	}
+}
+
+// TestStorage_SetJob_Good verifies that a valid job becomes current, is forwarded to
+// active miners, and the previous job is retained when the upstream session remains stable.
+//
+//	storage := nicehash.NewNonceStorage()
+//	storage.SetJob(proxy.Job{JobID: "job-1", ClientID: "session-1"})
+//	storage.SetJob(proxy.Job{JobID: "job-2", ClientID: "session-1"}) // job-1 becomes prevJob
+func TestStorage_SetJob_Good(t *testing.T) {
+	storage := NewNonceStorage()
+	conn := &recordingConn{}
+	miner := proxy.NewMiner(conn, 3333, nil)
+	miner.SetID(1)
+
+	if !storage.Add(miner) {
+		t.Fatal("expected miner to be assigned a slot")
+	}
+
+	job1 := proxy.Job{
+		Blob:     strings.Repeat("0", 160),
+		JobID:    "job-1",
+		Target:   "b88d0600",
+		ClientID: "session-1",
+	}
+	storage.SetJob(job1)
+
+	if got := miner.CurrentJob(); got.JobID != job1.JobID {
+		t.Fatalf("expected miner to receive first job, got %+v", got)
+	}
+	if len(conn.writes) != 1 {
+		t.Fatalf("expected one forwarded job write, got %d", len(conn.writes))
+	}
+
+	var payload struct {
+		Method string `json:"method"`
+		Params struct {
+			JobID string `json:"job_id"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(conn.writes[0], &payload); err != nil {
+		t.Fatalf("decode forwarded job: %v", err)
+	}
+	if payload.Method != "job" {
+		t.Fatalf("expected job notification, got %q", payload.Method)
+	}
+	if payload.Params.JobID != job1.JobID {
+		t.Fatalf("expected forwarded job id %q, got %q", job1.JobID, payload.Params.JobID)
+	}
+
+	job2 := proxy.Job{
+		Blob:     strings.Repeat("0", 160),
+		JobID:    "job-2",
+		Target:   "b88d0600",
+		ClientID: "session-1",
+	}
+	storage.SetJob(job2)
+
+	if got := storage.prevJob.JobID; got != job1.JobID {
+		t.Fatalf("expected previous job to be archived for the same client, got %q", got)
+	}
+	if got := storage.job.JobID; got != job2.JobID {
+		t.Fatalf("expected current job to be replaced, got %q", got)
+	}
+	if len(conn.writes) != 2 {
+		t.Fatalf("expected second job to be forwarded, got %d writes", len(conn.writes))
+	}
+}
+
+// TestStorage_SetJob_Bad verifies that invalid or nil receivers are ignored.
+//
+//	var storage *nicehash.NonceStorage
+//	storage.SetJob(proxy.Job{JobID: "job-1"}) // no panic, no-op
+func TestStorage_SetJob_Bad(t *testing.T) {
+	var storage *NonceStorage
+	storage.SetJob(proxy.Job{JobID: "job-1"})
+
+	storage = NewNonceStorage()
+	storage.SetJob(proxy.Job{})
+	if storage.job.JobID != "" || storage.prevJob.JobID != "" {
+		t.Fatalf("expected invalid job to leave storage unchanged, got current=%+v previous=%+v", storage.job, storage.prevJob)
+	}
+}
+
+// TestStorage_SetJob_Ugly verifies that a pool session change resets the previous-job
+// window instead of carrying stale job IDs across reconnects.
+//
+//	storage := nicehash.NewNonceStorage()
+//	storage.SetJob(proxy.Job{JobID: "job-1", ClientID: "session-1"})
+//	storage.SetJob(proxy.Job{JobID: "job-2", ClientID: "session-2"}) // prevJob resets
+func TestStorage_SetJob_Ugly(t *testing.T) {
+	storage := NewNonceStorage()
+	job1 := proxy.Job{
+		Blob:     strings.Repeat("0", 160),
+		JobID:    "job-1",
+		Target:   "b88d0600",
+		ClientID: "session-1",
+	}
+	job2 := proxy.Job{
+		Blob:     strings.Repeat("0", 160),
+		JobID:    "job-2",
+		Target:   "b88d0600",
+		ClientID: "session-2",
+	}
+
+	storage.SetJob(job1)
+	storage.SetJob(job2)
+
+	if got := storage.prevJob.JobID; got != "" {
+		t.Fatalf("expected previous job to reset on upstream session change, got %q", got)
+	}
+	if got := storage.job.JobID; got != job2.JobID {
+		t.Fatalf("expected current job to track the new pool session, got %q", got)
 	}
 }
 

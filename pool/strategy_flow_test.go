@@ -126,6 +126,72 @@ func TestFailoverStrategy_Connect_Bad(t *testing.T) {
 	strategy.Connect()
 }
 
+func TestFailoverStrategy_Connect_Ugly(t *testing.T) {
+	badListener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen for bad upstream: %v", err)
+	}
+	badAddr := badListener.Addr().String()
+	_ = badListener.Close()
+
+	addr, shutdown := startStratumServer(t, func(conn net.Conn, reader *bufio.Reader) {
+		loginLine := readLine(t, reader)
+		var loginReq struct {
+			Method string `json:"method"`
+		}
+		if err := json.Unmarshal(loginLine, &loginReq); err != nil {
+			t.Fatalf("decode login request: %v", err)
+		}
+		if loginReq.Method != "login" {
+			t.Fatalf("expected login method, got %q", loginReq.Method)
+		}
+		_, _ = io.WriteString(conn, `{"id":"session-1","result":{"id":"session-1","job":{"blob":"`+strings.Repeat("0", 160)+`","job_id":"job-1","target":"b88d0600","id":"session-1"}}}`+"\n")
+		time.Sleep(25 * time.Millisecond)
+	})
+	defer shutdown()
+
+	spy := &clientListenerSpy{}
+	cfg := &proxy.Config{
+		Retries:    1,
+		RetryPause: 0,
+		Pools: []proxy.PoolConfig{
+			{URL: badAddr, User: "WALLET", Pass: "x", Enabled: true},
+			{URL: addr, User: "WALLET", Pass: "x", Enabled: true},
+		},
+	}
+	strategy := NewFailoverStrategy(cfg.Pools, spy, cfg)
+
+	strategy.Connect()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		spy.mu.Lock()
+		gotJobs := len(spy.jobs)
+		spy.mu.Unlock()
+		if gotJobs > 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	spy.mu.Lock()
+	if len(spy.jobs) != 1 {
+		spy.mu.Unlock()
+		t.Fatalf("expected failover to connect to the second pool, got jobs=%+v", spy.jobs)
+	}
+	spy.mu.Unlock()
+
+	if strategy.current != 1 {
+		t.Fatalf("expected failover to advance to the second enabled pool, got index %d", strategy.current)
+	}
+	if strategy.client == nil {
+		t.Fatal("expected strategy to retain the connected client")
+	}
+	if got := strategy.client.config.URL; got != addr {
+		t.Fatalf("expected strategy to connect to %q, got %q", addr, got)
+	}
+}
+
 func TestFailoverStrategy_ReloadPools_Good(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

@@ -202,6 +202,57 @@ func TestMiner_HandleLogin_Bad(t *testing.T) {
 	})
 }
 
+func TestMiner_HandleLogin_AccessPassword_Good(t *testing.T) {
+	minerConn, clientConn := net.Pipe()
+	defer minerConn.Close()
+	defer clientConn.Close()
+
+	miner := NewMiner(minerConn, 3333, nil)
+	miner.accessPassword = "secret"
+	miner.onLogin = func(m *Miner) {
+		m.SetRouteID(1)
+	}
+
+	params, err := json.Marshal(loginParams{
+		Login: "wallet",
+		Pass:  "secret",
+	})
+	if err != nil {
+		t.Fatalf("marshal login params: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		miner.handleLogin(stratumRequest{ID: 13, Method: "login", Params: params})
+		close(done)
+	}()
+
+	line, err := bufio.NewReader(clientConn).ReadBytes('\n')
+	if err != nil {
+		t.Fatalf("read login response: %v", err)
+	}
+	<-done
+
+	var payload struct {
+		Error  json.RawMessage `json:"error"`
+		Result struct {
+			Status string `json:"status"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(line, &payload); err != nil {
+		t.Fatalf("unmarshal login response: %v", err)
+	}
+	if string(payload.Error) != "null" {
+		t.Fatalf("expected login response error to be null, got %s", string(payload.Error))
+	}
+	if payload.Result.Status != "OK" {
+		t.Fatalf("expected login to succeed with the configured access password, got %q", payload.Result.Status)
+	}
+	if miner.State() != MinerStateWaitReady {
+		t.Fatalf("expected miner to enter wait-ready state after successful password check, got %d", miner.State())
+	}
+}
+
 func TestProxy_New_Watch_Good(t *testing.T) {
 	cfg := &Config{
 		Mode:       "nicehash",
