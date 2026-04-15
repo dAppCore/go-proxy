@@ -61,7 +61,9 @@ func (s *SimpleSplitter) OnLogin(event *proxy.LoginEvent) {
 				delete(s.idle, id)
 				mapper.miner = event.Miner
 				mapper.idleAt = time.Time{}
+				mapper.mu.Lock()
 				mapper.stopped = false
+				mapper.mu.Unlock()
 				s.active[event.Miner.ID()] = mapper
 				event.Miner.SetRouteID(mapper.id)
 				if mapper.currentJob.IsValid() {
@@ -113,7 +115,9 @@ func (s *SimpleSplitter) OnClose(event *proxy.CloseEvent) {
 		s.idle[mapper.id] = mapper
 		return
 	}
+	mapper.mu.Lock()
 	mapper.stopped = true
+	mapper.mu.Unlock()
 	if mapper.strategy != nil {
 		mapper.strategy.Disconnect()
 	}
@@ -128,7 +132,10 @@ func (s *SimpleSplitter) GC() {
 	defer s.mu.Unlock()
 	now := time.Now()
 	for id, mapper := range s.idle {
-		if mapper.stopped || (s.config.ReuseTimeout > 0 && now.Sub(mapper.idleAt) > time.Duration(s.config.ReuseTimeout)*time.Second) {
+		mapper.mu.Lock()
+		stopped := mapper.stopped
+		mapper.mu.Unlock()
+		if stopped || (s.config.ReuseTimeout > 0 && now.Sub(mapper.idleAt) > time.Duration(s.config.ReuseTimeout)*time.Second) {
 			if mapper.strategy != nil {
 				mapper.strategy.Disconnect()
 			}
@@ -175,7 +182,10 @@ func (s *SimpleSplitter) Upstreams() proxy.UpstreamStats {
 		if mapper == nil {
 			continue
 		}
-		if mapper.stopped || mapper.strategy == nil || !mapper.strategy.IsActive() {
+		mapper.mu.Lock()
+		stopped := mapper.stopped
+		mapper.mu.Unlock()
+		if stopped || mapper.strategy == nil || !mapper.strategy.IsActive() {
 			stats.Error++
 			continue
 		}
@@ -185,7 +195,10 @@ func (s *SimpleSplitter) Upstreams() proxy.UpstreamStats {
 		if mapper == nil {
 			continue
 		}
-		if mapper.stopped || mapper.strategy == nil || !mapper.strategy.IsActive() {
+		mapper.mu.Lock()
+		stopped := mapper.stopped
+		mapper.mu.Unlock()
+		if stopped || mapper.strategy == nil || !mapper.strategy.IsActive() {
 			stats.Error++
 			continue
 		}
@@ -379,5 +392,7 @@ func (m *SimpleMapper) OnDisconnect() {
 	if m == nil {
 		return
 	}
+	m.mu.Lock()
 	m.stopped = true
+	m.mu.Unlock()
 }

@@ -80,7 +80,7 @@ func TestRegisterRoutes_POSTSummary_Bad(t *testing.T) {
 	}
 }
 
-func TestRegisterRoutes_POSTSummary_Unrestricted_Good(t *testing.T) {
+func TestRegisterRoutes_POSTSummary_Unrestricted_Bad(t *testing.T) {
 	config := &proxy.Config{
 		Mode:    "nicehash",
 		Workers: proxy.WorkersByRigID,
@@ -103,16 +103,8 @@ func TestRegisterRoutes_POSTSummary_Unrestricted_Good(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)
 
-	if recorder.Code != http.StatusOK {
-		t.Fatalf("expected %d, got %d", http.StatusOK, recorder.Code)
-	}
-
-	var document proxy.SummaryDocument
-	if err := json.Unmarshal(recorder.Body.Bytes(), &document); err != nil {
-		t.Fatalf("decode summary document: %v", err)
-	}
-	if document.Mode != "nicehash" {
-		t.Fatalf("expected mode %q, got %q", "nicehash", document.Mode)
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected %d, got %d", http.StatusMethodNotAllowed, recorder.Code)
 	}
 }
 
