@@ -1947,6 +1947,13 @@ func (s *Stats) OnReject(e Event) {
 	if isInvalidShareReason(e.Error) {
 		s.invalid.Add(1)
 	}
+	if e.Latency > 0 {
+		s.mu.Lock()
+		if len(s.latency) < 10000 {
+			s.latency = append(s.latency, e.Latency)
+		}
+		s.mu.Unlock()
+	}
 }
 
 // Tick advances the rolling windows.
