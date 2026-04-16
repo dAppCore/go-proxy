@@ -1499,6 +1499,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 		return
 	}
 	m.rpcID = rpcID
+	m.state = MinerStateWaitReady
 	m.mu.Unlock()
 	if m.onLogin != nil {
 		m.onLogin(m)
@@ -1534,6 +1535,11 @@ func (m *Miner) rejectLogin(id int64, message string) {
 	if m == nil {
 		return
 	}
+	m.mu.Lock()
+	if m.state != MinerStateClosing {
+		m.state = MinerStateWaitLogin
+	}
+	m.mu.Unlock()
 	m.ReplyWithError(id, message)
 	m.closeTransport()
 }
