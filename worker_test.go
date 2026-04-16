@@ -302,8 +302,8 @@ func TestWorker_OnClose_Good(t *testing.T) {
 	if len(records) != 1 {
 		t.Fatalf("expected one worker record to remain, got %d", len(records))
 	}
-	if records[0].Connections != 0 {
-		t.Fatalf("expected connection count to decrement on close, got %d", records[0].Connections)
+	if records[0].Connections != 1 {
+		t.Fatalf("expected cumulative connection count to remain at one, got %d", records[0].Connections)
 	}
 	if _, ok := workers.idIndex[miner.id]; ok {
 		t.Fatal("expected miner id to be removed from worker index")
@@ -336,7 +336,7 @@ func TestWorker_OnClose_Ugly(t *testing.T) {
 	if len(records) != 1 {
 		t.Fatalf("expected unknown closes not to affect existing records, got %d", len(records))
 	}
-	if records[0].Connections != 0 {
-		t.Fatalf("expected original worker connection count to remain zero, got %d", records[0].Connections)
+	if records[0].Connections != 1 {
+		t.Fatalf("expected original worker connection count to remain cumulative, got %d", records[0].Connections)
 	}
 }

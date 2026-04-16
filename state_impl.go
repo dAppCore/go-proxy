@@ -2047,7 +2047,6 @@ func (w *Workers) bindEvents(eventBus *EventBus) {
 	eventBus.Subscribe(EventLogin, w.OnLogin)
 	eventBus.Subscribe(EventAccept, w.OnAccept)
 	eventBus.Subscribe(EventReject, w.OnReject)
-	eventBus.Subscribe(EventClose, w.OnClose)
 	w.subscribed = true
 }
 
@@ -2165,20 +2164,13 @@ func (w *Workers) OnReject(e Event) {
 	record.LastIP = e.Miner.ip
 }
 
-// OnClose removes the miner mapping from the worker table.
+// OnClose removes the live miner-to-worker lookup without changing cumulative totals.
 func (w *Workers) OnClose(e Event) {
 	if w == nil || e.Miner == nil {
 		return
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	index, ok := w.idIndex[e.Miner.id]
-	if ok && index >= 0 && index < len(w.entries) {
-		record := &w.entries[index]
-		if record.Connections > 0 {
-			record.Connections--
-		}
-	}
 	delete(w.idIndex, e.Miner.id)
 }
 

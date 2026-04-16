@@ -1,6 +1,7 @@
 package simple
 
 import (
+	"strings"
 	"testing"
 
 	"dappco.re/go/proxy"
@@ -60,8 +61,8 @@ func TestSimpleMapperFile_OnDisconnect_Ugly(t *testing.T) {
 
 func TestSimpleMapperFile_OnJob_ResetsPreviousJob_Good(t *testing.T) {
 	mapper := NewSimpleMapper(7, activeStrategy{})
-	mapper.currentJob = proxy.Job{JobID: "job-1", ClientID: "session-1"}
-	mapper.OnJob(proxy.Job{JobID: "job-2", ClientID: "session-1"})
+	mapper.currentJob = proxy.Job{Blob: strings.Repeat("0", 160), JobID: "job-1", Target: "b88d0600", ClientID: "session-1"}
+	mapper.OnJob(proxy.Job{Blob: strings.Repeat("1", 160), JobID: "job-2", Target: "b88d0600", ClientID: "session-1"})
 	if mapper.prevJob.JobID != "job-1" {
 		t.Fatalf("expected previous job to be retained, got %q", mapper.prevJob.JobID)
 	}

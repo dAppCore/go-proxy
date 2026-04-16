@@ -375,7 +375,7 @@ func rejectUnavailableSubmit(events *proxy.EventBus, event *proxy.SubmitEvent) {
 
 // OnJob forwards the latest pool job to the active miner.
 func (m *SimpleMapper) OnJob(job proxy.Job) {
-	if m == nil {
+	if m == nil || !job.IsValid() {
 		return
 	}
 	m.mu.Lock()
