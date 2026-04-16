@@ -32,12 +32,15 @@ func (s *NonceSplitter) Connect() {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	if len(s.mappers) == 0 {
 		s.addMapperLocked()
 	}
-	for _, mapper := range s.mappers {
-		mapper.Start()
+	mappers := append([]*NonceMapper(nil), s.mappers...)
+	s.mu.Unlock()
+	for _, mapper := range mappers {
+		if mapper != nil {
+			mapper.Start()
+		}
 	}
 }
 
@@ -47,11 +50,12 @@ func (s *NonceSplitter) OnLogin(event *proxy.LoginEvent) {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var toStart *NonceMapper
 	event.Miner.SetExtendedNiceHash(true)
 	for _, mapper := range s.mappers {
 		if mapper.Add(event.Miner) {
 			s.mapperByID[mapper.id] = mapper
+			s.mu.Unlock()
 			return
 		}
 	}
@@ -59,6 +63,11 @@ func (s *NonceSplitter) OnLogin(event *proxy.LoginEvent) {
 	if mapper != nil {
 		_ = mapper.Add(event.Miner)
 		s.mapperByID[mapper.id] = mapper
+		toStart = mapper
+	}
+	s.mu.Unlock()
+	if toStart != nil {
+		toStart.Start()
 	}
 }
 
@@ -96,9 +105,9 @@ func (s *NonceSplitter) GC() {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := time.Now()
 	next := s.mappers[:0]
+	stale := make([]pool.Strategy, 0)
 	for _, mapper := range s.mappers {
 		if mapper == nil || mapper.storage == nil {
 			continue
@@ -106,7 +115,7 @@ func (s *NonceSplitter) GC() {
 		free, dead, active := mapper.storage.SlotCount()
 		if active == 0 && now.Sub(mapper.lastUsed) > time.Minute {
 			if mapper.strategy != nil {
-				mapper.strategy.Disconnect()
+				stale = append(stale, mapper.strategy)
 			}
 			delete(s.mapperByID, mapper.id)
 			_ = free
@@ -116,6 +125,10 @@ func (s *NonceSplitter) GC() {
 		next = append(next, mapper)
 	}
 	s.mappers = next
+	s.mu.Unlock()
+	for _, strategy := range stale {
+		strategy.Disconnect()
+	}
 }
 
 // Tick is called once per second.
@@ -209,7 +222,6 @@ func (s *NonceSplitter) addMapperLocked() *NonceMapper {
 		s.mapperByID = make(map[int64]*NonceMapper)
 	}
 	s.mapperByID[mapper.id] = mapper
-	mapper.Start()
 	return mapper
 }
 

@@ -33,16 +33,20 @@ func (s *SimpleSplitter) Connect() {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	strategies := make([]pool.Strategy, 0, len(s.active)+len(s.idle))
 	for _, mapper := range s.active {
 		if mapper.strategy != nil {
-			mapper.strategy.Connect()
+			strategies = append(strategies, mapper.strategy)
 		}
 	}
 	for _, mapper := range s.idle {
 		if mapper.strategy != nil {
-			mapper.strategy.Connect()
+			strategies = append(strategies, mapper.strategy)
 		}
+	}
+	s.mu.Unlock()
+	for _, strategy := range strategies {
+		strategy.Connect()
 	}
 }
 
@@ -52,7 +56,7 @@ func (s *SimpleSplitter) OnLogin(event *proxy.LoginEvent) {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var toConnect pool.Strategy
 	now := time.Now()
 
 	if s.config.ReuseTimeout > 0 {
@@ -69,6 +73,7 @@ func (s *SimpleSplitter) OnLogin(event *proxy.LoginEvent) {
 				if mapper.currentJob.IsValid() {
 					event.Miner.SetCurrentJob(mapper.currentJob)
 				}
+				s.mu.Unlock()
 				return
 			}
 		}
@@ -79,7 +84,11 @@ func (s *SimpleSplitter) OnLogin(event *proxy.LoginEvent) {
 	s.active[event.Miner.ID()] = mapper
 	event.Miner.SetRouteID(mapper.id)
 	if mapper.strategy != nil {
-		mapper.strategy.Connect()
+		toConnect = mapper.strategy
+	}
+	s.mu.Unlock()
+	if toConnect != nil {
+		toConnect.Connect()
 	}
 }
 
@@ -131,18 +140,22 @@ func (s *SimpleSplitter) GC() {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := time.Now()
+	stale := make([]pool.Strategy, 0)
 	for id, mapper := range s.idle {
 		mapper.mu.Lock()
 		stopped := mapper.stopped
 		mapper.mu.Unlock()
 		if stopped || (s.config.ReuseTimeout > 0 && now.Sub(mapper.idleAt) > time.Duration(s.config.ReuseTimeout)*time.Second) {
 			if mapper.strategy != nil {
-				mapper.strategy.Disconnect()
+				stale = append(stale, mapper.strategy)
 			}
 			delete(s.idle, id)
 		}
+	}
+	s.mu.Unlock()
+	for _, strategy := range stale {
+		strategy.Disconnect()
 	}
 }
 
