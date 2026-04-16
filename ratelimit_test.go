@@ -56,6 +56,20 @@ func TestRateLimiter_Allow_Ugly(t *testing.T) {
 	if rl.Allow("1.2.3.4:3333") {
 		t.Fatalf("expected banned IP to remain banned regardless of fresh bucket")
 	}
+
+	rlNoBan := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 0})
+	if !rlNoBan.Allow("1.2.3.4") {
+		t.Fatalf("expected bare host to be allowed on first call")
+	}
+	if rlNoBan.Allow("1.2.3.4") {
+		t.Fatalf("expected bare host to be rejected after the bucket is exhausted")
+	}
+	rlNoBan.mu.Lock()
+	if len(rlNoBan.banUntilByHost) != 0 {
+		rlNoBan.mu.Unlock()
+		t.Fatalf("expected disabled ban duration to avoid creating ban entries, got %#v", rlNoBan.banUntilByHost)
+	}
+	rlNoBan.mu.Unlock()
 }
 
 // TestRateLimiter_Allow_ExhaustedBucketStartsBan verifies the ban starts as soon as

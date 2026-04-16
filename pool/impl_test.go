@@ -166,3 +166,42 @@ func TestNewStrategyFactory_Ugly(t *testing.T) {
 		t.Fatalf("expected 2 pools after config update, got %d", len(pools))
 	}
 }
+
+func TestPoolImpl_requestID_Good(t *testing.T) {
+	cases := []struct {
+		name string
+		id   any
+		want int64
+	}{
+		{name: "float64", id: float64(7), want: 7},
+		{name: "int64", id: int64(8), want: 8},
+		{name: "int", id: int(9), want: 9},
+		{name: "string", id: "10", want: 10},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := requestID(tc.id); got != tc.want {
+				t.Fatalf("expected request id %d, got %d", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestPoolImpl_requestID_Bad(t *testing.T) {
+	if got := requestID("not-a-number"); got != 0 {
+		t.Fatalf("expected non-numeric string to map to 0, got %d", got)
+	}
+	if got := requestID(nil); got != 0 {
+		t.Fatalf("expected nil request id to map to 0, got %d", got)
+	}
+}
+
+func TestPoolImpl_requestID_Ugly(t *testing.T) {
+	if got := requestID(float64(12.9)); got != 12 {
+		t.Fatalf("expected fractional float request id to truncate, got %d", got)
+	}
+	if got := requestID(true); got != 0 {
+		t.Fatalf("expected unsupported request id type to map to 0, got %d", got)
+	}
+}

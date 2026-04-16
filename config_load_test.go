@@ -3,6 +3,7 @@ package proxy
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -61,6 +62,9 @@ func TestConfig_LoadConfig_Bad(t *testing.T) {
 		if cfg != nil {
 			t.Fatalf("expected no config on read failure, got %+v", cfg)
 		}
+		if result.Error == nil || !strings.Contains(result.Error.Error(), "proxy.config: read config failed") {
+			t.Fatalf("expected scoped read failure, got %v", result.Error)
+		}
 	})
 
 	t.Run("malformed_json", func(t *testing.T) {
@@ -77,6 +81,9 @@ func TestConfig_LoadConfig_Bad(t *testing.T) {
 		}
 		if cfg != nil {
 			t.Fatalf("expected no config on parse failure, got %+v", cfg)
+		}
+		if result.Error == nil || !strings.Contains(result.Error.Error(), "proxy.config: parse failed") {
+			t.Fatalf("expected scoped parse failure, got %v", result.Error)
 		}
 	})
 }

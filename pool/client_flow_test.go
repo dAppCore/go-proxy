@@ -284,6 +284,23 @@ func TestStratumClient_HandleMessage_Bad(t *testing.T) {
 	if len(spy.jobs) != 0 || len(spy.results) != 0 || spy.disconnects != 0 {
 		t.Fatalf("expected session-only login reply to be ignored by listener, got jobs=%d results=%d disconnects=%d", len(spy.jobs), len(spy.results), spy.disconnects)
 	}
+
+	t.Run("string_request_id", func(t *testing.T) {
+		spy := &clientListenerSpy{}
+		client := NewStratumClient(proxy.PoolConfig{}, spy)
+		client.pending[7] = struct{}{}
+
+		client.handleMessage([]byte(`{"id":"7","result":{"status":"OK"}}`))
+
+		spy.mu.Lock()
+		defer spy.mu.Unlock()
+		if len(spy.results) != 1 {
+			t.Fatalf("expected one result notification for string request id, got %d", len(spy.results))
+		}
+		if !spy.results[0].accepted {
+			t.Fatalf("expected string request id to resolve to an accepted result, got %+v", spy.results[0])
+		}
+	})
 }
 
 func TestStratumClient_Connect_Bad_TLSFingerprint(t *testing.T) {
