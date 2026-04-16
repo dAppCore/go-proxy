@@ -30,6 +30,16 @@ type Stats struct {
 	mu          sync.Mutex
 }
 
+// Connections returns the total number of TCP connections accepted so far.
+//
+//	total := stats.Connections()
+func (s *Stats) Connections() uint64 {
+	if s == nil {
+		return 0
+	}
+	return s.connections.Load()
+}
+
 const (
 	HashrateWindow60s   = 0 // 1 minute
 	HashrateWindow600s  = 1 // 10 minutes

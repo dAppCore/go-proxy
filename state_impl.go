@@ -212,6 +212,16 @@ func (p *Proxy) MinerCount() (now, max uint64) {
 	return p.stats.miners.Load(), p.stats.maxMiners.Load()
 }
 
+// ConnectionCount returns the total number of TCP connections accepted since process start.
+//
+//	total := p.ConnectionCount()
+func (p *Proxy) ConnectionCount() uint64 {
+	if p == nil || p.stats == nil {
+		return 0
+	}
+	return p.stats.Connections()
+}
+
 // Upstreams returns the current upstream connection counts.
 //
 //	stats := p.Upstreams()
