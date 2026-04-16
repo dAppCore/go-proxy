@@ -110,6 +110,64 @@ func TestStateImpl_NewMiner_Ugly(t *testing.T) {
 	}
 }
 
+func TestStateImpl_SetID_Good(t *testing.T) {
+	miner := &Miner{}
+
+	miner.SetID(42)
+
+	if got := miner.ID(); got != 42 {
+		t.Fatalf("expected SetID to persist 42, got %d", got)
+	}
+}
+
+func TestStateImpl_SetID_Bad(t *testing.T) {
+	miner := &Miner{}
+
+	miner.SetID(0)
+
+	if got := miner.ID(); got != 0 {
+		t.Fatalf("expected SetID to allow zero, got %d", got)
+	}
+}
+
+func TestStateImpl_SetID_Ugly(t *testing.T) {
+	miner := &Miner{}
+
+	miner.SetID(7)
+	miner.SetID(99)
+
+	if got := miner.ID(); got != 99 {
+		t.Fatalf("expected latest SetID call to win, got %d", got)
+	}
+}
+
+func TestStateImpl_ID_Good(t *testing.T) {
+	miner := &Miner{id: 314}
+
+	if got := miner.ID(); got != 314 {
+		t.Fatalf("expected ID accessor to return 314, got %d", got)
+	}
+}
+
+func TestStateImpl_ID_Bad(t *testing.T) {
+	miner := &Miner{}
+
+	if got := miner.ID(); got != 0 {
+		t.Fatalf("expected zero-value miner ID to be 0, got %d", got)
+	}
+}
+
+func TestStateImpl_ID_Ugly(t *testing.T) {
+	miner := &Miner{}
+
+	miner.SetID(1)
+	miner.SetID(2)
+
+	if got := miner.ID(); got != 2 {
+		t.Fatalf("expected ID accessor to reflect latest value, got %d", got)
+	}
+}
+
 func TestStateImpl_noopSplitter_Good(t *testing.T) {
 	splitter := &noopSplitter{}
 

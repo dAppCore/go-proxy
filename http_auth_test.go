@@ -197,6 +197,24 @@ func TestProxy_allowHTTP_NilRequest_Bad(t *testing.T) {
 	}
 }
 
+func TestProxy_secureStringEqual_Good(t *testing.T) {
+	if !secureStringEqual("secret", "secret") {
+		t.Fatal("expected identical strings to compare equal")
+	}
+}
+
+func TestProxy_secureStringEqual_Bad(t *testing.T) {
+	if secureStringEqual("secret", "secrex") {
+		t.Fatal("expected different same-length strings to compare unequal")
+	}
+}
+
+func TestProxy_secureStringEqual_Ugly(t *testing.T) {
+	if secureStringEqual("secret", "") {
+		t.Fatal("expected strings with different lengths to compare unequal")
+	}
+}
+
 func TestProxy_startHTTP_Good(t *testing.T) {
 	p := &Proxy{
 		config: &Config{

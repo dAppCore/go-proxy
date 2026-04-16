@@ -2,12 +2,35 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
+	"crypto/rand"
 	"encoding/json"
+	"errors"
+	"io"
 	"net"
 	"strings"
 	"testing"
 	"time"
 )
+
+type failingRandReader struct{}
+
+func (failingRandReader) Read([]byte) (int, error) {
+	return 0, errors.New("forced rand failure")
+}
+
+type loginRejectConn struct {
+	bytes.Buffer
+	closed bool
+}
+
+func (c *loginRejectConn) Read([]byte) (int, error)         { return 0, io.EOF }
+func (c *loginRejectConn) Close() error                     { c.closed = true; return nil }
+func (c *loginRejectConn) LocalAddr() net.Addr              { return minerTestAddr("127.0.0.1:3333") }
+func (c *loginRejectConn) RemoteAddr() net.Addr             { return minerTestAddr("203.0.113.8:49152") }
+func (c *loginRejectConn) SetDeadline(time.Time) error      { return nil }
+func (c *loginRejectConn) SetReadDeadline(time.Time) error  { return nil }
+func (c *loginRejectConn) SetWriteDeadline(time.Time) error { return nil }
 
 func TestMiner_HandleLogin_Good(t *testing.T) {
 	minerConn, clientConn := net.Pipe()
@@ -198,6 +221,55 @@ func TestMiner_HandleLogin_Bad(t *testing.T) {
 		}
 		if _, err := clientConn.Read(make([]byte, 1)); err == nil {
 			t.Fatal("expected rejected login to close the connection")
+		}
+	})
+
+	t.Run("uuid_generation_failure", func(t *testing.T) {
+		oldReader := rand.Reader
+		rand.Reader = failingRandReader{}
+		t.Cleanup(func() {
+			rand.Reader = oldReader
+		})
+
+		conn := &loginRejectConn{}
+		miner := NewMiner(conn, 3333, nil)
+		miner.onLogin = func(*Miner) {}
+
+		params, err := json.Marshal(loginParams{
+			Login: "wallet",
+			Pass:  "x",
+		})
+		if err != nil {
+			t.Fatalf("marshal login params: %v", err)
+		}
+
+		done := make(chan struct{})
+		go func() {
+			miner.handleLogin(stratumRequest{ID: 12, Method: "login", Params: params})
+			close(done)
+		}()
+
+		<-done
+
+		var payload struct {
+			Error struct {
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(conn.Bytes(), &payload); err != nil {
+			t.Fatalf("unmarshal login rejection: %v", err)
+		}
+		if payload.Error.Message != "Proxy is unavailable, try again later" {
+			t.Fatalf("expected UUID generation failure to reject login, got %q", payload.Error.Message)
+		}
+		if miner.State() != MinerStateWaitLogin {
+			t.Fatalf("expected failed login to remain in wait-login state, got %d", miner.State())
+		}
+		if got := miner.sessionID(); got != "" {
+			t.Fatalf("expected failed login to leave session id unset, got %q", got)
+		}
+		if !conn.closed {
+			t.Fatal("expected failed login to close the connection")
 		}
 	})
 }

@@ -1479,6 +1479,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	m.extAlgo = len(m.loginAlgos) > 0
 	rpcID, err := generateUUID()
 	if err != nil || rpcID == "" {
+		m.mu.Unlock()
 		m.rejectLogin(requestID(request.ID), "Proxy is unavailable, try again later")
 		return
 	}
