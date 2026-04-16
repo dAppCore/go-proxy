@@ -14,19 +14,27 @@ func (a minerNewTestAddr) Network() string { return "tcp" }
 func (a minerNewTestAddr) String() string  { return string(a) }
 
 type minerNewTestConn struct {
-	remote net.Addr
-	local  net.Addr
-	closed bool
+	remote           net.Addr
+	local            net.Addr
+	closed           bool
+	writeDeadline    time.Time
+	writeDeadlineSet bool
 }
 
-func (c *minerNewTestConn) Read([]byte) (int, error)         { return 0, io.EOF }
-func (c *minerNewTestConn) Write(p []byte) (int, error)      { return len(p), nil }
-func (c *minerNewTestConn) Close() error                     { c.closed = true; return nil }
-func (c *minerNewTestConn) LocalAddr() net.Addr              { return c.local }
-func (c *minerNewTestConn) RemoteAddr() net.Addr             { return c.remote }
-func (c *minerNewTestConn) SetDeadline(time.Time) error      { return nil }
-func (c *minerNewTestConn) SetReadDeadline(time.Time) error  { return nil }
-func (c *minerNewTestConn) SetWriteDeadline(time.Time) error { return nil }
+func (c *minerNewTestConn) Read([]byte) (int, error)        { return 0, io.EOF }
+func (c *minerNewTestConn) Write(p []byte) (int, error)     { return len(p), nil }
+func (c *minerNewTestConn) Close() error                    { c.closed = true; return nil }
+func (c *minerNewTestConn) LocalAddr() net.Addr             { return c.local }
+func (c *minerNewTestConn) RemoteAddr() net.Addr            { return c.remote }
+func (c *minerNewTestConn) SetDeadline(time.Time) error     { return nil }
+func (c *minerNewTestConn) SetReadDeadline(time.Time) error { return nil }
+func (c *minerNewTestConn) SetWriteDeadline(deadline time.Time) error {
+	if !deadline.IsZero() {
+		c.writeDeadline = deadline
+		c.writeDeadlineSet = true
+	}
+	return nil
+}
 
 func TestMiner_NewMiner_Good(t *testing.T) {
 	conn := &minerNewTestConn{
@@ -82,5 +90,26 @@ func TestMiner_NewMiner_Ugly(t *testing.T) {
 	}
 	if miner.State() != MinerStateWaitLogin {
 		t.Fatalf("expected miner state to remain initialised, got %v", miner.State())
+	}
+}
+
+func TestMiner_writeJSON_Good(t *testing.T) {
+	conn := &minerNewTestConn{
+		remote: minerNewTestAddr("10.0.0.1:49152"),
+		local:  minerNewTestAddr("0.0.0.0:3333"),
+	}
+	miner := NewMiner(conn, 3333, nil)
+
+	if err := miner.writeJSON(map[string]any{"hello": "world"}); err != nil {
+		t.Fatalf("expected writeJSON to succeed, got %v", err)
+	}
+	if !conn.writeDeadlineSet {
+		t.Fatal("expected writeJSON to set a write deadline")
+	}
+	if conn.writeDeadline.IsZero() {
+		t.Fatal("expected write deadline to be finite")
+	}
+	if time.Until(conn.writeDeadline) <= 0 {
+		t.Fatal("expected write deadline to be in the future")
 	}
 }

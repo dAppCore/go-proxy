@@ -11,17 +11,25 @@ import (
 )
 
 type clientTestConn struct {
-	closed atomic.Int64
+	closed           atomic.Int64
+	writeDeadline    time.Time
+	writeDeadlineSet bool
 }
 
-func (c *clientTestConn) Read([]byte) (int, error)         { return 0, io.EOF }
-func (c *clientTestConn) Write(p []byte) (int, error)      { return len(p), nil }
-func (c *clientTestConn) Close() error                     { c.closed.Add(1); return nil }
-func (c *clientTestConn) LocalAddr() net.Addr              { return clientTestAddr("127.0.0.1:1") }
-func (c *clientTestConn) RemoteAddr() net.Addr             { return clientTestAddr("127.0.0.1:2") }
-func (c *clientTestConn) SetDeadline(time.Time) error      { return nil }
-func (c *clientTestConn) SetReadDeadline(time.Time) error  { return nil }
-func (c *clientTestConn) SetWriteDeadline(time.Time) error { return nil }
+func (c *clientTestConn) Read([]byte) (int, error)        { return 0, io.EOF }
+func (c *clientTestConn) Write(p []byte) (int, error)     { return len(p), nil }
+func (c *clientTestConn) Close() error                    { c.closed.Add(1); return nil }
+func (c *clientTestConn) LocalAddr() net.Addr             { return clientTestAddr("127.0.0.1:1") }
+func (c *clientTestConn) RemoteAddr() net.Addr            { return clientTestAddr("127.0.0.1:2") }
+func (c *clientTestConn) SetDeadline(time.Time) error     { return nil }
+func (c *clientTestConn) SetReadDeadline(time.Time) error { return nil }
+func (c *clientTestConn) SetWriteDeadline(deadline time.Time) error {
+	if !deadline.IsZero() {
+		c.writeDeadline = deadline
+		c.writeDeadlineSet = true
+	}
+	return nil
+}
 
 type clientTestAddr string
 
@@ -32,9 +40,9 @@ type clientDisconnectSpy struct {
 	disconnects atomic.Int64
 }
 
-func (s *clientDisconnectSpy) OnJob(proxy.Job) {}
+func (s *clientDisconnectSpy) OnJob(proxy.Job)                      {}
 func (s *clientDisconnectSpy) OnResultAccepted(int64, bool, string) {}
-func (s *clientDisconnectSpy) OnDisconnect() { s.disconnects.Add(1) }
+func (s *clientDisconnectSpy) OnDisconnect()                        { s.disconnects.Add(1) }
 
 func TestClient_Disconnect_Good(t *testing.T) {
 	conn := &clientTestConn{}
@@ -95,5 +103,26 @@ func TestClient_Disconnect_Ugly(t *testing.T) {
 	}
 	if got := spy.disconnects.Load(); got != 1 {
 		t.Fatalf("expected listener to be notified once, got %d", got)
+	}
+}
+
+func TestClient_writeJSON_Good(t *testing.T) {
+	conn := &clientTestConn{}
+	client := &StratumClient{
+		conn:    conn,
+		pending: map[int64]struct{}{},
+	}
+
+	if err := client.writeJSON(map[string]any{"hello": "world"}); err != nil {
+		t.Fatalf("expected writeJSON to succeed, got %v", err)
+	}
+	if !conn.writeDeadlineSet {
+		t.Fatal("expected writeJSON to set a write deadline")
+	}
+	if conn.writeDeadline.IsZero() {
+		t.Fatal("expected write deadline to be finite")
+	}
+	if time.Until(conn.writeDeadline) <= 0 {
+		t.Fatal("expected write deadline to be in the future")
 	}
 }

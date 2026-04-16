@@ -18,6 +18,7 @@ import (
 
 const maxStratumLineLength = 16384
 const poolConnectTimeout = 10 * time.Second
+const poolWriteTimeout = 5 * time.Second
 
 // NewStrategyFactory creates a StrategyFactory for the supplied config.
 //
@@ -277,13 +278,21 @@ func (c *StratumClient) resetConnectionState() net.Conn {
 func (c *StratumClient) writeJSON(payload any) error {
 	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
-	if c.conn == nil {
+	conn := c.conn
+	if conn == nil {
 		return proxy.NewScopedError("proxy.pool.client", "connection is nil", nil)
 	}
+	if err := conn.SetWriteDeadline(time.Now().Add(poolWriteTimeout)); err != nil {
+		c.notifyDisconnect()
+		return proxy.NewScopedError("proxy.pool.client", "write deadline failed", err)
+	}
+	defer func() {
+		_ = conn.SetWriteDeadline(time.Time{})
+	}()
 	data := []byte(jsonMarshalString(payload))
 	var err error
 	data = append(data, '\n')
-	_, err = c.conn.Write(data)
+	_, err = conn.Write(data)
 	if err != nil {
 		c.notifyDisconnect()
 		return proxy.NewScopedError("proxy.pool.client", "write request failed", err)

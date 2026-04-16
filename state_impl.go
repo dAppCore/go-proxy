@@ -19,6 +19,7 @@ const (
 	minerLoginTimeout        = 10 * time.Second
 	minerReadyTimeout        = 600 * time.Second
 	minerTLSHandshakeTimeout = 5 * time.Second
+	minerWriteTimeout        = 5 * time.Second
 	submitDrainTimeout       = 5 * time.Second
 	httpReadHeaderTimeout    = 5 * time.Second
 	httpReadTimeout          = 10 * time.Second
@@ -1793,6 +1794,13 @@ func (m *Miner) writeJSON(payload any) error {
 	if conn == nil {
 		return nil
 	}
+	if err := conn.SetWriteDeadline(time.Now().Add(minerWriteTimeout)); err != nil {
+		m.Close()
+		return err
+	}
+	defer func() {
+		_ = conn.SetWriteDeadline(time.Time{})
+	}()
 	data := []byte(jsonMarshalString(payload))
 	data = append(data, '\n')
 	var written int
