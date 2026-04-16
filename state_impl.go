@@ -25,6 +25,7 @@ const (
 	httpReadTimeout          = 10 * time.Second
 	httpWriteTimeout         = 10 * time.Second
 	httpIdleTimeout          = 60 * time.Second
+	httpMaxHeaderBytes       = 16 * 1024
 	maskedPassword           = "********"
 )
 
@@ -816,6 +817,7 @@ func (p *Proxy) startMonitoringServer() bool {
 		ReadTimeout:       httpReadTimeout,
 		WriteTimeout:      httpWriteTimeout,
 		IdleTimeout:       httpIdleTimeout,
+		MaxHeaderBytes:    httpMaxHeaderBytes,
 	}
 	p.lifecycleMu.Lock()
 	p.httpServer = httpServer

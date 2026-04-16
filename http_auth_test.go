@@ -248,6 +248,12 @@ func TestProxy_startHTTP_Good(t *testing.T) {
 	if httpServer.IdleTimeout == 0 {
 		t.Fatal("expected monitoring server to set an idle timeout")
 	}
+	if httpServer.MaxHeaderBytes == 0 {
+		t.Fatal("expected monitoring server to cap header bytes")
+	}
+	if httpServer.MaxHeaderBytes != httpMaxHeaderBytes {
+		t.Fatalf("expected monitoring server header limit %d, got %d", httpMaxHeaderBytes, httpServer.MaxHeaderBytes)
+	}
 	p.Stop()
 }
 
