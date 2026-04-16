@@ -8,6 +8,31 @@ import (
 	"time"
 )
 
+type shareSinkSpy struct {
+	accepts     int
+	rejects     int
+	panicAccept bool
+	panicReject bool
+	lastAccept  Event
+	lastReject  Event
+}
+
+func (s *shareSinkSpy) OnAccept(e Event) {
+	if s.panicAccept {
+		panic("accept boom")
+	}
+	s.accepts++
+	s.lastAccept = e
+}
+
+func (s *shareSinkSpy) OnReject(e Event) {
+	if s.panicReject {
+		panic("reject boom")
+	}
+	s.rejects++
+	s.lastReject = e
+}
+
 func TestCoreImpl_HelperFunctions_Good(t *testing.T) {
 	if result := newSuccessResult(); !result.OK || result.Error != nil {
 		t.Fatalf("expected success result, got %+v", result)
@@ -63,6 +88,56 @@ func TestCoreImpl_HelperFunctions_Ugly(t *testing.T) {
 	refillBucket(&bucket, 30, time.Unix(120, 0))
 	if bucket.tokens != 30 {
 		t.Fatalf("expected refill to cap at limit, got %d", bucket.tokens)
+	}
+}
+
+func TestCoreImpl_shareSinkGroup_Good(t *testing.T) {
+	first := &shareSinkSpy{}
+	second := &shareSinkSpy{}
+
+	group := newShareSinkGroup(nil, first, second)
+	if group == nil {
+		t.Fatal("expected share sink group")
+	}
+	if got := len(group.sinks); got != 2 {
+		t.Fatalf("expected nil sinks to be filtered, got %d sinks", got)
+	}
+
+	accept := Event{Type: EventAccept, Diff: 1234}
+	reject := Event{Type: EventReject, Error: "invalid"}
+	group.OnAccept(accept)
+	group.OnReject(reject)
+
+	if first.accepts != 1 || second.accepts != 1 {
+		t.Fatalf("expected all sinks to receive accept event, got first=%d second=%d", first.accepts, second.accepts)
+	}
+	if first.rejects != 1 || second.rejects != 1 {
+		t.Fatalf("expected all sinks to receive reject event, got first=%d second=%d", first.rejects, second.rejects)
+	}
+	if first.lastAccept != accept || second.lastReject != reject {
+		t.Fatalf("expected event payloads to be forwarded, got first=%+v second=%+v", first.lastAccept, second.lastReject)
+	}
+}
+
+func TestCoreImpl_shareSinkGroup_Bad(t *testing.T) {
+	var group *shareSinkGroup
+	group.OnAccept(Event{Type: EventAccept})
+	group.OnReject(Event{Type: EventReject})
+}
+
+func TestCoreImpl_shareSinkGroup_Ugly(t *testing.T) {
+	first := &shareSinkSpy{panicAccept: true, panicReject: true}
+	second := &shareSinkSpy{}
+	group := newShareSinkGroup(first, second)
+
+	group.OnAccept(Event{Type: EventAccept, Diff: 42})
+	group.OnReject(Event{Type: EventReject, Error: "boom"})
+
+	if second.accepts != 1 {
+		t.Fatalf("expected later accept handlers to run after a panic, got %d", second.accepts)
+	}
+	if second.rejects != 1 {
+		t.Fatalf("expected later reject handlers to run after a panic, got %d", second.rejects)
 	}
 }
 
@@ -137,6 +212,39 @@ func TestCoreImpl_isLoopbackHTTPHost_Bad(t *testing.T) {
 func TestCoreImpl_isLoopbackHTTPHost_Ugly(t *testing.T) {
 	if !isLoopbackHTTPHost("  LOCALHOST  ") {
 		t.Fatal("expected trimmed case-insensitive localhost to be treated as loopback")
+	}
+}
+
+func TestCoreImpl_isHexString_Good(t *testing.T) {
+	if !isHexString("0123456789abcdef") {
+		t.Fatal("expected lowercase hex to be accepted")
+	}
+	if !isHexString("ABCDEF") {
+		t.Fatal("expected uppercase hex to be accepted")
+	}
+	if !isHexStringLen("deadBEEF", 8) {
+		t.Fatal("expected exact-length hex string to be accepted")
+	}
+}
+
+func TestCoreImpl_isHexString_Bad(t *testing.T) {
+	if isHexString("") {
+		t.Fatal("expected empty string to be rejected")
+	}
+	if isHexString("g123") {
+		t.Fatal("expected non-hex characters to be rejected")
+	}
+	if isHexStringLen("abc", 8) {
+		t.Fatal("expected length mismatch to be rejected")
+	}
+}
+
+func TestCoreImpl_isHexString_Ugly(t *testing.T) {
+	if isHexString("1234zzzz") {
+		t.Fatal("expected invalid characters at the end to be rejected")
+	}
+	if isHexStringLen("1234zzzz", 8) {
+		t.Fatal("expected invalid characters to cause isHexStringLen to fail")
 	}
 }
 

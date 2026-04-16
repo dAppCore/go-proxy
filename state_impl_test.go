@@ -210,3 +210,69 @@ func TestStateImpl_noopSplitter_Ugly(t *testing.T) {
 		t.Fatalf("expected noop splitter to remain empty after mixed calls, got %+v", got)
 	}
 }
+
+func TestStateImpl_requestID_Good(t *testing.T) {
+	cases := []struct {
+		name string
+		in   any
+		want int64
+	}{
+		{name: "float64", in: float64(7), want: 7},
+		{name: "int64", in: int64(8), want: 8},
+		{name: "int", in: int(9), want: 9},
+		{name: "string", in: "10", want: 10},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := requestID(tc.in); got != tc.want {
+				t.Fatalf("expected %d, got %d", tc.want, got)
+			}
+		})
+	}
+}
+
+func TestStateImpl_requestID_Bad(t *testing.T) {
+	cases := []any{
+		true,
+		nil,
+		"abc",
+	}
+	for _, in := range cases {
+		if got := requestID(in); got != 0 {
+			t.Fatalf("expected unsupported id %v to map to 0, got %d", in, got)
+		}
+	}
+}
+
+func TestStateImpl_requestID_Ugly(t *testing.T) {
+	if got := requestID(float64(9.75)); got != 9 {
+		t.Fatalf("expected floating-point ids to truncate, got %d", got)
+	}
+	if got := requestID("-12"); got != -12 {
+		t.Fatalf("expected signed string ids to parse, got %d", got)
+	}
+}
+
+func TestStateImpl_isLowerHex8_Good(t *testing.T) {
+	if !isLowerHex8("deadbeef") {
+		t.Fatal("expected lowercase hex nonce to be accepted")
+	}
+}
+
+func TestStateImpl_isLowerHex8_Bad(t *testing.T) {
+	for _, in := range []string{"", "deadbee", "DEADBEEF"} {
+		if isLowerHex8(in) {
+			t.Fatalf("expected %q to be rejected", in)
+		}
+	}
+}
+
+func TestStateImpl_isLowerHex8_Ugly(t *testing.T) {
+	if isLowerHex8("deadbeeg") {
+		t.Fatal("expected non-hex characters to be rejected")
+	}
+	if isLowerHex8("deadbeef00") {
+		t.Fatal("expected longer-than-8 values to be rejected")
+	}
+}
