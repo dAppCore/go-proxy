@@ -1042,7 +1042,10 @@ func monitoringConfigChanged(current, next HTTPConfig) bool {
 	if !current.Enabled && !next.Enabled {
 		return false
 	}
-	return current.Host != next.Host || current.Port != next.Port
+	return current.Host != next.Host ||
+		current.Port != next.Port ||
+		current.AccessToken != next.AccessToken ||
+		current.Restricted != next.Restricted
 }
 
 func secureStringEqual(a, b string) bool {

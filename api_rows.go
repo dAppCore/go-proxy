@@ -104,9 +104,15 @@ type WorkersDocument struct {
 	Workers []WorkerRow `json:"workers"`
 }
 
+// WorkersResponse is the RFC-style name for WorkersDocument.
+type WorkersResponse = WorkersDocument
+
 // doc := p.MinersDocument()
 // _ = doc.Miners[0][7]
 type MinersDocument struct {
 	Format []string   `json:"format"`
 	Miners []MinerRow `json:"miners"`
 }
+
+// MinersResponse is the RFC-style name for MinersDocument.
+type MinersResponse = MinersDocument
