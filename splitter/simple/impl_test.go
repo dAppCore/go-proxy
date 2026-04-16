@@ -59,7 +59,7 @@ func TestSimpleSplitter_OnLogin_Good(t *testing.T) {
 		return activeStrategy{}
 	})
 	miner := &proxy.Miner{}
-	job := proxy.Job{JobID: "job-1", Blob: "blob"}
+	job := proxy.Job{JobID: "job-1", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
 	mapper := &SimpleMapper{
 		id:         7,
 		strategy:   activeStrategy{},
@@ -196,7 +196,7 @@ func TestSimpleSplitter_Upstreams_RecoveryResetsStopped_Good(t *testing.T) {
 		t.Fatalf("expected disconnected mapper to count as error, got %+v", before)
 	}
 
-	mapper.OnJob(proxy.Job{JobID: "job-1", Blob: "blob"})
+	mapper.OnJob(proxy.Job{JobID: "job-1", Blob: strings.Repeat("0", 160), Target: "b88d0600"})
 
 	after := splitter.Upstreams()
 	if after.Active != 1 {
@@ -460,7 +460,7 @@ func TestSimpleMapper_OnJob_PreservesPreviousJobForSamePoolSession_Good(t *testi
 		currentJob: proxy.Job{JobID: "job-1", Blob: "blob-1", ClientID: "session-a"},
 	}
 
-	mapper.OnJob(proxy.Job{JobID: "job-2", Blob: "blob-2", ClientID: "session-a"})
+	mapper.OnJob(proxy.Job{JobID: "job-2", Blob: strings.Repeat("0", 160), Target: "b88d0600", ClientID: "session-a"})
 
 	if mapper.currentJob.JobID != "job-2" {
 		t.Fatalf("expected current job to roll forward, got %q", mapper.currentJob.JobID)
@@ -476,7 +476,7 @@ func TestSimpleMapper_OnJob_ResetsPreviousJobAcrossPoolSessions_Ugly(t *testing.
 		prevJob:    proxy.Job{JobID: "job-0", Blob: "blob-0", ClientID: "session-a"},
 	}
 
-	mapper.OnJob(proxy.Job{JobID: "job-2", Blob: "blob-2", ClientID: "session-b"})
+	mapper.OnJob(proxy.Job{JobID: "job-2", Blob: strings.Repeat("0", 160), Target: "b88d0600", ClientID: "session-b"})
 
 	if mapper.currentJob.JobID != "job-2" {
 		t.Fatalf("expected current job to advance after session change, got %q", mapper.currentJob.JobID)
@@ -492,7 +492,7 @@ func TestSimpleMapper_OnJob_ResetsPreviousJobWithoutClientID_Bad(t *testing.T) {
 		prevJob:    proxy.Job{JobID: "job-0", Blob: "blob-0"},
 	}
 
-	mapper.OnJob(proxy.Job{JobID: "job-2", Blob: "blob-2"})
+	mapper.OnJob(proxy.Job{JobID: "job-2", Blob: strings.Repeat("0", 160), Target: "b88d0600"})
 
 	if mapper.currentJob.JobID != "job-2" {
 		t.Fatalf("expected current job to advance, got %q", mapper.currentJob.JobID)

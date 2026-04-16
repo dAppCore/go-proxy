@@ -88,6 +88,7 @@ func TestStorage_Add_Ugly(t *testing.T) {
 	storage := NewNonceStorage()
 	miner := &proxy.Miner{}
 	miner.SetID(1)
+	blob160 := strings.Repeat("0", 160)
 
 	if !storage.Add(miner) {
 		t.Fatalf("expected first add to succeed")
@@ -100,7 +101,7 @@ func TestStorage_Add_Ugly(t *testing.T) {
 	}
 
 	// SetJob clears dead slots
-	storage.SetJob(proxy.Job{Blob: "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000", JobID: "job-1"})
+	storage.SetJob(proxy.Job{Blob: blob160, JobID: "job-1", Target: "b88d0600"})
 	free, dead, active = storage.SlotCount()
 	if dead != 0 {
 		t.Fatalf("expected dead slots cleared after SetJob, got %d", dead)
@@ -122,8 +123,9 @@ func TestStorage_Add_Ugly(t *testing.T) {
 func TestStorage_IsValidJobID_Good(t *testing.T) {
 	storage := NewNonceStorage()
 	storage.SetJob(proxy.Job{
-		JobID: "job-1",
-		Blob:  "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+		JobID:  "job-1",
+		Blob:   strings.Repeat("0", 160),
+		Target: "b88d0600",
 	})
 
 	if !storage.IsValidJobID("job-1") {
@@ -138,8 +140,9 @@ func TestStorage_IsValidJobID_Good(t *testing.T) {
 func TestStorage_IsValidJobID_Bad(t *testing.T) {
 	storage := NewNonceStorage()
 	storage.SetJob(proxy.Job{
-		JobID: "job-1",
-		Blob:  "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+		JobID:  "job-1",
+		Blob:   strings.Repeat("0", 160),
+		Target: "b88d0600",
 	})
 
 	if storage.IsValidJobID("nonexistent") {
@@ -157,10 +160,10 @@ func TestStorage_IsValidJobID_Bad(t *testing.T) {
 //	storage.IsValidJobID("job-1") // true (but expired counter increments)
 func TestStorage_IsValidJobID_Ugly(t *testing.T) {
 	storage := NewNonceStorage()
-	blob160 := "0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	blob160 := strings.Repeat("0", 160)
 
-	storage.SetJob(proxy.Job{JobID: "job-1", Blob: blob160, ClientID: "session-1"})
-	storage.SetJob(proxy.Job{JobID: "job-2", Blob: blob160, ClientID: "session-1"})
+	storage.SetJob(proxy.Job{JobID: "job-1", Blob: blob160, Target: "b88d0600", ClientID: "session-1"})
+	storage.SetJob(proxy.Job{JobID: "job-2", Blob: blob160, Target: "b88d0600", ClientID: "session-1"})
 
 	if !storage.IsValidJobID("job-2") {
 		t.Fatalf("expected current job to be valid")

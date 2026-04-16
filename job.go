@@ -2,6 +2,9 @@ package proxy
 
 // Job holds one pool work unit and its metadata.
 //
+// Valid jobs must carry a 160-char hex blob, non-empty job ID, and an 8-char
+// hex target so malformed upstream work is dropped before fanout.
+//
 //	j := proxy.Job{
 //	    Blob:   strings.Repeat("0", 160),
 //	    JobID:  "4BiGm3/RgGQzgkTI",

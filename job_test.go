@@ -10,7 +10,7 @@ import (
 //	job := proxy.Job{Blob: strings.Repeat("0", 160)}
 //	result := job.BlobWithFixedByte(0x2A) // chars 78-79 become "2a"
 func TestJob_BlobWithFixedByte_Good(t *testing.T) {
-	job := Job{Blob: strings.Repeat("0", 160)}
+	job := Job{Blob: strings.Repeat("0", 160), JobID: "job-1", Target: "b88d0600"}
 	got := job.BlobWithFixedByte(0x2A)
 	if len(got) != 160 {
 		t.Fatalf("expected length 160, got %d", len(got))
@@ -38,7 +38,7 @@ func TestJob_BlobWithFixedByte_Bad(t *testing.T) {
 //	job := proxy.Job{Blob: strings.Repeat("0", 160)}
 //	result := job.BlobWithFixedByte(0xFF) // chars 78-79 become "ff" (not "FF")
 func TestJob_BlobWithFixedByte_Ugly(t *testing.T) {
-	job := Job{Blob: strings.Repeat("0", 160)}
+	job := Job{Blob: strings.Repeat("0", 160), JobID: "job-1", Target: "b88d0600"}
 	got := job.BlobWithFixedByte(0xFF)
 	if got[78:80] != "ff" {
 		t.Fatalf("expected lowercase 'ff', got %q", got[78:80])
@@ -53,7 +53,7 @@ func TestJob_BlobWithFixedByte_Ugly(t *testing.T) {
 //	job := proxy.Job{Blob: "abc", JobID: "job-1"}
 //	job.IsValid() // true
 func TestJob_IsValid_Good(t *testing.T) {
-	job := Job{Blob: "abc", JobID: "job-1"}
+	job := Job{Blob: strings.Repeat("0", 160), JobID: "job-1", Target: "b88d0600"}
 	if !job.IsValid() {
 		t.Fatalf("expected job with blob and job id to be valid")
 	}
@@ -64,11 +64,14 @@ func TestJob_IsValid_Good(t *testing.T) {
 //	job := proxy.Job{Blob: "", JobID: "job-1"}
 //	job.IsValid() // false
 func TestJob_IsValid_Bad(t *testing.T) {
-	if (Job{Blob: "", JobID: "job-1"}).IsValid() {
+	if (Job{Blob: "", JobID: "job-1", Target: "b88d0600"}).IsValid() {
 		t.Fatalf("expected empty blob to be invalid")
 	}
-	if (Job{Blob: "abc", JobID: ""}).IsValid() {
+	if (Job{Blob: strings.Repeat("0", 160), JobID: "", Target: "b88d0600"}).IsValid() {
 		t.Fatalf("expected empty job id to be invalid")
+	}
+	if (Job{Blob: strings.Repeat("0", 160), JobID: "job-1", Target: "bad"}).IsValid() {
+		t.Fatalf("expected invalid target to be rejected")
 	}
 }
 

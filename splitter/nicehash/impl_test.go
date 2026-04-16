@@ -31,8 +31,8 @@ func TestNonceStorage_IsValidJobID_Bad(t *testing.T) {
 func TestNonceStorage_IsValidJobID_Ugly(t *testing.T) {
 	storage := NewNonceStorage()
 	blob := strings.Repeat("0", 160)
-	storage.SetJob(proxy.Job{JobID: "job-1", Blob: blob, ClientID: "session-1"})
-	storage.SetJob(proxy.Job{JobID: "job-2", Blob: blob, ClientID: "session-1"})
+	storage.SetJob(proxy.Job{JobID: "job-1", Blob: blob, Target: "b88d0600", ClientID: "session-1"})
+	storage.SetJob(proxy.Job{JobID: "job-2", Blob: blob, Target: "b88d0600", ClientID: "session-1"})
 	if !storage.IsValidJobID("job-1") {
 		t.Fatal("expected previous job id to be accepted")
 	}

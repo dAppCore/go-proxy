@@ -244,20 +244,20 @@ func (g *shareSinkGroup) OnReject(e Event) {
 	}
 }
 
-// IsValid returns true when the job contains a blob and job id.
+// IsValid returns true when the job matches the RFC shape.
 //
 //	if !job.IsValid() {
 //	    return
 //	}
 func (j Job) IsValid() bool {
-	return j.Blob != "" && j.JobID != ""
+	return len(j.JobID) > 0 && isHexStringLen(j.Blob, 160) && isHexStringLen(j.Target, 8)
 }
 
 // BlobWithFixedByte replaces the blob byte at position 39 with fixedByte.
 //
 //	partitioned := job.BlobWithFixedByte(0x2A)
 func (j Job) BlobWithFixedByte(fixedByte uint8) string {
-	if len(j.Blob) < 80 {
+	if len(j.Blob) != 160 || !isHexString(j.Blob) {
 		return j.Blob
 	}
 	blob := []byte(j.Blob)
@@ -609,4 +609,24 @@ func generateUUID() (string, error) {
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func isHexStringLen(value string, length int) bool {
+	return len(value) == length && isHexString(value)
+}
+
+func isHexString(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'f':
+		case r >= 'A' && r <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
 }

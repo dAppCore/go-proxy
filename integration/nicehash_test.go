@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"strings"
 	"testing"
 	"time"
 
@@ -408,7 +409,7 @@ func encodeLineBytes(payload any) []byte {
 }
 
 func zeroBlob() string {
-	return "00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+	return strings.Repeat("0", 160)
 }
 
 func closeAll(connections []net.Conn) {

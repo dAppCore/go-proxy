@@ -84,7 +84,7 @@ func TestMapper_Submit_InvalidJob_Good(t *testing.T) {
 	miner.SetID(7)
 	strategy := &startCountingStrategy{}
 	mapper := NewNonceMapper(1, &proxy.Config{}, strategy)
-	mapper.storage.job = proxy.Job{JobID: "job-1", Blob: "blob", Target: "b88d0600"}
+	mapper.storage.job = proxy.Job{JobID: "job-1", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
 
 	done := make(chan struct{})
 	go func() {
@@ -135,8 +135,8 @@ func TestMapper_OnResultAccepted_ExpiredUsesPreviousJob(t *testing.T) {
 	miner.SetID(7)
 	mapper := NewNonceMapper(1, &proxy.Config{}, &startCountingStrategy{})
 	mapper.events = bus
-	mapper.storage.job = proxy.Job{JobID: "job-new", Blob: "blob-new", Target: "b88d0600"}
-	mapper.storage.prevJob = proxy.Job{JobID: "job-old", Blob: "blob-old", Target: "b88d0600"}
+	mapper.storage.job = proxy.Job{JobID: "job-new", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
+	mapper.storage.prevJob = proxy.Job{JobID: "job-old", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
 	mapper.storage.miners[miner.ID()] = miner
 	if !mapper.storage.IsValidJobID("job-old") {
 		t.Fatal("expected previous job to validate before result handling")
@@ -173,8 +173,8 @@ func TestMapper_Submit_ExpiredJobUsesPreviousDifficulty(t *testing.T) {
 
 	strategy := &submitCaptureStrategy{}
 	mapper := NewNonceMapper(1, &proxy.Config{}, strategy)
-	mapper.storage.job = proxy.Job{JobID: "job-new", Blob: "blob-new", Target: "ffffffff"}
-	mapper.storage.prevJob = proxy.Job{JobID: "job-old", Blob: "blob-old", Target: "b88d0600"}
+	mapper.storage.job = proxy.Job{JobID: "job-new", Blob: strings.Repeat("0", 160), Target: "ffffffff"}
+	mapper.storage.prevJob = proxy.Job{JobID: "job-old", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
 	mapper.storage.miners[miner.ID()] = miner
 
 	mapper.Submit(&proxy.SubmitEvent{
@@ -221,7 +221,7 @@ func TestMapper_OnResultAccepted_CustomDiffUsesEffectiveDifficulty(t *testing.T)
 	miner.SetID(8)
 	mapper := NewNonceMapper(1, &proxy.Config{}, &startCountingStrategy{})
 	mapper.events = bus
-	mapper.storage.job = proxy.Job{JobID: "job-new", Blob: "blob-new", Target: "b88d0600"}
+	mapper.storage.job = proxy.Job{JobID: "job-new", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
 	mapper.storage.miners[miner.ID()] = miner
 	mapper.pending[10] = SubmitContext{
 		RequestID: 77,
