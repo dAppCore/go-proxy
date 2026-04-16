@@ -224,6 +224,37 @@ func TestRegisterRoutes_POSTWorkers_Bad(t *testing.T) {
 	}
 }
 
+func TestRegisterRoutes_PUTSummary_Bad(t *testing.T) {
+	config := &proxy.Config{
+		Mode:    "nicehash",
+		Workers: proxy.WorkersByRigID,
+		Bind:    []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+	}
+	p, result := proxy.New(config)
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	RegisterRoutes(router, p)
+	handler := router.Handler()
+
+	request := httptest.NewRequest(http.MethodPut, "/1/summary", nil)
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, request)
+
+	if recorder.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected %d, got %d", http.StatusMethodNotAllowed, recorder.Code)
+	}
+	if got := recorder.Header().Get("Allow"); got != http.MethodGet {
+		t.Fatalf("expected Allow header %q, got %q", http.MethodGet, got)
+	}
+}
+
 func TestRegisterRoutes_GETMiners_Ugly(t *testing.T) {
 	config := &proxy.Config{
 		Mode:    "simple",

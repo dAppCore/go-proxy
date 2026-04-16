@@ -62,8 +62,7 @@ func registerJSONRoute(group *gin.RouterGroup, proxyInstance *proxy.Proxy, path 
 		}
 		writeJSON(context.Writer, renderDocument())
 	}
-	group.GET(path, handler)
-	group.POST(path, handler)
+	group.Any(path, handler)
 }
 
 func allowMonitoringRequest(proxyInstance *proxy.Proxy, request *http.Request) (int, bool) {

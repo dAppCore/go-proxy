@@ -340,3 +340,21 @@ func TestWorker_OnClose_Ugly(t *testing.T) {
 		t.Fatalf("expected original worker connection count to remain cumulative, got %d", records[0].Connections)
 	}
 }
+
+func TestWorker_EventBusCloseCleanup_Good(t *testing.T) {
+	bus := NewEventBus()
+	workers := NewWorkers(WorkersByUser, bus)
+	miner := &Miner{id: 403, user: "close-bus", ip: "10.0.0.32"}
+
+	bus.Dispatch(Event{Type: EventLogin, Miner: miner})
+	bus.Dispatch(Event{Type: EventClose, Miner: miner})
+	bus.Dispatch(Event{Type: EventAccept, Miner: miner, Diff: 1000})
+
+	records := workers.List()
+	if len(records) != 1 {
+		t.Fatalf("expected one worker record, got %d", len(records))
+	}
+	if records[0].Accepted != 0 {
+		t.Fatalf("expected closed miner accepts to be ignored, got %d", records[0].Accepted)
+	}
+}

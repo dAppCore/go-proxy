@@ -2070,6 +2070,7 @@ func (w *Workers) bindEvents(eventBus *EventBus) {
 	eventBus.Subscribe(EventLogin, w.OnLogin)
 	eventBus.Subscribe(EventAccept, w.OnAccept)
 	eventBus.Subscribe(EventReject, w.OnReject)
+	eventBus.Subscribe(EventClose, w.OnClose)
 	w.subscribed = true
 }
 
