@@ -47,7 +47,7 @@ func NewStratumClient(poolConfig proxy.PoolConfig, listener StratumListener) *St
 	}
 }
 
-// IsActive reports whether the client has received at least one job.
+// active := client.IsActive()
 func (c *StratumClient) IsActive() bool {
 	if c == nil {
 		return false
@@ -57,7 +57,7 @@ func (c *StratumClient) IsActive() bool {
 	return c.active
 }
 
-// SessionID returns the current pool session identifier.
+// sessionID := client.SessionID()
 func (c *StratumClient) SessionID() string {
 	if c == nil {
 		return ""
@@ -415,7 +415,10 @@ func (c *StratumClient) handleMessage(line []byte) {
 	}
 }
 
-// NewFailoverStrategy creates the ordered pool failover wrapper.
+// strategy := pool.NewFailoverStrategy([]proxy.PoolConfig{
+//     {URL: "primary.example:3333", Enabled: true},
+//     {URL: "backup.example:3333", Enabled: true},
+// }, listener, config)
 func NewFailoverStrategy(pools []proxy.PoolConfig, listener StratumListener, config *proxy.Config) *FailoverStrategy {
 	return &FailoverStrategy{
 		pools:    pools,
@@ -557,7 +560,7 @@ func (s *FailoverStrategy) IsActive() bool {
 	return client.IsActive()
 }
 
-// Tick keeps an active pool connection alive when configured.
+// strategy.Tick(60)
 func (s *FailoverStrategy) Tick(ticks uint64) {
 	if s == nil || ticks == 0 || ticks%60 != 0 {
 		return

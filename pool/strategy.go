@@ -23,7 +23,7 @@ type FailoverStrategy struct {
 	mu       sync.Mutex
 }
 
-// CurrentIndex returns the active pool index selected by the strategy.
+// index := strategy.CurrentIndex()
 func (s *FailoverStrategy) CurrentIndex() int {
 	if s == nil {
 		return -1
@@ -33,7 +33,7 @@ func (s *FailoverStrategy) CurrentIndex() int {
 	return s.current
 }
 
-// Client returns the current pool client, if any.
+// client := strategy.Client()
 func (s *FailoverStrategy) Client() *StratumClient {
 	if s == nil {
 		return nil
