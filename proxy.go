@@ -8,10 +8,11 @@
 package proxy
 
 import (
+	// Note: AX-6 — structural HTTP boundary for monitoring server wiring.
 	"net/http"
-	"sync"
-	"sync/atomic"
 	"time"
+
+	core "dappco.re/go/core"
 )
 
 // Proxy wires the configured listeners, splitters, stats, workers, and log sinks.
@@ -28,8 +29,8 @@ import (
 //	}
 type Proxy struct {
 	config            *Config
-	configMu          sync.RWMutex
-	lifecycleMu       sync.RWMutex
+	configMu          core.RWMutex
+	lifecycleMu       core.RWMutex
 	splitter          Splitter
 	shareSink         ShareSink
 	stats             *Stats
@@ -39,8 +40,8 @@ type Proxy struct {
 	ticker            *time.Ticker
 	watcher           *ConfigWatcher
 	done              chan struct{}
-	stopOnce          sync.Once
-	minersMu          sync.RWMutex
+	stopOnce          core.Once
+	minersMu          core.RWMutex
 	miners            map[int64]*Miner
 	customDiff        *CustomDiff
 	customDiffBuckets *CustomDiffBuckets
@@ -48,7 +49,7 @@ type Proxy struct {
 	httpServer        *http.Server
 	accessLog         *accessLogSink
 	shareLog          *shareLogSink
-	submitCount       atomic.Int64
+	submitCount       core.AtomicInt64
 }
 
 // Splitter routes miner logins, submits, and disconnects to the active upstream strategy.
@@ -128,7 +129,7 @@ type ConfigWatcher struct {
 	onConfigChange func(*Config)
 	lastModifiedAt time.Time
 	stopCh         chan struct{}
-	mu             sync.Mutex
+	mu             core.Mutex
 	started        bool
 }
 
@@ -145,7 +146,7 @@ type RateLimiter struct {
 	limit          RateLimit
 	bucketByHost   map[string]*tokenBucket
 	banUntilByHost map[string]time.Time
-	mu             sync.Mutex
+	mu             core.Mutex
 }
 
 // tokenBucket is the per-IP refillable counter.
@@ -161,5 +162,5 @@ type tokenBucket struct {
 //	resolver := proxy.NewCustomDiff(50000)
 //	resolver.Apply(&Miner{user: "WALLET+75000"})
 type CustomDiff struct {
-	globalDiff atomic.Uint64
+	globalDiff core.AtomicUint64
 }
