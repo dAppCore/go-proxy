@@ -8,7 +8,7 @@ import (
 	"net/http"
 
 	core "dappco.re/go/core"
-	coreapi "dappco.re/go/core/api"
+	coreapi "dappco.re/go/api"
 	"dappco.re/go/proxy"
 	"github.com/gin-gonic/gin"
 )

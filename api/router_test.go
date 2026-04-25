@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	coreapi "dappco.re/go/core/api"
+	coreapi "dappco.re/go/api"
 	"dappco.re/go/proxy"
 )
 
