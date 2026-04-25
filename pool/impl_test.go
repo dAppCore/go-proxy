@@ -1,6 +1,9 @@
 package pool
 
 import (
+	"crypto/sha256"
+	"crypto/x509"
+	"encoding/hex"
 	"testing"
 
 	"dappco.re/go/proxy"
@@ -203,5 +206,36 @@ func TestPoolImpl_requestID_Ugly(t *testing.T) {
 	}
 	if got := requestID(true); got != 0 {
 		t.Fatalf("expected unsupported request id type to map to 0, got %d", got)
+	}
+}
+
+func TestMakeFingerprintVerifier_Good(t *testing.T) {
+	cert, _ := mustGenerateSelfSignedCert(t)
+	parsed, err := x509.ParseCertificate(cert.Certificate[0])
+	if err != nil {
+		t.Fatalf("parse certificate: %v", err)
+	}
+	sum := sha256.Sum256(parsed.RawSubjectPublicKeyInfo)
+	verifier := makeFingerprintVerifier(hex.EncodeToString(sum[:]))
+
+	if err := verifier([][]byte{cert.Certificate[0]}, nil); err != nil {
+		t.Fatalf("expected matching SPKI fingerprint to verify, got %v", err)
+	}
+}
+
+func TestMakeFingerprintVerifier_Bad(t *testing.T) {
+	cert, _ := mustGenerateSelfSignedCert(t)
+	verifier := makeFingerprintVerifier("00")
+
+	if err := verifier([][]byte{cert.Certificate[0]}, nil); err == nil {
+		t.Fatal("expected invalid fingerprint to fail")
+	}
+
+	verifier = makeFingerprintVerifier(hex.EncodeToString(make([]byte, sha256.Size)))
+	if err := verifier(nil, nil); err == nil {
+		t.Fatal("expected missing certificate to fail")
+	}
+	if err := verifier([][]byte{cert.Certificate[0]}, nil); err == nil {
+		t.Fatal("expected mismatched fingerprint to fail")
 	}
 }

@@ -3,9 +3,7 @@ package pool
 import (
 	"bufio"
 	"context"
-	"crypto/sha256"
 	"crypto/tls"
-	"encoding/hex"
 	"io"
 	"net"
 	"strconv"
@@ -97,7 +95,9 @@ func (c *StratumClient) Connect() proxy.Result {
 			MinVersion: tls.VersionTLS12,
 		}
 		if trimString(c.config.TLSFingerprint) != "" {
-			tlsCfg.InsecureSkipVerify = true
+			tlsCfg.InsecureSkipVerify = true // #nosec G402 — fingerprint pinning replaces cert chain
+			tlsCfg.VerifyPeerCertificate = makeFingerprintVerifier(c.config.TLSFingerprint)
+			tlsCfg.VerifyConnection = makeFingerprintConnectionVerifier(c.config.TLSFingerprint)
 		}
 		tlsConn := tls.Client(conn, tlsCfg)
 		if err := setConnectDeadline(tlsConn, time.Now().Add(remaining)); err != nil {
@@ -109,18 +109,6 @@ func (c *StratumClient) Connect() proxy.Result {
 			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake failed", err)}
 		}
 		_ = tlsConn.SetDeadline(time.Time{})
-		if fp := lowerString(trimString(c.config.TLSFingerprint)); fp != "" {
-			cert := tlsConn.ConnectionState().PeerCertificates
-			if len(cert) == 0 {
-				_ = tlsConn.Close()
-				return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "missing certificate", nil)}
-			}
-			sum := sha256.Sum256(cert[0].Raw)
-			if hex.EncodeToString(sum[:]) != fp {
-				_ = tlsConn.Close()
-				return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "tls fingerprint mismatch", nil)}
-			}
-		}
 		c.conn = tlsConn
 		c.tlsConn = tlsConn
 	} else {
@@ -415,10 +403,10 @@ func (c *StratumClient) handleMessage(line []byte) {
 	}
 }
 
-// strategy := pool.NewFailoverStrategy([]proxy.PoolConfig{
-//     {URL: "primary.example:3333", Enabled: true},
-//     {URL: "backup.example:3333", Enabled: true},
-// }, listener, config)
+//	strategy := pool.NewFailoverStrategy([]proxy.PoolConfig{
+//	    {URL: "primary.example:3333", Enabled: true},
+//	    {URL: "backup.example:3333", Enabled: true},
+//	}, listener, config)
 func NewFailoverStrategy(pools []proxy.PoolConfig, listener StratumListener, config *proxy.Config) *FailoverStrategy {
 	return &FailoverStrategy{
 		pools:    pools,
