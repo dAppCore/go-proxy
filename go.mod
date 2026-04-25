@@ -8,10 +8,10 @@ require (
 	github.com/gin-gonic/gin v1.11.0
 )
 
-replace dappco.re/go/core => /home/claude/Code/core/go
+replace dappco.re/go/core => ../go
 
-replace dappco.re/go/core/api => /home/claude/Code/core/api
+replace dappco.re/go/core/api => ../api
 
-replace dappco.re/go/core/io => /home/claude/Code/core/go-io
+replace dappco.re/go/core/io => ../go-io
 
-replace dappco.re/go/core/log => /home/claude/Code/core/go-log
+replace dappco.re/go/core/log => ../go-log
