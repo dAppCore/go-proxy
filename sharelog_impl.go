@@ -2,14 +2,15 @@ package proxy
 
 import (
 	"io"
-	"sync"
 	"time"
+
+	core "dappco.re/go/core"
 )
 
 type shareLogSink struct {
 	path string
 	file io.WriteCloser
-	mu   sync.Mutex
+	mu   core.Mutex
 }
 
 func newShareLogSink(path string) *shareLogSink {

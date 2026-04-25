@@ -3,15 +3,16 @@ package proxy
 import (
 	"io"
 	"strconv"
-	"sync"
 	"time"
 	"unicode"
+
+	core "dappco.re/go/core"
 )
 
 type accessLogSink struct {
 	path string
 	file io.WriteCloser
-	mu   sync.Mutex
+	mu   core.Mutex
 }
 
 func newAccessLogSink(path string) *accessLogSink {
