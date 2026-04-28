@@ -414,3 +414,119 @@ func TestRegisterRoutes_GETWorkersAuthRequired_Ugly(t *testing.T) {
 		t.Fatalf("expected bearer challenge, got %q", got)
 	}
 }
+
+func TestRouter_RegisterRoutes_Good(t *testing.T) {
+	p, result := proxy.New(&proxy.Config{Mode: "simple", Workers: proxy.WorkersByRigID, Bind: []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	RegisterRoutes(router, p)
+	recorder := httptest.NewRecorder()
+	router.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/1/summary", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected registered summary route, got %d", recorder.Code)
+	}
+}
+
+func TestRouter_RegisterRoutes_Bad(t *testing.T) {
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	RegisterRoutes(router, nil)
+	recorder := httptest.NewRecorder()
+	router.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/1/summary", nil))
+	if recorder.Code != http.StatusNotFound {
+		t.Fatalf("expected nil proxy registration ignored, got %d", recorder.Code)
+	}
+}
+
+func TestRouter_RegisterRoutes_Ugly(t *testing.T) {
+	p, result := proxy.New(&proxy.Config{Mode: "simple", Workers: proxy.WorkersByRigID, Bind: []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+	RegisterRoutes(nil, p)
+	if p.Mode() != "simple" {
+		t.Fatalf("expected nil router call not to mutate proxy, mode=%q", p.Mode())
+	}
+}
+
+func TestRouter_Routes_Name_Good(t *testing.T) {
+	routes := &monitoringRoutes{}
+	if got := routes.Name(); got != "proxy-monitoring" {
+		t.Fatalf("expected route name, got %q", got)
+	}
+}
+
+func TestRouter_Routes_Name_Bad(t *testing.T) {
+	var routes *monitoringRoutes
+	if got := routes.Name(); got != "proxy-monitoring" {
+		t.Fatalf("expected nil route name to be stable, got %q", got)
+	}
+}
+
+func TestRouter_Routes_Name_Ugly(t *testing.T) {
+	routes := &monitoringRoutes{proxy: nil}
+	if got := routes.Name(); got != "proxy-monitoring" {
+		t.Fatalf("expected route name independent of proxy, got %q", got)
+	}
+}
+
+func TestRouter_Routes_BasePath_Good(t *testing.T) {
+	routes := &monitoringRoutes{}
+	if got := routes.BasePath(); got != "/1" {
+		t.Fatalf("expected base path /1, got %q", got)
+	}
+}
+
+func TestRouter_Routes_BasePath_Bad(t *testing.T) {
+	var routes *monitoringRoutes
+	if got := routes.BasePath(); got != "/1" {
+		t.Fatalf("expected nil route base path to be stable, got %q", got)
+	}
+}
+
+func TestRouter_Routes_BasePath_Ugly(t *testing.T) {
+	routes := &monitoringRoutes{proxy: nil}
+	if got := routes.BasePath(); got != "/1" {
+		t.Fatalf("expected base path independent of proxy, got %q", got)
+	}
+}
+
+func TestRouter_Routes_RegisterRoutes_Good(t *testing.T) {
+	p, result := proxy.New(&proxy.Config{Mode: "simple", Workers: proxy.WorkersByRigID, Bind: []proxy.BindAddr{{Host: "127.0.0.1", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
+	if !result.OK {
+		t.Fatalf("new proxy: %v", result.Error)
+	}
+	router, err := coreapi.New()
+	if err != nil {
+		t.Fatalf("new engine: %v", err)
+	}
+	router.Register(&monitoringRoutes{proxy: p})
+	recorder := httptest.NewRecorder()
+	router.Handler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/1/miners", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected registered miners route, got %d", recorder.Code)
+	}
+}
+
+func TestRouter_Routes_RegisterRoutes_Bad(t *testing.T) {
+	var routes *monitoringRoutes
+	routes.RegisterRoutes(nil)
+	if routes != nil {
+		t.Fatal("expected nil routes to remain nil")
+	}
+}
+
+func TestRouter_Routes_RegisterRoutes_Ugly(t *testing.T) {
+	routes := &monitoringRoutes{}
+	routes.RegisterRoutes(nil)
+	if routes.proxy != nil {
+		t.Fatalf("expected nil group call not to mutate routes, got %+v", routes)
+	}
+}

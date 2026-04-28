@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-func TestProxy_Stop_Good(t *testing.T) {
+func TestStateImpl_Proxy_Stop_Good(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
 
@@ -41,13 +41,16 @@ func TestProxy_Stop_Good(t *testing.T) {
 	}
 }
 
-func TestProxy_Stop_Bad(t *testing.T) {
+func TestStateImpl_Proxy_Stop_Bad(t *testing.T) {
 	var proxyInstance *Proxy
 
 	proxyInstance.Stop()
+	if proxyInstance != nil {
+		t.Fatal("expected nil proxy to remain nil")
+	}
 }
 
-func TestProxy_Stop_Ugly(t *testing.T) {
+func TestStateImpl_Proxy_Stop_Ugly(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
 

@@ -12,7 +12,7 @@ import (
 	"dappco.re/go/proxy"
 )
 
-func TestFailoverStrategy_Connect_Good(t *testing.T) {
+func TestImpl_FailoverStrategy_Connect_Good(t *testing.T) {
 	addr, shutdown := startStratumServer(t, func(conn net.Conn, reader *bufio.Reader) {
 		loginLine := readLine(t, reader)
 		var loginReq struct {
@@ -121,12 +121,15 @@ func TestFailoverStrategy_Connect_Good(t *testing.T) {
 	spy.mu.Unlock()
 }
 
-func TestFailoverStrategy_Connect_Bad(t *testing.T) {
+func TestImpl_FailoverStrategy_Connect_Bad(t *testing.T) {
 	var strategy *FailoverStrategy
 	strategy.Connect()
+	if strategy != nil {
+		t.Fatal("expected nil strategy to remain nil")
+	}
 }
 
-func TestFailoverStrategy_Connect_Ugly(t *testing.T) {
+func TestImpl_FailoverStrategy_Connect_Ugly(t *testing.T) {
 	badListener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen for bad upstream: %v", err)
@@ -192,7 +195,7 @@ func TestFailoverStrategy_Connect_Ugly(t *testing.T) {
 	}
 }
 
-func TestFailoverStrategy_ReloadPools_Good(t *testing.T) {
+func TestImpl_FailoverStrategy_ReloadPools_Good(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -200,6 +203,7 @@ func TestFailoverStrategy_ReloadPools_Good(t *testing.T) {
 	defer func() { _ = ln.Close() }()
 	accepts := make(chan struct{}, 2)
 	done := make(chan struct{})
+	handlerErrs := make(chan string, 2)
 	go func() {
 		defer close(done)
 		for i := 0; i < 2; i++ {
@@ -211,18 +215,25 @@ func TestFailoverStrategy_ReloadPools_Good(t *testing.T) {
 			go func(c net.Conn) {
 				defer c.Close()
 				reader := bufio.NewReader(c)
-				loginLine := readLine(t, reader)
+				loginLine, err := reader.ReadBytes('\n')
+				if err != nil {
+					handlerErrs <- err.Error()
+					return
+				}
 				var loginReq struct {
 					Method string `json:"method"`
 				}
 				if err := json.Unmarshal(loginLine, &loginReq); err != nil {
-					t.Fatalf("decode login request: %v", err)
+					handlerErrs <- err.Error()
+					return
 				}
 				if loginReq.Method != "login" {
-					t.Fatalf("expected login method, got %q", loginReq.Method)
+					handlerErrs <- "expected login method"
+					return
 				}
 				_, _ = io.WriteString(c, `{"id":"session-1","result":{"id":"session-1"}}`+"\n")
 				time.Sleep(10 * time.Millisecond)
+				handlerErrs <- ""
 			}(conn)
 		}
 	}()
@@ -253,9 +264,17 @@ func TestFailoverStrategy_ReloadPools_Good(t *testing.T) {
 	<-accepts
 	_ = ln.Close()
 	<-done
+	for i := 0; i < 2; i++ {
+		if msg := <-handlerErrs; msg != "" {
+			t.Fatal(msg)
+		}
+	}
 }
 
-func TestFailoverStrategy_ReloadPools_Ugly(t *testing.T) {
+func TestImpl_FailoverStrategy_ReloadPools_Ugly(t *testing.T) {
 	strategy := NewFailoverStrategy(nil, nil, &proxy.Config{})
 	strategy.ReloadPools()
+	if strategy.Client() != nil {
+		t.Fatalf("expected reload with no pools to leave client nil, got %+v", strategy.Client())
+	}
 }

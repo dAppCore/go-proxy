@@ -6,7 +6,7 @@ import (
 	"time"
 	"unicode"
 
-	core "dappco.re/go/core"
+	core "dappco.re/go"
 )
 
 type accessLogSink struct {
@@ -30,7 +30,9 @@ func (l *accessLogSink) SetPath(path string) {
 	}
 	l.path = path
 	if l.file != nil {
-		_ = l.file.Close()
+		if err := l.file.Close(); err != nil {
+			// best-effort close before reopening the configured path
+		}
 		l.file = nil
 	}
 }
@@ -42,7 +44,9 @@ func (l *accessLogSink) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.file != nil {
-		_ = l.file.Close()
+		if err := l.file.Close(); err != nil {
+			// best-effort close; the sink is reset either way
+		}
 		l.file = nil
 	}
 }
@@ -85,7 +89,9 @@ func (l *accessLogSink) writeConnectLine(ip, user, agent string) {
 	builder.WriteString("  ")
 	builder.WriteString(sanitizeLogColumnField(agent))
 	builder.WriteByte('\n')
-	_, _ = l.file.Write([]byte(builder.String()))
+	if _, err := l.file.Write([]byte(builder.String())); err != nil {
+		return
+	}
 }
 
 func (l *accessLogSink) writeCloseLine(ip, user string, rx, tx uint64) {
@@ -114,7 +120,9 @@ func (l *accessLogSink) writeCloseLine(ip, user string, rx, tx uint64) {
 	builder.WriteString("  tx=")
 	builder.WriteString(formatUint(tx))
 	builder.WriteByte('\n')
-	_, _ = l.file.Write([]byte(builder.String()))
+	if _, err := l.file.Write([]byte(builder.String())); err != nil {
+		return
+	}
 }
 
 func formatUint(value uint64) string {

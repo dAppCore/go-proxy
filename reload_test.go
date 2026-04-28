@@ -23,7 +23,7 @@ func (s *reloadableSplitter) GC()                         {}
 func (s *reloadableSplitter) Upstreams() UpstreamStats    { return UpstreamStats{} }
 func (s *reloadableSplitter) ReloadPools()                { s.reloads++ }
 
-func TestProxy_Reload_Good(t *testing.T) {
+func TestStateImpl_Proxy_Reload_Good(t *testing.T) {
 	original := &Config{
 		Mode:    "nicehash",
 		Workers: WorkersByRigID,
@@ -413,17 +413,17 @@ func TestProxy_Reload_HTTPEnabled_Good(t *testing.T) {
 
 	p := &Proxy{
 		config: &Config{
-			Mode: "nicehash",
-			Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Mode:  "nicehash",
+			Bind:  []BindAddr{{Host: "127.0.0.1", Port: 3333}},
 			Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
-			HTTP: HTTPConfig{},
+			HTTP:  HTTPConfig{},
 		},
 		ticker: ticker,
 	}
 
 	p.Reload(&Config{
-		Mode: "nicehash",
-		Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Mode:  "nicehash",
+		Bind:  []BindAddr{{Host: "127.0.0.1", Port: 3333}},
 		Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
 		HTTP: HTTPConfig{
 			Enabled: true,
@@ -447,8 +447,8 @@ func TestProxy_Reload_HTTPDisabled_Bad(t *testing.T) {
 
 	p := &Proxy{
 		config: &Config{
-			Mode: "nicehash",
-			Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Mode:  "nicehash",
+			Bind:  []BindAddr{{Host: "127.0.0.1", Port: 3333}},
 			Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
 			HTTP: HTTPConfig{
 				Enabled: true,
@@ -463,10 +463,10 @@ func TestProxy_Reload_HTTPDisabled_Bad(t *testing.T) {
 	}
 
 	p.Reload(&Config{
-		Mode: "nicehash",
-		Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Mode:  "nicehash",
+		Bind:  []BindAddr{{Host: "127.0.0.1", Port: 3333}},
 		Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
-		HTTP: HTTPConfig{},
+		HTTP:  HTTPConfig{},
 	})
 
 	p.lifecycleMu.RLock()
@@ -484,8 +484,8 @@ func TestProxy_Reload_HTTPAddress_Ugly(t *testing.T) {
 
 	p := &Proxy{
 		config: &Config{
-			Mode: "nicehash",
-			Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+			Mode:  "nicehash",
+			Bind:  []BindAddr{{Host: "127.0.0.1", Port: 3333}},
 			Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
 			HTTP: HTTPConfig{
 				Enabled: true,
@@ -505,8 +505,8 @@ func TestProxy_Reload_HTTPAddress_Ugly(t *testing.T) {
 	p.lifecycleMu.RUnlock()
 
 	p.Reload(&Config{
-		Mode: "nicehash",
-		Bind: []BindAddr{{Host: "127.0.0.1", Port: 3333}},
+		Mode:  "nicehash",
+		Bind:  []BindAddr{{Host: "127.0.0.1", Port: 3333}},
 		Pools: []PoolConfig{{URL: "pool.example:3333", Enabled: true}},
 		HTTP: HTTPConfig{
 			Enabled: true,

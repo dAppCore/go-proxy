@@ -2,7 +2,7 @@ package proxy
 
 import "testing"
 
-func TestEventBus_Subscribe_Good(t *testing.T) {
+func TestCoreImpl_EventBus_Subscribe_Good(t *testing.T) {
 	bus := NewEventBus()
 	order := make([]int, 0, 2)
 
@@ -23,7 +23,7 @@ func TestEventBus_Subscribe_Good(t *testing.T) {
 	}
 }
 
-func TestEventBus_Subscribe_Bad(t *testing.T) {
+func TestCoreImpl_EventBus_Subscribe_Bad(t *testing.T) {
 	var bus *EventBus
 	bus.Subscribe(EventLogin, nil)
 
@@ -36,7 +36,7 @@ func TestEventBus_Subscribe_Bad(t *testing.T) {
 	}
 }
 
-func TestEventBus_Subscribe_Ugly(t *testing.T) {
+func TestCoreImpl_EventBus_Subscribe_Ugly(t *testing.T) {
 	var bus EventBus
 	called := 0
 
@@ -53,7 +53,7 @@ func TestEventBus_Subscribe_Ugly(t *testing.T) {
 	}
 }
 
-func TestEventBus_Dispatch_Good(t *testing.T) {
+func TestCoreImpl_EventBus_Dispatch_Good(t *testing.T) {
 	bus := NewEventBus()
 	got := make([]string, 0, 1)
 
@@ -74,7 +74,7 @@ func TestEventBus_Dispatch_Good(t *testing.T) {
 	}
 }
 
-func TestEventBus_Dispatch_Bad(t *testing.T) {
+func TestCoreImpl_EventBus_Dispatch_Bad(t *testing.T) {
 	var bus *EventBus
 	bus.Dispatch(Event{Type: EventClose})
 
@@ -82,7 +82,7 @@ func TestEventBus_Dispatch_Bad(t *testing.T) {
 	bus.Dispatch(Event{Type: EventClose})
 }
 
-func TestEventBus_Dispatch_Ugly(t *testing.T) {
+func TestCoreImpl_EventBus_Dispatch_Ugly(t *testing.T) {
 	bus := NewEventBus()
 	called := 0
 

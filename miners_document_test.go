@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestProxy_MinersDocument_Good(t *testing.T) {
+func TestStateImpl_Proxy_MinersDocument_Good(t *testing.T) {
 	p := &Proxy{
 		miners: map[int64]*Miner{
 			1: {
@@ -39,7 +39,7 @@ func TestProxy_MinersDocument_Good(t *testing.T) {
 	}
 }
 
-func TestProxy_MinersDocument_Bad(t *testing.T) {
+func TestStateImpl_Proxy_MinersDocument_Bad(t *testing.T) {
 	var p *Proxy
 
 	document := p.MinersDocument()
@@ -51,7 +51,7 @@ func TestProxy_MinersDocument_Bad(t *testing.T) {
 	}
 }
 
-func TestProxy_MinersDocument_Ugly(t *testing.T) {
+func TestStateImpl_Proxy_MinersDocument_Ugly(t *testing.T) {
 	p := &Proxy{
 		miners: map[int64]*Miner{
 			1: {
@@ -104,7 +104,7 @@ func (s upstreamStubSplitter) Tick(uint64)              {}
 func (s upstreamStubSplitter) GC()                      {}
 func (s upstreamStubSplitter) Upstreams() UpstreamStats { return s.stats }
 
-func TestProxy_SummaryDocument_Good(t *testing.T) {
+func TestStateImpl_Proxy_SummaryDocument_Good(t *testing.T) {
 	stats := NewStats()
 	stats.OnLogin(Event{Miner: &Miner{}})
 	stats.OnAccept(Event{Diff: 100, Latency: 12})
@@ -149,7 +149,7 @@ func TestProxy_SummaryDocument_Good(t *testing.T) {
 	}
 }
 
-func TestProxy_SummaryDocument_Bad(t *testing.T) {
+func TestStateImpl_Proxy_SummaryDocument_Bad(t *testing.T) {
 	var p *Proxy
 
 	doc := p.SummaryDocument()
@@ -158,7 +158,7 @@ func TestProxy_SummaryDocument_Bad(t *testing.T) {
 	}
 }
 
-func TestProxy_SummaryDocument_Ugly(t *testing.T) {
+func TestStateImpl_Proxy_SummaryDocument_Ugly(t *testing.T) {
 	p := &Proxy{
 		config:  &Config{Mode: "simple", Workers: WorkersDisabled},
 		stats:   NewStats(),
@@ -174,7 +174,7 @@ func TestProxy_SummaryDocument_Ugly(t *testing.T) {
 	}
 }
 
-func TestProxy_WorkersDocument_Good(t *testing.T) {
+func TestStateImpl_Proxy_WorkersDocument_Good(t *testing.T) {
 	workers := NewWorkers(WorkersByRigID, nil)
 	miner := &Miner{id: 1, ip: "10.0.0.1", user: "WALLET", rigID: "rig-alpha"}
 	workers.OnLogin(Event{Miner: miner})
@@ -201,7 +201,7 @@ func TestProxy_WorkersDocument_Good(t *testing.T) {
 	}
 }
 
-func TestProxy_WorkersDocument_Bad(t *testing.T) {
+func TestStateImpl_Proxy_WorkersDocument_Bad(t *testing.T) {
 	var p *Proxy
 
 	doc := p.WorkersDocument()
@@ -210,7 +210,7 @@ func TestProxy_WorkersDocument_Bad(t *testing.T) {
 	}
 }
 
-func TestProxy_WorkersDocument_Ugly(t *testing.T) {
+func TestStateImpl_Proxy_WorkersDocument_Ugly(t *testing.T) {
 	workers := NewWorkers(WorkersByRigID, nil)
 	workers.OnLogin(Event{Miner: &Miner{id: 1, ip: "10.0.0.1", user: "WALLET", rigID: "rig-ugly"}})
 	p := &Proxy{

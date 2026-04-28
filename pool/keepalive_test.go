@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-func TestStratumClient_Keepalive_Good(t *testing.T) {
+func TestImpl_StratumClient_Keepalive_Good(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
 	defer clientConn.Close()
@@ -47,7 +47,7 @@ func TestStratumClient_Keepalive_Good(t *testing.T) {
 	}
 }
 
-func TestStratumClient_Keepalive_Bad(t *testing.T) {
+func TestImpl_StratumClient_Keepalive_Bad(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
 	defer clientConn.Close()
@@ -68,7 +68,7 @@ func TestStratumClient_Keepalive_Bad(t *testing.T) {
 	}
 }
 
-func TestStratumClient_Keepalive_Ugly(t *testing.T) {
+func TestImpl_StratumClient_Keepalive_Ugly(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
 	defer clientConn.Close()

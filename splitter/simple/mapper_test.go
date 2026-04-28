@@ -48,6 +48,9 @@ func TestSimpleMapperFile_OnDisconnect_Good(t *testing.T) {
 func TestSimpleMapperFile_OnDisconnect_Bad(t *testing.T) {
 	var mapper *SimpleMapper
 	mapper.OnDisconnect()
+	if mapper != nil {
+		t.Fatal("expected nil mapper to remain nil")
+	}
 }
 
 func TestSimpleMapperFile_OnDisconnect_Ugly(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"time"
 	"unicode"
 
-	core "dappco.re/go/core"
+	core "dappco.re/go"
 	"dappco.re/go/proxy"
 )
 
@@ -28,7 +28,9 @@ func (l *AccessLog) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.file != nil {
-		_ = l.file.Close()
+		if err := l.file.Close(); err != nil {
+			// best-effort close; the log is reset either way
+		}
 		l.file = nil
 	}
 }
@@ -74,7 +76,9 @@ func (l *ShareLog) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.file != nil {
-		_ = l.file.Close()
+		if err := l.file.Close(); err != nil {
+			// best-effort close; the log is reset either way
+		}
 		l.file = nil
 	}
 }
@@ -118,7 +122,9 @@ func (accessLog *AccessLog) writeConnectLine(ip, user, agent string) {
 	builder.WriteString("  ")
 	builder.WriteString(sanitizeLogColumnField(agent))
 	builder.WriteByte('\n')
-	_, _ = accessLog.file.Write([]byte(builder.String()))
+	if _, err := accessLog.file.Write([]byte(builder.String())); err != nil {
+		return
+	}
 }
 
 func (accessLog *AccessLog) writeCloseLine(ip, user string, rx, tx uint64) {
@@ -140,7 +146,9 @@ func (accessLog *AccessLog) writeCloseLine(ip, user string, rx, tx uint64) {
 	builder.WriteString("  tx=")
 	builder.WriteString(strconv.FormatUint(tx, 10))
 	builder.WriteByte('\n')
-	_, _ = accessLog.file.Write([]byte(builder.String()))
+	if _, err := accessLog.file.Write([]byte(builder.String())); err != nil {
+		return
+	}
 }
 
 func (shareLog *ShareLog) writeAcceptLine(user string, diff uint64, latency uint64) {
@@ -160,7 +168,9 @@ func (shareLog *ShareLog) writeAcceptLine(user string, diff uint64, latency uint
 	builder.WriteString(strconv.FormatUint(latency, 10))
 	builder.WriteString("ms")
 	builder.WriteByte('\n')
-	_, _ = shareLog.file.Write([]byte(builder.String()))
+	if _, err := shareLog.file.Write([]byte(builder.String())); err != nil {
+		return
+	}
 }
 
 func (shareLog *ShareLog) writeRejectLine(user, reason string) {
@@ -176,7 +186,9 @@ func (shareLog *ShareLog) writeRejectLine(user, reason string) {
 	builder.WriteString("  reason=\"")
 	builder.WriteString(sanitizeLogField(reason))
 	builder.WriteString("\"\n")
-	_, _ = shareLog.file.Write([]byte(builder.String()))
+	if _, err := shareLog.file.Write([]byte(builder.String())); err != nil {
+		return
+	}
 }
 
 func (accessLog *AccessLog) ensureFile() error {

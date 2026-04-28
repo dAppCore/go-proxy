@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"math"
+	"os"
 	"testing"
 	"time"
 )
@@ -271,5 +272,180 @@ func TestCoreImpl_refillBucket_Ugly(t *testing.T) {
 	refillBucket(&bucket, 30, time.Unix(120, 0))
 	if bucket.tokens != 30 {
 		t.Fatalf("expected refill to cap at limit, got %d", bucket.tokens)
+	}
+}
+
+func TestCoreImpl_RegisterSplitterFactory_Good(t *testing.T) {
+	mode := "ax-register-good"
+	RegisterSplitterFactory(mode, func(*Config, *EventBus) Splitter { return &noopSplitter{} })
+	factory, ok := splitterFactoryForMode(mode)
+	if !ok || factory == nil {
+		t.Fatalf("expected registered splitter factory, ok=%v factoryNil=%v", ok, factory == nil)
+	}
+}
+
+func TestCoreImpl_RegisterSplitterFactory_Bad(t *testing.T) {
+	mode := "ax-register-bad"
+	RegisterSplitterFactory(mode, nil)
+	factory, ok := splitterFactoryForMode(mode)
+	if !ok || factory != nil {
+		t.Fatalf("expected nil factory to be registered as nil, ok=%v factoryNil=%v", ok, factory == nil)
+	}
+}
+
+func TestCoreImpl_RegisterSplitterFactory_Ugly(t *testing.T) {
+	RegisterSplitterFactory(" ax-register-ugly ", func(*Config, *EventBus) Splitter { return &noopSplitter{} })
+	RegisterSplitterFactory("ax-register-ugly", func(*Config, *EventBus) Splitter { return nil })
+	factory, ok := splitterFactoryForMode("AX-REGISTER-UGLY")
+	if !ok || factory == nil || factory(nil, nil) != nil {
+		t.Fatalf("expected normalized overwrite to return nil splitter, ok=%v factoryNil=%v", ok, factory == nil)
+	}
+}
+
+func TestCoreImpl_NewEventBus_Good(t *testing.T) {
+	bus := NewEventBus()
+	if bus == nil || bus.listeners == nil {
+		t.Fatalf("expected initialized event bus, got %+v", bus)
+	}
+}
+
+func TestCoreImpl_NewEventBus_Bad(t *testing.T) {
+	bus := NewEventBus()
+	bus.Dispatch(Event{Type: EventAccept})
+	if len(bus.listeners) != 0 {
+		t.Fatalf("expected dispatch without subscribers to keep listener map empty, got %+v", bus.listeners)
+	}
+}
+
+func TestCoreImpl_NewEventBus_Ugly(t *testing.T) {
+	bus := NewEventBus()
+	bus.Subscribe(EventLogin, nil)
+	if len(bus.listeners[EventLogin]) != 0 {
+		t.Fatalf("expected nil handler to be ignored, got %+v", bus.listeners)
+	}
+}
+
+func TestCoreImpl_SinkGroup_OnAccept_Good(t *testing.T) {
+	sink := &shareSinkSpy{}
+	group := newShareSinkGroup(sink)
+	group.OnAccept(Event{Diff: 7})
+	if sink.accepts != 1 || sink.lastAccept.Diff != 7 {
+		t.Fatalf("expected accept dispatched once, sink=%+v", sink)
+	}
+}
+
+func TestCoreImpl_SinkGroup_OnAccept_Bad(t *testing.T) {
+	var group *shareSinkGroup
+	group.OnAccept(Event{Diff: 7})
+	if group != nil {
+		t.Fatal("expected nil sink group to remain nil")
+	}
+}
+
+func TestCoreImpl_SinkGroup_OnAccept_Ugly(t *testing.T) {
+	sink := &shareSinkSpy{panicAccept: true}
+	group := newShareSinkGroup(sink, &shareSinkSpy{})
+	group.OnAccept(Event{Diff: 9})
+	if len(group.sinks) != 2 {
+		t.Fatalf("expected panic recovery to preserve sinks, got %+v", group.sinks)
+	}
+}
+
+func TestCoreImpl_SinkGroup_OnReject_Good(t *testing.T) {
+	sink := &shareSinkSpy{}
+	group := newShareSinkGroup(sink)
+	group.OnReject(Event{Error: "invalid"})
+	if sink.rejects != 1 || sink.lastReject.Error != "invalid" {
+		t.Fatalf("expected reject dispatched once, sink=%+v", sink)
+	}
+}
+
+func TestCoreImpl_SinkGroup_OnReject_Bad(t *testing.T) {
+	var group *shareSinkGroup
+	group.OnReject(Event{Error: "invalid"})
+	if group != nil {
+		t.Fatal("expected nil sink group to remain nil")
+	}
+}
+
+func TestCoreImpl_SinkGroup_OnReject_Ugly(t *testing.T) {
+	sink := &shareSinkSpy{panicReject: true}
+	group := newShareSinkGroup(sink, &shareSinkSpy{})
+	group.OnReject(Event{Error: "invalid"})
+	if len(group.sinks) != 2 {
+		t.Fatalf("expected panic recovery to preserve sinks, got %+v", group.sinks)
+	}
+}
+
+func TestCoreImpl_NewCustomDiff_Good(t *testing.T) {
+	resolver := NewCustomDiff(50000)
+	miner := &Miner{user: "wallet"}
+	resolver.OnLogin(Event{Miner: miner})
+	if miner.customDiff != 50000 || miner.user != "wallet" {
+		t.Fatalf("expected global custom diff applied, miner=%+v", miner)
+	}
+}
+
+func TestCoreImpl_NewCustomDiff_Bad(t *testing.T) {
+	resolver := NewCustomDiff(0)
+	miner := &Miner{user: "wallet"}
+	resolver.OnLogin(Event{Miner: miner})
+	if miner.customDiff != 0 || !miner.customDiffResolved {
+		t.Fatalf("expected zero global diff to resolve without diff, miner=%+v", miner)
+	}
+}
+
+func TestCoreImpl_NewCustomDiff_Ugly(t *testing.T) {
+	resolver := NewCustomDiff(50000)
+	miner := &Miner{user: "wallet+25000"}
+	resolver.OnLogin(Event{Miner: miner})
+	if miner.user != "wallet" || miner.customDiff != 25000 || !miner.customDiffFromLogin {
+		t.Fatalf("expected login custom diff to override global, miner=%+v", miner)
+	}
+}
+
+func TestCoreImpl_NewRateLimiter_Good(t *testing.T) {
+	limiter := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 2})
+	if limiter == nil || limiter.bucketByHost == nil || limiter.banUntilByHost == nil {
+		t.Fatalf("expected initialized limiter, got %+v", limiter)
+	}
+}
+
+func TestCoreImpl_NewRateLimiter_Bad(t *testing.T) {
+	limiter := NewRateLimiter(RateLimit{})
+	if !limiter.Allow("203.0.113.10:3333") {
+		t.Fatal("expected zero-limit limiter to allow connections")
+	}
+}
+
+func TestCoreImpl_NewRateLimiter_Ugly(t *testing.T) {
+	limiter := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1})
+	if !limiter.Allow("203.0.113.10:3333") || limiter.Allow("203.0.113.10:4444") {
+		t.Fatalf("expected host-only bucket to exhaust after first allow, buckets=%+v", limiter.bucketByHost)
+	}
+}
+
+func TestCoreImpl_NewConfigWatcher_Good(t *testing.T) {
+	path := t.TempDir() + "/config.json"
+	if err := os.WriteFile(path, []byte(`{"mode":"simple"}`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	watcher := NewConfigWatcher(path, func(*Config) {})
+	if watcher == nil || watcher.configPath != path || watcher.lastModifiedAt.IsZero() {
+		t.Fatalf("expected watcher with stat metadata, got %+v", watcher)
+	}
+}
+
+func TestCoreImpl_NewConfigWatcher_Bad(t *testing.T) {
+	watcher := NewConfigWatcher("", nil)
+	if watcher == nil || watcher.configPath != "" || watcher.onConfigChange != nil {
+		t.Fatalf("expected watcher with empty path and nil callback, got %+v", watcher)
+	}
+}
+
+func TestCoreImpl_NewConfigWatcher_Ugly(t *testing.T) {
+	watcher := NewConfigWatcher(t.TempDir()+"/missing.json", func(*Config) {})
+	if watcher == nil || !watcher.lastModifiedAt.IsZero() {
+		t.Fatalf("expected missing config path to leave zero mtime, got %+v", watcher)
 	}
 }

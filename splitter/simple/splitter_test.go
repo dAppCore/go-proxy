@@ -64,9 +64,15 @@ func TestSimpleSplitterFile_OnClose_Good(t *testing.T) {
 func TestSimpleSplitterFile_OnClose_Bad(t *testing.T) {
 	var splitter *SimpleSplitter
 	splitter.OnClose(nil)
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
 func TestSimpleSplitterFile_OnClose_Ugly(t *testing.T) {
 	splitter := NewSimpleSplitter(&proxy.Config{}, nil, nil)
 	splitter.OnClose(&proxy.CloseEvent{Miner: &proxy.Miner{}})
+	if len(splitter.active) != 0 || len(splitter.idle) != 0 {
+		t.Fatalf("expected close for unknown miner to leave maps empty, active=%d idle=%d", len(splitter.active), len(splitter.idle))
+	}
 }

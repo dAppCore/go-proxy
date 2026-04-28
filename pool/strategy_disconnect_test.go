@@ -22,7 +22,7 @@ func (s *disconnectSpy) OnDisconnect() {
 	s.disconnects.Add(1)
 }
 
-func TestFailoverStrategy_Disconnect_Good(t *testing.T) {
+func TestImpl_FailoverStrategy_Disconnect_Good(t *testing.T) {
 	spy := &disconnectSpy{}
 	strategy := &FailoverStrategy{
 		listener: spy,
@@ -38,7 +38,7 @@ func TestFailoverStrategy_Disconnect_Good(t *testing.T) {
 	}
 }
 
-func TestFailoverStrategy_Disconnect_Bad(t *testing.T) {
+func TestImpl_FailoverStrategy_Disconnect_Bad(t *testing.T) {
 	spy := &disconnectSpy{}
 	strategy := &FailoverStrategy{listener: spy}
 
@@ -49,7 +49,7 @@ func TestFailoverStrategy_Disconnect_Bad(t *testing.T) {
 	}
 }
 
-func TestFailoverStrategy_Disconnect_Ugly(t *testing.T) {
+func TestImpl_FailoverStrategy_Disconnect_Ugly(t *testing.T) {
 	spy := &disconnectSpy{}
 	strategy := &FailoverStrategy{
 		listener: spy,

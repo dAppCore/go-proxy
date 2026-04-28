@@ -64,6 +64,9 @@ func TestNicehashMapperFile_OnDisconnect_Good(t *testing.T) {
 func TestNicehashMapperFile_OnDisconnect_Bad(t *testing.T) {
 	var mapper *NonceMapper
 	mapper.OnDisconnect()
+	if mapper != nil {
+		t.Fatal("expected nil mapper to remain nil")
+	}
 }
 
 func TestNicehashMapperFile_OnDisconnect_Ugly(t *testing.T) {

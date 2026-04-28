@@ -2,7 +2,7 @@ package proxy
 
 import "testing"
 
-func TestCustomDiff_OnLogin_Good(t *testing.T) {
+func TestCoreImpl_CustomDiff_OnLogin_Good(t *testing.T) {
 	cd := NewCustomDiff(10000)
 	miner := &Miner{user: "WALLET"}
 
@@ -19,7 +19,7 @@ func TestCustomDiff_OnLogin_Good(t *testing.T) {
 	}
 }
 
-func TestCustomDiff_OnLogin_Bad(t *testing.T) {
+func TestCoreImpl_CustomDiff_OnLogin_Bad(t *testing.T) {
 	cd := NewCustomDiff(10000)
 	miner := &Miner{user: "WALLET"}
 
@@ -32,7 +32,7 @@ func TestCustomDiff_OnLogin_Bad(t *testing.T) {
 	}
 }
 
-func TestCustomDiff_OnLogin_Ugly(t *testing.T) {
+func TestCoreImpl_CustomDiff_OnLogin_Ugly(t *testing.T) {
 	cd := NewCustomDiff(10000)
 	miner := &Miner{user: "WALLET+50000"}
 
@@ -56,7 +56,7 @@ func TestCustomDiff_OnLogin_Ugly(t *testing.T) {
 //	cd := proxy.NewCustomDiff(10000)
 //	cd.Apply(&proxy.Miner{user: "WALLET+50000"})
 //	// miner.User() == "WALLET", miner.customDiff == 50000
-func TestCustomDiff_Apply_Good(t *testing.T) {
+func TestStateImpl_CustomDiff_Apply_Good(t *testing.T) {
 	cd := NewCustomDiff(10000)
 	miner := &Miner{user: "WALLET+50000"}
 	cd.OnLogin(Event{Miner: miner})
@@ -73,7 +73,7 @@ func TestCustomDiff_Apply_Good(t *testing.T) {
 //	cd := proxy.NewCustomDiff(10000)
 //	cd.Apply(&proxy.Miner{user: "WALLET+abc"})
 //	// miner.User() == "WALLET+abc", miner.customDiff == 0
-func TestCustomDiff_Apply_Bad(t *testing.T) {
+func TestStateImpl_CustomDiff_Apply_Bad(t *testing.T) {
 	cd := NewCustomDiff(10000)
 	miner := &Miner{user: "WALLET+abc"}
 	cd.OnLogin(Event{Miner: miner})
@@ -90,7 +90,7 @@ func TestCustomDiff_Apply_Bad(t *testing.T) {
 //	cd := proxy.NewCustomDiff(10000)
 //	cd.Apply(&proxy.Miner{user: "WALLET"})
 //	// miner.customDiff == 10000 (falls back to global)
-func TestCustomDiff_Apply_Ugly(t *testing.T) {
+func TestStateImpl_CustomDiff_Apply_Ugly(t *testing.T) {
 	cd := NewCustomDiff(10000)
 	miner := &Miner{user: "WALLET"}
 	cd.OnLogin(Event{Miner: miner})

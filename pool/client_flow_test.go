@@ -86,7 +86,7 @@ func readLine(t *testing.T, reader *bufio.Reader) []byte {
 	return line
 }
 
-func TestStratumClient_Connect_Good(t *testing.T) {
+func TestImpl_StratumClient_Connect_Good(t *testing.T) {
 	addr, shutdown := startStratumServer(t, func(conn net.Conn, reader *bufio.Reader) {
 		loginLine := readLine(t, reader)
 		var loginReq struct {
@@ -226,7 +226,7 @@ func TestStratumClient_Connect_Good(t *testing.T) {
 	})
 }
 
-func TestStratumClient_Connect_Bad(t *testing.T) {
+func TestImpl_StratumClient_Connect_Bad(t *testing.T) {
 	client := NewStratumClient(proxy.PoolConfig{}, nil)
 	if result := client.Connect(); result.OK {
 		t.Fatal("expected empty pool URL to fail")
@@ -320,7 +320,7 @@ func TestStratumClient_Connect_Bad_TLSFingerprint(t *testing.T) {
 	}
 }
 
-func TestStratumClient_Submit_Good(t *testing.T) {
+func TestImpl_StratumClient_Submit_Good(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
 	defer clientConn.Close()
@@ -331,10 +331,13 @@ func TestStratumClient_Submit_Good(t *testing.T) {
 		pending:   make(map[int64]struct{}),
 	}
 
-	done := make(chan struct{})
+	errCh := make(chan error, 1)
 	go func() {
-		defer close(done)
-		line := readLine(t, bufio.NewReader(serverConn))
+		line, err := bufio.NewReader(serverConn).ReadBytes('\n')
+		if err != nil {
+			errCh <- err
+			return
+		}
 		var payload struct {
 			Method string `json:"method"`
 			Params struct {
@@ -346,27 +349,33 @@ func TestStratumClient_Submit_Good(t *testing.T) {
 			} `json:"params"`
 		}
 		if err := json.Unmarshal(line, &payload); err != nil {
-			t.Fatalf("decode submit request: %v", err)
+			errCh <- err
+			return
 		}
 		if payload.Method != "submit" {
-			t.Fatalf("expected submit method, got %q", payload.Method)
+			errCh <- errors.New("expected submit method")
+			return
 		}
 		if payload.Params.ID != "session-1" || payload.Params.JobID != "job-1" || payload.Params.Nonce != "deadbeef" || payload.Params.Result != "HASH64HEX" || payload.Params.Algo != "cn/r" {
-			t.Fatalf("unexpected submit params: %+v", payload.Params)
+			errCh <- errors.New("unexpected submit params")
+			return
 		}
+		errCh <- nil
 	}()
 
 	if seq := client.Submit("job-1", "deadbeef", "HASH64HEX", "cn/r"); seq != 1 {
 		t.Fatalf("expected submit sequence 1, got %d", seq)
 	}
-	<-done
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
 
 	if got := len(client.pending); got != 1 {
 		t.Fatalf("expected one pending request, got %d", got)
 	}
 }
 
-func TestStratumClient_Submit_Bad(t *testing.T) {
+func TestImpl_StratumClient_Submit_Bad(t *testing.T) {
 	serverConn, clientConn := net.Pipe()
 	defer serverConn.Close()
 	defer clientConn.Close()
@@ -377,25 +386,33 @@ func TestStratumClient_Submit_Bad(t *testing.T) {
 		pending:   make(map[int64]struct{}),
 	}
 
-	done := make(chan struct{})
+	errCh := make(chan error, 1)
 	go func() {
-		defer close(done)
-		line := readLine(t, bufio.NewReader(serverConn))
+		line, err := bufio.NewReader(serverConn).ReadBytes('\n')
+		if err != nil {
+			errCh <- err
+			return
+		}
 		var payload struct {
 			Params map[string]any `json:"params"`
 		}
 		if err := json.Unmarshal(line, &payload); err != nil {
-			t.Fatalf("decode submit request: %v", err)
+			errCh <- err
+			return
 		}
 		if _, ok := payload.Params["algo"]; ok {
-			t.Fatalf("expected empty algo to be omitted from submit payload, got %#v", payload.Params["algo"])
+			errCh <- errors.New("expected empty algo to be omitted from submit payload")
+			return
 		}
+		errCh <- nil
 	}()
 
 	if seq := client.Submit("job-1", "deadbeef", "HASH64HEX", ""); seq != 1 {
 		t.Fatalf("expected submit sequence 1, got %d", seq)
 	}
-	<-done
+	if err := <-errCh; err != nil {
+		t.Fatal(err)
+	}
 }
 
 type failingConn struct{}
@@ -418,7 +435,7 @@ func (d *deadlineConn) SetDeadline(deadline time.Time) error {
 	return nil
 }
 
-func TestStratumClient_Submit_Ugly(t *testing.T) {
+func TestImpl_StratumClient_Submit_Ugly(t *testing.T) {
 	spy := &clientListenerSpy{}
 	client := &StratumClient{
 		conn:      failingConn{},

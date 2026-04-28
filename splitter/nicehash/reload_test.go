@@ -19,7 +19,7 @@ func (s *reloadableStrategy) ReloadPools()                                   { s
 
 var _ pool.ReloadableStrategy = (*reloadableStrategy)(nil)
 
-func TestNonceSplitter_ReloadPools_Good(t *testing.T) {
+func TestImpl_NonceSplitter_ReloadPools_Good(t *testing.T) {
 	strategy := &reloadableStrategy{}
 	splitter := &NonceSplitter{
 		mappers: []*NonceMapper{
@@ -34,7 +34,7 @@ func TestNonceSplitter_ReloadPools_Good(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_ReloadPools_Bad(t *testing.T) {
+func TestImpl_NonceSplitter_ReloadPools_Bad(t *testing.T) {
 	splitter := &NonceSplitter{
 		mappers: []*NonceMapper{
 			{strategy: nil},
@@ -44,7 +44,7 @@ func TestNonceSplitter_ReloadPools_Bad(t *testing.T) {
 	splitter.ReloadPools()
 }
 
-func TestNonceSplitter_ReloadPools_Ugly(t *testing.T) {
+func TestImpl_NonceSplitter_ReloadPools_Ugly(t *testing.T) {
 	splitter := NewNonceSplitter(&proxy.Config{}, proxy.NewEventBus(), func(listener pool.StratumListener) pool.Strategy {
 		return &reloadableStrategy{}
 	})

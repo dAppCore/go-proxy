@@ -2,7 +2,7 @@ package proxy
 
 import "testing"
 
-func TestConfig_Validate_Good(t *testing.T) {
+func TestCoreImpl_Config_Validate_Good(t *testing.T) {
 	cfg := &Config{
 		Mode:    "nicehash",
 		Workers: WorkersByRigID,
@@ -29,7 +29,7 @@ func TestConfig_Validate_HTTPLoopbackNoToken_Good(t *testing.T) {
 	}
 }
 
-func TestConfig_Validate_Bad(t *testing.T) {
+func TestCoreImpl_Config_Validate_Bad(t *testing.T) {
 	t.Run("nil_config", func(t *testing.T) {
 		var cfg *Config
 		if result := cfg.Validate(); result.OK {
@@ -179,7 +179,7 @@ func TestConfig_Validate_Bad(t *testing.T) {
 	})
 }
 
-func TestConfig_Validate_Ugly(t *testing.T) {
+func TestCoreImpl_Config_Validate_Ugly(t *testing.T) {
 	t.Run("enabled_pool_without_url", func(t *testing.T) {
 		cfg := &Config{
 			Mode:    "nicehash",
@@ -279,7 +279,11 @@ func TestConfig_normalizeConfigValues_Good(t *testing.T) {
 }
 
 func TestConfig_normalizeConfigValues_Bad(t *testing.T) {
-	normalizeConfigValues(nil)
+	var cfg *Config
+	normalizeConfigValues(cfg)
+	if cfg != nil {
+		t.Fatal("expected nil config to remain nil")
+	}
 }
 
 func TestConfig_normalizeConfigValues_Ugly(t *testing.T) {

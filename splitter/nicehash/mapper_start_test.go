@@ -61,6 +61,9 @@ func TestMapper_Start_Bad(t *testing.T) {
 	mapper := NewNonceMapper(1, &proxy.Config{}, nil)
 
 	mapper.Start()
+	if mapper.lastUsed.IsZero() == false {
+		t.Fatalf("expected mapper without strategy not to update lastUsed, got %v", mapper.lastUsed)
+	}
 }
 
 func TestMapper_Start_Ugly(t *testing.T) {

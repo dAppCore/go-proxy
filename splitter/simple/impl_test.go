@@ -54,7 +54,7 @@ func TestSimpleMapper_New_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_OnLogin_Good(t *testing.T) {
+func TestImpl_SimpleSplitter_OnLogin_Good(t *testing.T) {
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, func(listener pool.StratumListener) pool.Strategy {
 		return activeStrategy{}
 	})
@@ -78,7 +78,7 @@ func TestSimpleSplitter_OnLogin_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_OnLogin_Ugly(t *testing.T) {
+func TestImpl_SimpleSplitter_OnLogin_Ugly(t *testing.T) {
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, func(listener pool.StratumListener) pool.Strategy {
 		return activeStrategy{}
 	})
@@ -138,7 +138,7 @@ func TestSimpleSplitter_OnSubmit_UsesRouteID_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_Upstreams_Good(t *testing.T) {
+func TestImpl_SimpleSplitter_Upstreams_Good(t *testing.T) {
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, func(listener pool.StratumListener) pool.Strategy {
 		return activeStrategy{}
 	})
@@ -161,7 +161,7 @@ func TestSimpleSplitter_Upstreams_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_Upstreams_Ugly(t *testing.T) {
+func TestImpl_SimpleSplitter_Upstreams_Ugly(t *testing.T) {
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, nil, func(listener pool.StratumListener) pool.Strategy {
 		return activeStrategy{}
 	})
@@ -217,6 +217,142 @@ func (discardConn) RemoteAddr() net.Addr             { return nil }
 func (discardConn) SetDeadline(time.Time) error      { return nil }
 func (discardConn) SetReadDeadline(time.Time) error  { return nil }
 func (discardConn) SetWriteDeadline(time.Time) error { return nil }
+
+func TestImpl_SimpleSplitter_OnLogin_Bad(t *testing.T) {
+	splitter := NewSimpleSplitter(&proxy.Config{}, nil, func(pool.StratumListener) pool.Strategy { return activeStrategy{} })
+	splitter.OnLogin(nil)
+	if len(splitter.active) != 0 {
+		t.Fatalf("expected nil login event ignored, active=%d", len(splitter.active))
+	}
+}
+
+func TestImpl_SimpleSplitter_OnSubmit_Good(t *testing.T) {
+	strategy := &submitRecordingStrategy{}
+	splitter := NewSimpleSplitter(&proxy.Config{}, nil, nil)
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	miner.SetID(1)
+	miner.SetRouteID(7)
+	mapper := &SimpleMapper{id: 7, miner: miner, currentJob: proxy.Job{JobID: "job-1"}, strategy: strategy, pending: make(map[int64]submitContext)}
+	splitter.active[miner.ID()] = mapper
+	splitter.OnSubmit(&proxy.SubmitEvent{Miner: miner, JobID: "job-1", RequestID: 9})
+	if strategy.submits != 1 || len(mapper.pending) != 1 {
+		t.Fatalf("expected submit forwarded and pending recorded, submits=%d pending=%d", strategy.submits, len(mapper.pending))
+	}
+}
+
+func TestImpl_SimpleSplitter_OnSubmit_Bad(t *testing.T) {
+	splitter := NewSimpleSplitter(&proxy.Config{}, nil, nil)
+	splitter.OnSubmit(nil)
+	if len(splitter.active) != 0 {
+		t.Fatalf("expected nil submit ignored, active=%d", len(splitter.active))
+	}
+}
+
+func TestImpl_SimpleSplitter_OnSubmit_Ugly(t *testing.T) {
+	splitter := NewSimpleSplitter(&proxy.Config{}, nil, nil)
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	miner.SetRouteID(99)
+	splitter.OnSubmit(&proxy.SubmitEvent{Miner: miner, JobID: "job-1", RequestID: 3})
+	if miner.TX() == 0 {
+		t.Fatal("expected unavailable route submit to reply with an error")
+	}
+}
+
+func TestImpl_SimpleSplitter_Upstreams_Bad(t *testing.T) {
+	splitter := NewSimpleSplitter(&proxy.Config{}, nil, nil)
+	splitter.active[1] = &SimpleMapper{strategy: activeStrategy{}, stopped: true}
+	stats := splitter.Upstreams()
+	if stats.Error != 1 || stats.Total != 1 {
+		t.Fatalf("expected stopped active mapper counted as error, got %+v", stats)
+	}
+}
+
+func TestImpl_SimpleMapper_Submit_Good(t *testing.T) {
+	strategy := &submitRecordingStrategy{}
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	mapper := NewSimpleMapper(1, strategy)
+	mapper.currentJob = proxy.Job{JobID: "job-1", Target: "b88d0600"}
+	mapper.Submit(&proxy.SubmitEvent{Miner: miner, JobID: "job-1", RequestID: 4})
+	if len(mapper.pending) != 1 || strategy.submits != 1 {
+		t.Fatalf("expected pending submit, pending=%d submits=%d", len(mapper.pending), strategy.submits)
+	}
+}
+
+func TestImpl_SimpleMapper_Submit_Bad(t *testing.T) {
+	mapper := NewSimpleMapper(1, nil)
+	mapper.Submit(nil)
+	if len(mapper.pending) != 0 {
+		t.Fatalf("expected nil submit ignored without pending entries, got %d", len(mapper.pending))
+	}
+}
+
+func TestImpl_SimpleMapper_Submit_Ugly(t *testing.T) {
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	mapper := NewSimpleMapper(1, &submitRecordingStrategy{})
+	mapper.currentJob = proxy.Job{JobID: "current"}
+	mapper.prevJob = proxy.Job{JobID: "previous", Target: "b88d0600"}
+	mapper.Submit(&proxy.SubmitEvent{Miner: miner, JobID: "previous", RequestID: 5})
+	if len(mapper.pending) != 1 {
+		t.Fatalf("expected previous job submit accepted, pending=%d", len(mapper.pending))
+	}
+}
+
+func TestImpl_SimpleMapper_OnJob_Good(t *testing.T) {
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	mapper := NewSimpleMapper(1, activeStrategy{})
+	mapper.miner = miner
+	job := proxy.Job{JobID: "job-1", Blob: strings.Repeat("0", 160), Target: "b88d0600"}
+	mapper.OnJob(job)
+	if mapper.currentJob.JobID != "job-1" || miner.CurrentJob().JobID != "job-1" {
+		t.Fatalf("expected job stored and forwarded, mapper=%+v minerJob=%+v", mapper.currentJob, miner.CurrentJob())
+	}
+}
+
+func TestImpl_SimpleMapper_OnJob_Bad(t *testing.T) {
+	mapper := NewSimpleMapper(1, activeStrategy{})
+	mapper.OnJob(proxy.Job{})
+	if mapper.currentJob.JobID != "" {
+		t.Fatalf("expected invalid job ignored, got %+v", mapper.currentJob)
+	}
+}
+
+func TestImpl_SimpleMapper_OnJob_Ugly(t *testing.T) {
+	mapper := NewSimpleMapper(1, activeStrategy{})
+	mapper.currentJob = proxy.Job{JobID: "prev", ClientID: "session-1"}
+	mapper.OnJob(proxy.Job{JobID: "next", ClientID: "session-1", Blob: strings.Repeat("0", 160), Target: "b88d0600"})
+	if mapper.prevJob.JobID != "prev" || mapper.currentJob.JobID != "next" {
+		t.Fatalf("expected previous job retained, prev=%+v current=%+v", mapper.prevJob, mapper.currentJob)
+	}
+}
+
+func TestImpl_SimpleMapper_OnResultAccepted_Good(t *testing.T) {
+	miner := proxy.NewMiner(discardConn{}, 3333, nil)
+	mapper := NewSimpleMapper(1, activeStrategy{})
+	mapper.miner = miner
+	mapper.currentJob = proxy.Job{JobID: "job-1"}
+	mapper.pending[3] = submitContext{RequestID: 9, Diff: 64, JobID: "job-1", StartedAt: time.Now()}
+	mapper.OnResultAccepted(3, true, "")
+	if len(mapper.pending) != 0 || miner.TX() == 0 {
+		t.Fatalf("expected accepted result to clear pending and reply, pending=%d tx=%d", len(mapper.pending), miner.TX())
+	}
+}
+
+func TestImpl_SimpleMapper_OnDisconnect_Bad(t *testing.T) {
+	var mapper *SimpleMapper
+	mapper.OnDisconnect()
+	if mapper != nil {
+		t.Fatal("expected nil mapper to remain nil")
+	}
+}
+
+func TestImpl_SimpleMapper_OnDisconnect_Ugly(t *testing.T) {
+	mapper := NewSimpleMapper(1, activeStrategy{})
+	mapper.OnDisconnect()
+	mapper.OnDisconnect()
+	if !mapper.stopped {
+		t.Fatal("expected repeated disconnect to leave mapper stopped")
+	}
+}
 
 func TestSimpleMapper_OnResultAccepted_Expired(t *testing.T) {
 	bus := proxy.NewEventBus()
@@ -294,7 +430,7 @@ func TestSimpleMapper_OnResultAccepted_CustomDiffUsesEffectiveDifficulty(t *test
 	}
 }
 
-func TestSimpleMapper_OnResultAccepted_Bad(t *testing.T) {
+func TestImpl_SimpleMapper_OnResultAccepted_Bad(t *testing.T) {
 	bus := proxy.NewEventBus()
 	rejects := make(chan proxy.Event, 1)
 	bus.Subscribe(proxy.EventReject, func(e proxy.Event) {
@@ -354,7 +490,7 @@ func TestSimpleMapper_OnResultAccepted_Bad(t *testing.T) {
 	}
 }
 
-func TestSimpleMapper_OnResultAccepted_Ugly(t *testing.T) {
+func TestImpl_SimpleMapper_OnResultAccepted_Ugly(t *testing.T) {
 	mapper := &SimpleMapper{}
 	mapper.OnResultAccepted(999, true, "")
 	if len(mapper.pending) != 0 {

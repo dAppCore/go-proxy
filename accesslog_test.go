@@ -199,6 +199,9 @@ func TestAccessLogSink_SetPath_Good(t *testing.T) {
 func TestAccessLogSink_SetPath_Bad(t *testing.T) {
 	var sink *accessLogSink
 	sink.SetPath("ignored")
+	if sink != nil {
+		t.Fatal("expected nil access log sink to remain nil")
+	}
 }
 
 func TestAccessLogSink_SetPath_Ugly(t *testing.T) {

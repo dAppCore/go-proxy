@@ -1,10 +1,10 @@
 module dappco.re/go/proxy
 
-go 1.26.0
+go 1.26.2
 
 require (
+	dappco.re/go v0.9.0
 	dappco.re/go/api v0.0.0
-	dappco.re/go/core v0.8.0-alpha.1
 	github.com/gin-gonic/gin v1.12.0
 )
 
@@ -100,7 +100,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace dappco.re/go/core => /Users/snider/Code/core/go
+replace dappco.re/go => /Users/snider/Code/core/go
 
 replace dappco.re/go/api => /Users/snider/Code/core/api
 

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	core "dappco.re/go/core"
+	core "dappco.re/go"
 )
 
 // Result is the success/error carrier used by constructors and loaders.
@@ -195,7 +195,7 @@ func (b *EventBus) Dispatch(e Event) {
 	for _, handler := range handlers {
 		func() {
 			defer func() {
-				_ = recover()
+				recover()
 			}()
 			handler(e)
 		}()
@@ -223,7 +223,7 @@ func (g *shareSinkGroup) OnAccept(e Event) {
 	for _, sink := range g.sinks {
 		func() {
 			defer func() {
-				_ = recover()
+				recover()
 			}()
 			sink.OnAccept(e)
 		}()
@@ -237,7 +237,7 @@ func (g *shareSinkGroup) OnReject(e Event) {
 	for _, sink := range g.sinks {
 		func() {
 			defer func() {
-				_ = recover()
+				recover()
 			}()
 			sink.OnReject(e)
 		}()

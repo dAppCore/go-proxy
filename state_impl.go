@@ -17,6 +17,8 @@ import (
 const (
 	maxStratumLineLength     = 16384
 	minerLoginTimeout        = 10 * time.Second
+	minerLoginJobWait        = 100 * time.Millisecond
+	minerLoginJobPoll        = 2 * time.Millisecond
 	minerReadyTimeout        = 600 * time.Second
 	minerTLSHandshakeTimeout = 5 * time.Second
 	minerWriteTimeout        = 5 * time.Second
@@ -594,7 +596,9 @@ func (p *Proxy) onShareSettled(Event) {
 
 func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	if p == nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			// best-effort close for rejected accept path
+		}
 		return
 	}
 	p.configMu.RLock()
@@ -851,7 +855,9 @@ func (p *Proxy) reloadMonitoringServer() {
 		return
 	}
 	p.stopMonitoringServer()
-	_ = p.startMonitoringServer()
+	if ok := p.startMonitoringServer(); !ok {
+		return
+	}
 }
 
 func (p *Proxy) stopMonitoringServer() {
@@ -867,7 +873,9 @@ func (p *Proxy) stopMonitoringServer() {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), submitDrainTimeout)
 	defer cancel()
-	_ = httpServer.Shutdown(ctx)
+	if err := httpServer.Shutdown(ctx); err != nil {
+		return
+	}
 }
 
 func (p *Proxy) isRunning() bool {
@@ -1365,7 +1373,10 @@ func (m *Miner) readLoop() {
 			return
 		}
 		if timeout := m.readTimeout(); timeout > 0 {
-			_ = conn.SetReadDeadline(time.Now().Add(timeout))
+			if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+				m.Close()
+				return
+			}
 		} else if m.State() == MinerStateWaitLogin {
 			m.Close()
 			return
@@ -1500,6 +1511,7 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	}
 	m.rpcID = rpcID
 	m.state = MinerStateWaitReady
+	m.loginReplyPending = true
 	m.mu.Unlock()
 	if m.onLogin != nil {
 		m.onLogin(m)
@@ -1528,6 +1540,9 @@ func (m *Miner) handleLogin(request stratumRequest) {
 	if m.State() == MinerStateClosing {
 		return
 	}
+	if extNH {
+		m.waitForLoginJob(minerLoginJobWait)
+	}
 	m.replyLoginSuccess(requestID(request.ID))
 }
 
@@ -1539,9 +1554,23 @@ func (m *Miner) rejectLogin(id int64, message string) {
 	if m.state != MinerStateClosing {
 		m.state = MinerStateWaitLogin
 	}
+	m.loginReplyPending = false
 	m.mu.Unlock()
 	m.ReplyWithError(id, message)
 	m.closeTransport()
+}
+
+func (m *Miner) waitForLoginJob(timeout time.Duration) {
+	if m == nil || timeout <= 0 {
+		return
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if m.CurrentJob().IsValid() || m.State() == MinerStateClosing {
+			return
+		}
+		time.Sleep(minerLoginJobPoll)
+	}
 }
 
 type resolvedCustomDiff struct {
@@ -1594,7 +1623,7 @@ func (m *Miner) handleSubmit(request stratumRequest) {
 	paramsMap := valueMap(request.Params)
 	if paramsMap == nil {
 		if data, ok := request.Params.([]byte); ok {
-			_ = jsonUnmarshalBytes(data, &params)
+			jsonUnmarshalBytes(data, &params)
 		}
 	} else {
 		params.ID = valueString(paramsMap["id"])
@@ -1670,14 +1699,19 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 	}
 	m.mu.Lock()
 	m.currentJob = job
+	deferNotification := m.loginReplyPending
 	m.mu.Unlock()
-	renderedJob, effectiveAlgo := m.renderJob(job, algo)
-	payload := map[string]any{
-		"jsonrpc": "2.0",
-		"method":  "job",
-		"params":  buildMinerJobPayload(renderedJob, m.sessionID(), m.supportsAlgoExtension(), effectiveAlgo),
+	if !deferNotification {
+		renderedJob, effectiveAlgo := m.renderJob(job, algo)
+		payload := map[string]any{
+			"jsonrpc": "2.0",
+			"method":  "job",
+			"params":  buildMinerJobPayload(renderedJob, m.sessionID(), m.supportsAlgoExtension(), effectiveAlgo),
+		}
+		if err := m.writeJSON(payload); err != nil {
+			return
+		}
 	}
-	_ = m.writeJSON(payload)
 	m.touchActivity()
 	m.mu.Lock()
 	if m.state == MinerStateWaitReady {
@@ -1690,20 +1724,28 @@ func (m *Miner) replyLoginSuccess(id int64) {
 	if m == nil {
 		return
 	}
+	m.sendMu.Lock()
+	defer m.sendMu.Unlock()
+	m.mu.Lock()
+	sessionID := m.rpcID
+	includeAlgo := m.algoEnabled && m.extAlgo
+	job := m.currentJob
+	m.loginReplyPending = false
+	if job.IsValid() {
+		m.state = MinerStateReady
+	}
+	m.mu.Unlock()
 	result := map[string]any{
-		"id":     m.sessionID(),
+		"id":     sessionID,
 		"status": "OK",
 	}
-	if m.supportsAlgoExtension() {
+	if includeAlgo {
 		result["extensions"] = []string{"algo"}
 	}
-	if job := m.CurrentJob(); job.IsValid() {
+	if job.IsValid() {
 		renderedJob, effectiveAlgo := m.renderJob(job, job.Algo)
-		result["job"] = buildMinerJobPayload(renderedJob, m.sessionID(), m.supportsAlgoExtension(), effectiveAlgo)
+		result["job"] = buildMinerJobPayload(renderedJob, sessionID, includeAlgo, effectiveAlgo)
 		m.touchActivity()
-		m.mu.Lock()
-		m.state = MinerStateReady
-		m.mu.Unlock()
 	}
 	payload := map[string]any{
 		"id":      id,
@@ -1711,7 +1753,9 @@ func (m *Miner) replyLoginSuccess(id int64) {
 		"error":   nil,
 		"result":  result,
 	}
-	_ = m.writeJSON(payload)
+	if err := m.writeJSONLocked(payload); err != nil {
+		return
+	}
 }
 
 func (m *Miner) renderJob(job Job, algo string) (Job, string) {
@@ -1772,7 +1816,9 @@ func (m *Miner) ReplyWithError(id int64, message string) {
 			"message": message,
 		},
 	}
-	_ = m.writeJSON(payload)
+	if err := m.writeJSON(payload); err != nil {
+		return
+	}
 }
 
 func (m *Miner) Success(id int64, status string) {
@@ -1787,7 +1833,9 @@ func (m *Miner) Success(id int64, status string) {
 			"status": status,
 		},
 	}
-	_ = m.writeJSON(payload)
+	if err := m.writeJSON(payload); err != nil {
+		return
+	}
 }
 
 func (m *Miner) touchActivity() {
@@ -1803,13 +1851,19 @@ func (m *Miner) touchActivity() {
 		return
 	}
 	if conn != nil {
-		_ = conn.SetReadDeadline(time.Now().Add(minerReadyTimeout))
+		if err := conn.SetReadDeadline(time.Now().Add(minerReadyTimeout)); err != nil {
+			return
+		}
 	}
 }
 
 func (m *Miner) writeJSON(payload any) error {
 	m.sendMu.Lock()
 	defer m.sendMu.Unlock()
+	return m.writeJSONLocked(payload)
+}
+
+func (m *Miner) writeJSONLocked(payload any) error {
 	m.mu.RLock()
 	conn := m.conn
 	m.mu.RUnlock()
@@ -1821,7 +1875,9 @@ func (m *Miner) writeJSON(payload any) error {
 		return err
 	}
 	defer func() {
-		_ = conn.SetWriteDeadline(time.Time{})
+		if err := conn.SetWriteDeadline(time.Time{}); err != nil {
+			return
+		}
 	}()
 	data := []byte(jsonMarshalString(payload))
 	data = append(data, '\n')
@@ -1864,7 +1920,9 @@ func (m *Miner) closeTransport() {
 	m.tlsConn = nil
 	m.mu.Unlock()
 	if conn != nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			return
+		}
 	}
 }
 
@@ -2361,7 +2419,9 @@ func (s *Server) Start() {
 				}
 			}
 			if s.limiter != nil && !s.limiter.Allow(conn.RemoteAddr().String()) {
-				_ = conn.Close()
+				if err := conn.Close(); err != nil {
+					// best-effort close for rate-limited connection
+				}
 				continue
 			}
 			go s.handleAcceptedConn(conn)
@@ -2372,23 +2432,39 @@ func (s *Server) Start() {
 func (s *Server) handleAcceptedConn(conn net.Conn) {
 	if s == nil || conn == nil {
 		if conn != nil {
-			_ = conn.Close()
+			if err := conn.Close(); err != nil {
+				// best-effort close for orphaned connection
+			}
 		}
 		return
 	}
 	if s.tlsConfig != nil {
 		tlsConn := tls.Server(conn, s.tlsConfig)
-		_ = conn.SetDeadline(time.Now().Add(minerTLSHandshakeTimeout))
-		if err := tlsConn.Handshake(); err != nil {
-			_ = conn.Close()
+		if err := conn.SetDeadline(time.Now().Add(minerTLSHandshakeTimeout)); err != nil {
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after deadline failure
+			}
 			return
 		}
-		_ = tlsConn.SetDeadline(time.Time{})
+		if err := tlsConn.Handshake(); err != nil {
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after handshake failure
+			}
+			return
+		}
+		if err := tlsConn.SetDeadline(time.Time{}); err != nil {
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after deadline reset failure
+			}
+			return
+		}
 		conn = tlsConn
 	}
 	select {
 	case <-s.done:
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			// best-effort close during server shutdown
+		}
 		return
 	default:
 	}
@@ -2410,7 +2486,9 @@ func (s *Server) Stop() {
 		close(s.done)
 	}
 	if s.listener != nil {
-		_ = s.listener.Close()
+		if err := s.listener.Close(); err != nil {
+			return
+		}
 	}
 }
 

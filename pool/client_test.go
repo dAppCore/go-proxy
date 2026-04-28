@@ -126,3 +126,130 @@ func TestClient_writeJSON_Good(t *testing.T) {
 		t.Fatal("expected write deadline to be in the future")
 	}
 }
+
+func TestImpl_NewStratumClient_Good(t *testing.T) {
+	listener := &clientDisconnectSpy{}
+	client := NewStratumClient(proxy.PoolConfig{URL: "pool.example:3333"}, listener)
+	if client == nil || client.listener != listener || client.pending == nil {
+		t.Fatalf("expected initialized stratum client, got %+v", client)
+	}
+}
+
+func TestImpl_NewStratumClient_Bad(t *testing.T) {
+	client := NewStratumClient(proxy.PoolConfig{}, nil)
+	if client == nil || client.config.URL != "" || client.listener != nil {
+		t.Fatalf("expected empty client config with nil listener, got %+v", client)
+	}
+}
+
+func TestImpl_NewStratumClient_Ugly(t *testing.T) {
+	client := NewStratumClient(proxy.PoolConfig{TLS: true, TLSFingerprint: "abc"}, nil)
+	if !client.config.TLS || client.config.TLSFingerprint != "abc" {
+		t.Fatalf("expected TLS config retained, got %+v", client.config)
+	}
+}
+
+func TestImpl_StratumClient_IsActive_Good(t *testing.T) {
+	client := &StratumClient{active: true}
+	if !client.IsActive() {
+		t.Fatal("expected active client")
+	}
+}
+
+func TestImpl_StratumClient_IsActive_Bad(t *testing.T) {
+	var client *StratumClient
+	if client.IsActive() {
+		t.Fatal("expected nil client inactive")
+	}
+}
+
+func TestImpl_StratumClient_IsActive_Ugly(t *testing.T) {
+	client := &StratumClient{}
+	if client.IsActive() {
+		t.Fatal("expected zero-value client inactive")
+	}
+}
+
+func TestImpl_StratumClient_SessionID_Good(t *testing.T) {
+	client := &StratumClient{sessionID: "session-1"}
+	if got := client.SessionID(); got != "session-1" {
+		t.Fatalf("expected session id, got %q", got)
+	}
+}
+
+func TestImpl_StratumClient_SessionID_Bad(t *testing.T) {
+	var client *StratumClient
+	if got := client.SessionID(); got != "" {
+		t.Fatalf("expected nil client session empty, got %q", got)
+	}
+}
+
+func TestImpl_StratumClient_SessionID_Ugly(t *testing.T) {
+	client := &StratumClient{}
+	if got := client.SessionID(); got != "" {
+		t.Fatalf("expected zero-value session empty, got %q", got)
+	}
+}
+
+func TestImpl_StratumClient_Connect_Ugly(t *testing.T) {
+	var client *StratumClient
+	result := client.Connect()
+	if result.OK || result.Error == nil {
+		t.Fatalf("expected nil client connect failure, got %+v", result)
+	}
+}
+
+func TestImpl_StratumClient_Login_Good(t *testing.T) {
+	conn := &tickConn{}
+	client := &StratumClient{config: proxy.PoolConfig{User: "wallet", Pass: "x"}, conn: conn, pending: make(map[int64]struct{})}
+	client.Login()
+	if got := conn.writes.Load(); got != 1 {
+		t.Fatalf("expected one login write, got %d", got)
+	}
+}
+
+func TestImpl_StratumClient_Login_Bad(t *testing.T) {
+	client := &StratumClient{}
+	client.Login()
+	if client.seq != 0 {
+		t.Fatalf("expected login without conn ignored, seq=%d", client.seq)
+	}
+}
+
+func TestImpl_StratumClient_Login_Ugly(t *testing.T) {
+	conn := &tickConn{}
+	client := &StratumClient{config: proxy.PoolConfig{User: "wallet", RigID: "rig", Algo: "rx/0"}, conn: conn, seq: 5, pending: make(map[int64]struct{})}
+	client.Login()
+	if client.seq != 5 || conn.writes.Load() != 1 {
+		t.Fatalf("expected existing seq retained and one write, seq=%d writes=%d", client.seq, conn.writes.Load())
+	}
+}
+
+func TestImpl_StratumClient_Disconnect_Good(t *testing.T) {
+	conn := &clientTestConn{}
+	spy := &clientDisconnectSpy{}
+	client := &StratumClient{listener: spy, conn: conn, sessionID: "session", active: true, pending: map[int64]struct{}{1: {}}}
+	client.Disconnect()
+	if conn.closed.Load() != 1 || spy.disconnects.Load() != 1 || client.conn != nil || client.IsActive() {
+		t.Fatalf("expected disconnect cleanup, closed=%d disconnects=%d conn=%v active=%v", conn.closed.Load(), spy.disconnects.Load(), client.conn, client.IsActive())
+	}
+}
+
+func TestImpl_StratumClient_Disconnect_Bad(t *testing.T) {
+	var client *StratumClient
+	client.Disconnect()
+	if client != nil {
+		t.Fatal("expected nil client to remain nil")
+	}
+}
+
+func TestImpl_StratumClient_Disconnect_Ugly(t *testing.T) {
+	conn := &clientTestConn{}
+	spy := &clientDisconnectSpy{}
+	client := &StratumClient{listener: spy, conn: conn, pending: map[int64]struct{}{}}
+	client.Disconnect()
+	client.Disconnect()
+	if conn.closed.Load() != 1 || spy.disconnects.Load() != 1 {
+		t.Fatalf("expected idempotent disconnect, closed=%d disconnects=%d", conn.closed.Load(), spy.disconnects.Load())
+	}
+}

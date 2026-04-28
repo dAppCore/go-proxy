@@ -23,7 +23,7 @@ func TestConfigWatcher_New_Good(t *testing.T) {
 	}
 }
 
-func TestConfigWatcher_Start_Good(t *testing.T) {
+func TestCoreImpl_ConfigWatcher_Start_Good(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	initial := []byte(`{"mode":"nicehash","workers":"false","bind":[{"host":"127.0.0.1","port":3333}],"pools":[{"url":"pool.example:3333","enabled":true}]}`)
@@ -74,7 +74,7 @@ func TestConfigWatcher_Start_Good(t *testing.T) {
 //	})
 //	watcher.Start()
 //	watcher.Stop()
-func TestConfigWatcher_Start_Bad(t *testing.T) {
+func TestCoreImpl_ConfigWatcher_Start_Bad(t *testing.T) {
 	called := make(chan struct{}, 1)
 	watcher := NewConfigWatcher("/nonexistent/path/config.json", func(*Config) {
 		select {
@@ -96,7 +96,7 @@ func TestConfigWatcher_Start_Bad(t *testing.T) {
 	}
 }
 
-func TestConfigWatcher_Start_Ugly(t *testing.T) {
+func TestCoreImpl_ConfigWatcher_Start_Ugly(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	initial := []byte(`{"mode":"nicehash","workers":"false","bind":[{"host":"127.0.0.1","port":3333}],"pools":[{"url":"pool.example:3333","enabled":true}]}`)
@@ -136,7 +136,7 @@ func TestConfigWatcher_Start_Ugly(t *testing.T) {
 }
 
 // TestConfigWatcher_Stop_Good verifies that Stop closes a running watcher cleanly.
-func TestConfigWatcher_Stop_Good(t *testing.T) {
+func TestCoreImpl_ConfigWatcher_Stop_Good(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	initial := []byte(`{"mode":"nicehash","workers":"false","bind":[{"host":"127.0.0.1","port":3333}],"pools":[{"url":"pool.example:3333","enabled":true}]}`)
@@ -159,7 +159,7 @@ func TestConfigWatcher_Stop_Good(t *testing.T) {
 }
 
 // TestConfigWatcher_Stop_Bad verifies that a nil watcher is ignored.
-func TestConfigWatcher_Stop_Bad(t *testing.T) {
+func TestCoreImpl_ConfigWatcher_Stop_Bad(t *testing.T) {
 	var watcher *ConfigWatcher
 	watcher.Stop()
 
@@ -168,7 +168,7 @@ func TestConfigWatcher_Stop_Bad(t *testing.T) {
 }
 
 // TestConfigWatcher_Stop_Ugly verifies that Stop is idempotent across repeated calls.
-func TestConfigWatcher_Stop_Ugly(t *testing.T) {
+func TestCoreImpl_ConfigWatcher_Stop_Ugly(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
 	initial := []byte(`{"mode":"nicehash","workers":"false","bind":[{"host":"127.0.0.1","port":3333}],"pools":[{"url":"pool.example:3333","enabled":true}]}`)

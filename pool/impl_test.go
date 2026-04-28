@@ -112,7 +112,7 @@ func TestFailoverStrategy_EnabledPools_Ugly(t *testing.T) {
 //
 //	factory := pool.NewStrategyFactory(cfg)
 //	strategy := factory(listener) // creates FailoverStrategy
-func TestNewStrategyFactory_Good(t *testing.T) {
+func TestImpl_NewStrategyFactory_Good(t *testing.T) {
 	cfg := &proxy.Config{
 		Mode:    "nicehash",
 		Workers: proxy.WorkersByRigID,
@@ -136,7 +136,7 @@ func TestNewStrategyFactory_Good(t *testing.T) {
 //
 //	factory := pool.NewStrategyFactory(nil)
 //	strategy := factory(nil)
-func TestNewStrategyFactory_Bad(t *testing.T) {
+func TestImpl_NewStrategyFactory_Bad(t *testing.T) {
 	factory := NewStrategyFactory(nil)
 	strategy := factory(nil)
 	if strategy == nil {
@@ -149,7 +149,7 @@ func TestNewStrategyFactory_Bad(t *testing.T) {
 //	cfg.Pools = append(cfg.Pools, proxy.PoolConfig{URL: "added.example:3333", Enabled: true})
 //	strategy := factory(nil)
 //	// strategy sees the updated pools via the shared config pointer
-func TestNewStrategyFactory_Ugly(t *testing.T) {
+func TestImpl_NewStrategyFactory_Ugly(t *testing.T) {
 	cfg := &proxy.Config{
 		Mode:    "nicehash",
 		Workers: proxy.WorkersByRigID,

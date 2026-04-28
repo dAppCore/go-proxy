@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	core "dappco.re/go/core"
+	core "dappco.re/go"
 	"dappco.re/go/proxy"
 )
 
@@ -83,7 +83,9 @@ func (c *StratumClient) Connect() proxy.Result {
 	if c.config.TLS {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
-			_ = conn.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after connect deadline exhaustion
+			}
 			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake timeout", context.DeadlineExceeded)}
 		}
 		host := addr
@@ -101,14 +103,23 @@ func (c *StratumClient) Connect() proxy.Result {
 		}
 		tlsConn := tls.Client(conn, tlsCfg)
 		if err := setConnectDeadline(tlsConn, time.Now().Add(remaining)); err != nil {
-			_ = conn.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after deadline setup failure
+			}
 			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake timeout", err)}
 		}
 		if err := tlsConn.Handshake(); err != nil {
-			_ = conn.Close()
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after TLS handshake failure
+			}
 			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "handshake failed", err)}
 		}
-		_ = tlsConn.SetDeadline(time.Time{})
+		if err := tlsConn.SetDeadline(time.Time{}); err != nil {
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after deadline reset failure
+			}
+			return proxy.Result{Result: core.Result{OK: false}, Error: proxy.NewScopedError("proxy.pool.tls", "deadline reset failed", err)}
+		}
 		c.conn = tlsConn
 		c.tlsConn = tlsConn
 	} else {
@@ -155,7 +166,9 @@ func (c *StratumClient) Login() {
 		"method":  "login",
 		"params":  params,
 	}
-	_ = c.writeJSON(req)
+	if err := c.writeJSON(req); err != nil {
+		return
+	}
 }
 
 // seq := client.Submit("job-1", "deadbeef", "HASH64HEX", "cn/r")
@@ -202,7 +215,9 @@ func (c *StratumClient) Keepalive() {
 			"id": c.SessionID(),
 		},
 	}
-	_ = c.writeJSON(req)
+	if err := c.writeJSON(req); err != nil {
+		return
+	}
 }
 
 func (c *StratumClient) reserveRequestID(minimum int64) int64 {
@@ -228,7 +243,9 @@ func (c *StratumClient) Disconnect() {
 	c.closedOnce.Do(func() {
 		conn := c.resetConnectionState()
 		if conn != nil {
-			_ = conn.Close()
+			if err := conn.Close(); err != nil {
+				// best-effort close during disconnect
+			}
 		}
 		if c.listener != nil {
 			c.listener.OnDisconnect()
@@ -240,7 +257,9 @@ func (c *StratumClient) notifyDisconnect() {
 	c.closedOnce.Do(func() {
 		conn := c.resetConnectionState()
 		if conn != nil {
-			_ = conn.Close()
+			if err := conn.Close(); err != nil {
+				// best-effort close during disconnect notification
+			}
 		}
 		if c.listener != nil {
 			c.listener.OnDisconnect()
@@ -275,7 +294,9 @@ func (c *StratumClient) writeJSON(payload any) error {
 		return proxy.NewScopedError("proxy.pool.client", "write deadline failed", err)
 	}
 	defer func() {
-		_ = conn.SetWriteDeadline(time.Time{})
+		if err := conn.SetWriteDeadline(time.Time{}); err != nil {
+			return
+		}
 	}()
 	data := []byte(jsonMarshalString(payload))
 	var err error

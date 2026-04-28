@@ -13,7 +13,7 @@ import (
 //	summary := stats.Summary()
 //	_ = summary.Accepted  // 1
 //	_ = summary.Hashes    // 100000
-func TestStats_OnAccept_Good(t *testing.T) {
+func TestStateImpl_Stats_OnAccept_Good(t *testing.T) {
 	stats := NewStats()
 
 	stats.OnAccept(Event{Diff: 100000, Latency: 82})
@@ -34,7 +34,7 @@ func TestStats_OnAccept_Good(t *testing.T) {
 //
 //	stats := proxy.NewStats()
 //	// 100 goroutines each call OnAccept — no data race under -race flag.
-func TestStats_OnAccept_Bad(t *testing.T) {
+func TestStateImpl_Stats_OnAccept_Bad(t *testing.T) {
 	stats := NewStats()
 	var wg sync.WaitGroup
 	for i := 0; i < 100; i++ {
@@ -56,7 +56,7 @@ func TestStats_OnAccept_Bad(t *testing.T) {
 //
 //	stats := proxy.NewStats()
 //	// 15 accepts with diffs 1..15 → topDiff[9] is 6 (10th highest), not 0
-func TestStats_OnAccept_Ugly(t *testing.T) {
+func TestStateImpl_Stats_OnAccept_Ugly(t *testing.T) {
 	stats := NewStats()
 
 	for i := 1; i <= 15; i++ {
@@ -77,7 +77,7 @@ func TestStats_OnAccept_Ugly(t *testing.T) {
 //
 //	stats := proxy.NewStats()
 //	stats.OnReject(proxy.Event{Error: "Low difficulty share"})
-func TestStats_OnReject_Good(t *testing.T) {
+func TestStateImpl_Stats_OnReject_Good(t *testing.T) {
 	stats := NewStats()
 
 	stats.OnReject(Event{Error: "Low difficulty share"})
@@ -96,7 +96,7 @@ func TestStats_OnReject_Good(t *testing.T) {
 //
 //	stats := proxy.NewStats()
 //	stats.OnReject(proxy.Event{Error: "Stale share"})
-func TestStats_OnReject_Bad(t *testing.T) {
+func TestStateImpl_Stats_OnReject_Bad(t *testing.T) {
 	stats := NewStats()
 
 	stats.OnReject(Event{Error: "Stale share"})
@@ -114,7 +114,7 @@ func TestStats_OnReject_Bad(t *testing.T) {
 //
 //	stats := proxy.NewStats()
 //	stats.OnAccept(proxy.Event{Diff: 1000, Expired: true})
-func TestStats_OnReject_Ugly(t *testing.T) {
+func TestStateImpl_Stats_OnReject_Ugly(t *testing.T) {
 	stats := NewStats()
 
 	stats.OnAccept(Event{Diff: 1000, Expired: true})
@@ -134,7 +134,7 @@ func TestStats_OnReject_Ugly(t *testing.T) {
 //	stats.OnAccept(proxy.Event{Diff: 500})
 //	stats.Tick()
 //	summary := stats.Summary()
-func TestStats_Tick_Good(t *testing.T) {
+func TestStateImpl_Stats_Tick_Good(t *testing.T) {
 	stats := NewStats()
 
 	stats.OnAccept(Event{Diff: 500})
@@ -148,13 +148,16 @@ func TestStats_Tick_Good(t *testing.T) {
 }
 
 // TestStats_Tick_Bad verifies that a nil stats receiver is ignored.
-func TestStats_Tick_Bad(t *testing.T) {
+func TestStateImpl_Stats_Tick_Bad(t *testing.T) {
 	var stats *Stats
 	stats.Tick()
+	if stats != nil {
+		t.Fatal("expected nil stats to remain nil")
+	}
 }
 
 // TestStats_Tick_Ugly verifies that a zero-value stats instance can be ticked safely.
-func TestStats_Tick_Ugly(t *testing.T) {
+func TestStateImpl_Stats_Tick_Ugly(t *testing.T) {
 	var stats Stats
 
 	stats.Tick()
@@ -196,7 +199,7 @@ func TestStats_OnLogin_OnClose_Good(t *testing.T) {
 //	stats := proxy.NewStats()
 //	stats.OnLogin(proxy.Event{Miner: &proxy.Miner{}})
 //	stats.OnClose(proxy.Event{Miner: &proxy.Miner{}})
-func TestStats_OnClose_Good(t *testing.T) {
+func TestStateImpl_Stats_OnClose_Good(t *testing.T) {
 	stats := NewStats()
 	miner := &Miner{}
 
@@ -212,7 +215,7 @@ func TestStats_OnClose_Good(t *testing.T) {
 }
 
 // TestStats_OnClose_Bad verifies that nil inputs are ignored.
-func TestStats_OnClose_Bad(t *testing.T) {
+func TestStateImpl_Stats_OnClose_Bad(t *testing.T) {
 	var stats *Stats
 	stats.OnClose(Event{})
 
@@ -227,7 +230,7 @@ func TestStats_OnClose_Bad(t *testing.T) {
 }
 
 // TestStats_OnClose_Ugly verifies that repeated closes do not underflow the miner counter.
-func TestStats_OnClose_Ugly(t *testing.T) {
+func TestStateImpl_Stats_OnClose_Ugly(t *testing.T) {
 	stats := NewStats()
 	miner := &Miner{}
 
@@ -243,7 +246,7 @@ func TestStats_OnClose_Ugly(t *testing.T) {
 	}
 }
 
-func TestStats_Summary_Good(t *testing.T) {
+func TestStateImpl_Stats_Summary_Good(t *testing.T) {
 	stats := NewStats()
 	stats.startTime = time.Now().Add(-30 * time.Second)
 
@@ -269,7 +272,7 @@ func TestStats_Summary_Good(t *testing.T) {
 	}
 }
 
-func TestStats_Summary_Bad(t *testing.T) {
+func TestStateImpl_Stats_Summary_Bad(t *testing.T) {
 	var stats *Stats
 
 	summary := stats.Summary()
@@ -281,7 +284,7 @@ func TestStats_Summary_Bad(t *testing.T) {
 	}
 }
 
-func TestStats_Summary_Ugly(t *testing.T) {
+func TestStateImpl_Stats_Summary_Ugly(t *testing.T) {
 	var stats Stats
 
 	summary := stats.Summary()
@@ -290,5 +293,28 @@ func TestStats_Summary_Ugly(t *testing.T) {
 	}
 	if summary.AvgLatency != 0 || summary.AvgTime != 0 {
 		t.Fatalf("expected zero-value stats to have zero averages, got %+v", summary)
+	}
+}
+
+func TestStats_Stats_Connections_Good(t *testing.T) {
+	stats := NewStats()
+	stats.connections.Store(2)
+	if got := stats.Connections(); got != 2 {
+		t.Fatalf("expected two connections, got %d", got)
+	}
+}
+
+func TestStats_Stats_Connections_Bad(t *testing.T) {
+	var stats *Stats
+	if got := stats.Connections(); got != 0 {
+		t.Fatalf("expected nil stats connections 0, got %d", got)
+	}
+}
+
+func TestStats_Stats_Connections_Ugly(t *testing.T) {
+	stats := NewStats()
+	stats.connections.Store(^uint64(0))
+	if got := stats.Connections(); got != ^uint64(0) {
+		t.Fatalf("expected max connection count, got %d", got)
 	}
 }

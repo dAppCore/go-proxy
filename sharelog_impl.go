@@ -4,7 +4,7 @@ import (
 	"io"
 	"time"
 
-	core "dappco.re/go/core"
+	core "dappco.re/go"
 )
 
 type shareLogSink struct {
@@ -28,7 +28,9 @@ func (l *shareLogSink) SetPath(path string) {
 	}
 	l.path = path
 	if l.file != nil {
-		_ = l.file.Close()
+		if err := l.file.Close(); err != nil {
+			// best-effort close before reopening the configured path
+		}
 		l.file = nil
 	}
 }
@@ -40,7 +42,9 @@ func (l *shareLogSink) Close() {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	if l.file != nil {
-		_ = l.file.Close()
+		if err := l.file.Close(); err != nil {
+			// best-effort close; the sink is reset either way
+		}
 		l.file = nil
 	}
 }
@@ -91,5 +95,7 @@ func (l *shareLogSink) writeLine(kind, user string, diff uint64, latency uint16,
 		builder.WriteString("\"")
 	}
 	builder.WriteByte('\n')
-	_, _ = l.file.Write([]byte(builder.String()))
+	if _, err := l.file.Write([]byte(builder.String())); err != nil {
+		return
+	}
 }

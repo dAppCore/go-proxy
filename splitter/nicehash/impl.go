@@ -61,7 +61,10 @@ func (s *NonceSplitter) OnLogin(event *proxy.LoginEvent) {
 	}
 	mapper := s.addMapperLocked()
 	if mapper != nil {
-		_ = mapper.Add(event.Miner)
+		if added := mapper.Add(event.Miner); !added {
+			s.mu.Unlock()
+			return
+		}
 		s.mapperByID[mapper.id] = mapper
 		toStart = mapper
 	}

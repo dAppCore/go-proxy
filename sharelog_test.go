@@ -153,6 +153,9 @@ func TestShareLogSink_SetPath_Good(t *testing.T) {
 func TestShareLogSink_SetPath_Bad(t *testing.T) {
 	var sink *shareLogSink
 	sink.SetPath("ignored")
+	if sink != nil {
+		t.Fatal("expected nil share log sink to remain nil")
+	}
 }
 
 func TestShareLogSink_SetPath_Ugly(t *testing.T) {

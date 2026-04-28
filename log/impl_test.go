@@ -17,7 +17,7 @@ import (
 //
 //	al := log.NewAccessLog("/tmp/test-access.log")
 //	al.OnLogin(proxy.Event{Miner: miner}) // writes "CONNECT  10.0.0.1  WALLET  XMRig/6.21.0"
-func TestAccessLog_OnLogin_Good(t *testing.T) {
+func TestImpl_AccessLog_OnLogin_Good(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "access.log")
 	al := NewAccessLog(path)
 	defer al.Close()
@@ -40,7 +40,7 @@ func TestAccessLog_OnLogin_Good(t *testing.T) {
 //
 //	al := log.NewAccessLog("/tmp/test-access.log")
 //	al.OnLogin(proxy.Event{Miner: nil}) // no-op
-func TestAccessLog_OnLogin_Bad(t *testing.T) {
+func TestImpl_AccessLog_OnLogin_Bad(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "access.log")
 	al := NewAccessLog(path)
 	defer al.Close()
@@ -60,7 +60,7 @@ func TestAccessLog_OnLogin_Bad(t *testing.T) {
 //
 //	var al *log.AccessLog
 //	al.OnLogin(proxy.Event{Miner: miner}) // no-op, no panic
-func TestAccessLog_OnLogin_Ugly(t *testing.T) {
+func TestImpl_AccessLog_OnLogin_Ugly(t *testing.T) {
 	var al *AccessLog
 	miner := newTestMiner(t)
 	al.OnLogin(proxy.Event{Miner: miner})
@@ -70,7 +70,7 @@ func TestAccessLog_OnLogin_Ugly(t *testing.T) {
 //
 //	al := log.NewAccessLog("/tmp/test-access.log")
 //	al.OnClose(proxy.Event{Miner: miner}) // writes "CLOSE  <ip>  <user>  rx=0  tx=0"
-func TestAccessLog_OnClose_Good(t *testing.T) {
+func TestImpl_AccessLog_OnClose_Good(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "access.log")
 	al := NewAccessLog(path)
 	defer al.Close()
@@ -99,7 +99,7 @@ func TestAccessLog_OnClose_Good(t *testing.T) {
 //
 //	al := log.NewAccessLog("/tmp/test-access.log")
 //	al.OnClose(proxy.Event{Miner: nil}) // no-op
-func TestAccessLog_OnClose_Bad(t *testing.T) {
+func TestImpl_AccessLog_OnClose_Bad(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "access.log")
 	al := NewAccessLog(path)
 	defer al.Close()
@@ -119,7 +119,7 @@ func TestAccessLog_OnClose_Bad(t *testing.T) {
 //
 //	al := log.NewAccessLog("")
 //	al.OnClose(proxy.Event{Miner: miner}) // no-op, empty path
-func TestAccessLog_OnClose_Ugly(t *testing.T) {
+func TestImpl_AccessLog_OnClose_Ugly(t *testing.T) {
 	al := NewAccessLog("")
 	defer al.Close()
 
@@ -131,7 +131,7 @@ func TestAccessLog_OnClose_Ugly(t *testing.T) {
 //
 //	sl := log.NewShareLog("/tmp/test-shares.log")
 //	sl.OnAccept(proxy.Event{Miner: miner, Diff: 100000, Latency: 82})
-func TestShareLog_OnAccept_Good(t *testing.T) {
+func TestImpl_ShareLog_OnAccept_Good(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "shares.log")
 	sl := NewShareLog(path)
 	defer sl.Close()
@@ -160,7 +160,7 @@ func TestShareLog_OnAccept_Good(t *testing.T) {
 //
 //	sl := log.NewShareLog("/tmp/test-shares.log")
 //	sl.OnAccept(proxy.Event{Miner: nil}) // no-op
-func TestShareLog_OnAccept_Bad(t *testing.T) {
+func TestImpl_ShareLog_OnAccept_Bad(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "shares.log")
 	sl := NewShareLog(path)
 	defer sl.Close()
@@ -180,7 +180,7 @@ func TestShareLog_OnAccept_Bad(t *testing.T) {
 //
 //	var sl *log.ShareLog
 //	sl.OnAccept(proxy.Event{Miner: miner}) // no-op, no panic
-func TestShareLog_OnAccept_Ugly(t *testing.T) {
+func TestImpl_ShareLog_OnAccept_Ugly(t *testing.T) {
 	var sl *ShareLog
 	miner := newTestMiner(t)
 	sl.OnAccept(proxy.Event{Miner: miner, Diff: 100000})
@@ -190,7 +190,7 @@ func TestShareLog_OnAccept_Ugly(t *testing.T) {
 //
 //	sl := log.NewShareLog("/tmp/test-shares.log")
 //	sl.OnReject(proxy.Event{Miner: miner, Error: "Low difficulty share"})
-func TestShareLog_OnReject_Good(t *testing.T) {
+func TestImpl_ShareLog_OnReject_Good(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "shares.log")
 	sl := NewShareLog(path)
 	defer sl.Close()
@@ -216,7 +216,7 @@ func TestShareLog_OnReject_Good(t *testing.T) {
 //
 //	sl := log.NewShareLog("/tmp/test-shares.log")
 //	sl.OnReject(proxy.Event{Miner: nil}) // no-op
-func TestShareLog_OnReject_Bad(t *testing.T) {
+func TestImpl_ShareLog_OnReject_Bad(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "shares.log")
 	sl := NewShareLog(path)
 	defer sl.Close()
@@ -236,7 +236,7 @@ func TestShareLog_OnReject_Bad(t *testing.T) {
 //
 //	sl := log.NewShareLog("")
 //	sl.OnReject(proxy.Event{Miner: miner, Error: "reason"}) // no-op, empty path
-func TestShareLog_OnReject_Ugly(t *testing.T) {
+func TestImpl_ShareLog_OnReject_Ugly(t *testing.T) {
 	sl := NewShareLog("")
 	defer sl.Close()
 
@@ -364,7 +364,7 @@ func setMinerStringField(t *testing.T, miner *proxy.Miner, field, value string) 
 //	al.OnLogin(proxy.Event{Miner: miner})
 //	al.Close()
 //	al.Close() // double close is safe
-func TestAccessLog_Close_Good(t *testing.T) {
+func TestImpl_AccessLog_Close_Good(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "access.log")
 	al := NewAccessLog(path)
 
@@ -378,18 +378,24 @@ func TestAccessLog_Close_Good(t *testing.T) {
 //
 //	var al *log.AccessLog
 //	al.Close() // no-op, no panic
-func TestAccessLog_Close_Bad(t *testing.T) {
+func TestImpl_AccessLog_Close_Bad(t *testing.T) {
 	var al *AccessLog
 	al.Close()
+	if al != nil {
+		t.Fatal("expected nil access log to remain nil")
+	}
 }
 
 // TestAccessLog_Close_Ugly verifies Close on a never-opened log does not panic.
 //
 //	al := log.NewAccessLog("/nonexistent/dir/access.log")
 //	al.Close() // no file was ever opened
-func TestAccessLog_Close_Ugly(t *testing.T) {
+func TestImpl_AccessLog_Close_Ugly(t *testing.T) {
 	al := NewAccessLog("/nonexistent/dir/access.log")
 	al.Close()
+	if al.file != nil {
+		t.Fatalf("expected never-opened access log to have nil file, got %v", al.file)
+	}
 }
 
 // TestShareLog_Close_Good verifies Close releases the file handle and is safe to call twice.
@@ -398,7 +404,7 @@ func TestAccessLog_Close_Ugly(t *testing.T) {
 //	sl.OnAccept(proxy.Event{Miner: miner, Diff: 1000})
 //	sl.Close()
 //	sl.Close() // double close is safe
-func TestShareLog_Close_Good(t *testing.T) {
+func TestImpl_ShareLog_Close_Good(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "shares.log")
 	sl := NewShareLog(path)
 
@@ -412,18 +418,24 @@ func TestShareLog_Close_Good(t *testing.T) {
 //
 //	var sl *log.ShareLog
 //	sl.Close() // no-op, no panic
-func TestShareLog_Close_Bad(t *testing.T) {
+func TestImpl_ShareLog_Close_Bad(t *testing.T) {
 	var sl *ShareLog
 	sl.Close()
+	if sl != nil {
+		t.Fatal("expected nil share log to remain nil")
+	}
 }
 
 // TestShareLog_Close_Ugly verifies Close on a never-opened log does not panic.
 //
 //	sl := log.NewShareLog("/nonexistent/dir/shares.log")
 //	sl.Close() // no file was ever opened
-func TestShareLog_Close_Ugly(t *testing.T) {
+func TestImpl_ShareLog_Close_Ugly(t *testing.T) {
 	sl := NewShareLog("/nonexistent/dir/shares.log")
 	sl.Close()
+	if sl.file != nil {
+		t.Fatalf("expected never-opened share log to have nil file, got %v", sl.file)
+	}
 }
 
 // newTestMiner creates a minimal miner for log testing using a net.Pipe connection.

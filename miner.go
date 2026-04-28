@@ -51,6 +51,7 @@ type Miner struct {
 	rx                  uint64 // bytes received from miner
 	tx                  uint64 // bytes sent from miner
 	currentJob          Job
+	loginReplyPending   bool
 	connectedAt         time.Time
 	lastActivityAt      time.Time
 	mu                  sync.RWMutex

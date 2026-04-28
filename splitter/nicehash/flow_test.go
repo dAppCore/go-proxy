@@ -25,7 +25,7 @@ func (s *nicehashStrategySpy) Disconnect()    { s.disconnects++ }
 func (s *nicehashStrategySpy) IsActive() bool { return s.active }
 func (s *nicehashStrategySpy) Tick(uint64)    { s.ticks++ }
 
-func TestNonceSplitter_OnLogin_Good(t *testing.T) {
+func TestImpl_NonceSplitter_OnLogin_Good(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -49,7 +49,7 @@ func TestNonceSplitter_OnLogin_Good(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_Connect_Good(t *testing.T) {
+func TestImpl_NonceSplitter_Connect_Good(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -65,12 +65,15 @@ func TestNonceSplitter_Connect_Good(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_Connect_Bad(t *testing.T) {
+func TestImpl_NonceSplitter_Connect_Bad(t *testing.T) {
 	var splitter *NonceSplitter
 	splitter.Connect()
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestNonceSplitter_Connect_Ugly(t *testing.T) {
+func TestImpl_NonceSplitter_Connect_Ugly(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -84,12 +87,15 @@ func TestNonceSplitter_Connect_Ugly(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_OnLogin_Bad(t *testing.T) {
+func TestImpl_NonceSplitter_OnLogin_Bad(t *testing.T) {
 	var splitter *NonceSplitter
 	splitter.OnLogin(nil)
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestNonceSplitter_OnLogin_Ugly(t *testing.T) {
+func TestImpl_NonceSplitter_OnLogin_Ugly(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -104,7 +110,7 @@ func TestNonceSplitter_OnLogin_Ugly(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_OnSubmit_Good(t *testing.T) {
+func TestImpl_NonceSplitter_OnSubmit_Good(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -125,12 +131,15 @@ func TestNonceSplitter_OnSubmit_Good(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_OnSubmit_Bad(t *testing.T) {
+func TestImpl_NonceSplitter_OnSubmit_Bad(t *testing.T) {
 	var splitter *NonceSplitter
 	splitter.OnSubmit(nil)
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestNonceSplitter_OnSubmit_Ugly(t *testing.T) {
+func TestImpl_NonceSplitter_OnSubmit_Ugly(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -145,7 +154,7 @@ func TestNonceSplitter_OnSubmit_Ugly(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_OnClose_Good(t *testing.T) {
+func TestImpl_NonceSplitter_OnClose_Good(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -161,12 +170,15 @@ func TestNonceSplitter_OnClose_Good(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_OnClose_Bad(t *testing.T) {
+func TestImpl_NonceSplitter_OnClose_Bad(t *testing.T) {
 	var splitter *NonceSplitter
 	splitter.OnClose(nil)
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestNonceSplitter_OnClose_Ugly(t *testing.T) {
+func TestImpl_NonceSplitter_OnClose_Ugly(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -182,7 +194,7 @@ func TestNonceSplitter_OnClose_Ugly(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_Tick_Good(t *testing.T) {
+func TestImpl_NonceSplitter_Tick_Good(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -198,7 +210,7 @@ func TestNonceSplitter_Tick_Good(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_Disconnect_Good(t *testing.T) {
+func TestImpl_NonceSplitter_Disconnect_Good(t *testing.T) {
 	spy := &nicehashStrategySpy{}
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -233,7 +245,7 @@ func TestNonceMapper_OnJob_IsActive_Good(t *testing.T) {
 	}
 }
 
-func TestNonceMapper_OnDisconnect_Good(t *testing.T) {
+func TestImpl_NonceMapper_OnDisconnect_Good(t *testing.T) {
 	mapper := NewNonceMapper(1, &proxy.Config{Mode: "nicehash"}, &nicehashStrategySpy{active: true})
 	mapper.OnDisconnect()
 	if mapper.active {

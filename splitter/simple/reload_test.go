@@ -18,7 +18,7 @@ func (s *reloadableStrategy) ReloadPools()                                   { s
 
 var _ pool.ReloadableStrategy = (*reloadableStrategy)(nil)
 
-func TestSimpleSplitter_ReloadPools_Good(t *testing.T) {
+func TestImpl_SimpleSplitter_ReloadPools_Good(t *testing.T) {
 	strategy := &reloadableStrategy{}
 	splitter := &SimpleSplitter{
 		active: map[int64]*SimpleMapper{
@@ -34,7 +34,7 @@ func TestSimpleSplitter_ReloadPools_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_ReloadPools_Bad(t *testing.T) {
+func TestImpl_SimpleSplitter_ReloadPools_Bad(t *testing.T) {
 	splitter := &SimpleSplitter{
 		active: map[int64]*SimpleMapper{
 			1: {strategy: nil},
@@ -45,7 +45,7 @@ func TestSimpleSplitter_ReloadPools_Bad(t *testing.T) {
 	splitter.ReloadPools()
 }
 
-func TestSimpleSplitter_ReloadPools_Ugly(t *testing.T) {
+func TestImpl_SimpleSplitter_ReloadPools_Ugly(t *testing.T) {
 	active := &reloadableStrategy{}
 	idle := &reloadableStrategy{}
 	splitter := &SimpleSplitter{

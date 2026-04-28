@@ -6,15 +6,15 @@ type proxySplitterStub struct {
 	stats UpstreamStats
 }
 
-func (s *proxySplitterStub) Connect()                    {}
-func (s *proxySplitterStub) OnLogin(*LoginEvent)         {}
-func (s *proxySplitterStub) OnSubmit(*SubmitEvent)        {}
-func (s *proxySplitterStub) OnClose(*CloseEvent)         {}
-func (s *proxySplitterStub) Tick(uint64)                 {}
-func (s *proxySplitterStub) GC()                         {}
-func (s *proxySplitterStub) Upstreams() UpstreamStats    { return s.stats }
+func (s *proxySplitterStub) Connect()                 {}
+func (s *proxySplitterStub) OnLogin(*LoginEvent)      {}
+func (s *proxySplitterStub) OnSubmit(*SubmitEvent)    {}
+func (s *proxySplitterStub) OnClose(*CloseEvent)      {}
+func (s *proxySplitterStub) Tick(uint64)              {}
+func (s *proxySplitterStub) GC()                      {}
+func (s *proxySplitterStub) Upstreams() UpstreamStats { return s.stats }
 
-func TestProxy_WorkerRecords_Good(t *testing.T) {
+func TestStateImpl_Proxy_WorkerRecords_Good(t *testing.T) {
 	workers := NewWorkers(WorkersByUser, nil)
 	miner := &Miner{id: 7, ip: "10.0.0.1", user: "WALLET"}
 	workers.OnLogin(Event{Miner: miner})
@@ -32,21 +32,21 @@ func TestProxy_WorkerRecords_Good(t *testing.T) {
 	}
 }
 
-func TestProxy_WorkerRecords_Bad(t *testing.T) {
+func TestStateImpl_Proxy_WorkerRecords_Bad(t *testing.T) {
 	var p *Proxy
 	if got := p.WorkerRecords(); got != nil {
 		t.Fatalf("expected nil proxy to return nil records, got %v", got)
 	}
 }
 
-func TestProxy_WorkerRecords_Ugly(t *testing.T) {
+func TestStateImpl_Proxy_WorkerRecords_Ugly(t *testing.T) {
 	p := &Proxy{}
 	if got := p.WorkerRecords(); got != nil {
 		t.Fatalf("expected proxy without workers to return nil records, got %v", got)
 	}
 }
 
-func TestProxy_MinerCount_Good(t *testing.T) {
+func TestStateImpl_Proxy_MinerCount_Good(t *testing.T) {
 	stats := NewStats()
 	stats.OnLogin(Event{Miner: &Miner{}})
 	p := &Proxy{stats: stats}
@@ -57,7 +57,7 @@ func TestProxy_MinerCount_Good(t *testing.T) {
 	}
 }
 
-func TestProxy_MinerCount_Bad(t *testing.T) {
+func TestStateImpl_Proxy_MinerCount_Bad(t *testing.T) {
 	var p *Proxy
 	now, max := p.MinerCount()
 	if now != 0 || max != 0 {
@@ -65,7 +65,7 @@ func TestProxy_MinerCount_Bad(t *testing.T) {
 	}
 }
 
-func TestProxy_MinerCount_Ugly(t *testing.T) {
+func TestStateImpl_Proxy_MinerCount_Ugly(t *testing.T) {
 	p := &Proxy{}
 	now, max := p.MinerCount()
 	if now != 0 || max != 0 {
@@ -73,28 +73,28 @@ func TestProxy_MinerCount_Ugly(t *testing.T) {
 	}
 }
 
-func TestProxy_Upstreams_Good(t *testing.T) {
+func TestStateImpl_Proxy_Upstreams_Good(t *testing.T) {
 	p := &Proxy{splitter: &proxySplitterStub{stats: UpstreamStats{Active: 1, Sleep: 2, Error: 3, Total: 6}}}
 	if got := p.Upstreams(); got != (UpstreamStats{Active: 1, Sleep: 2, Error: 3, Total: 6}) {
 		t.Fatalf("expected upstream counts to be forwarded, got %+v", got)
 	}
 }
 
-func TestProxy_Upstreams_Bad(t *testing.T) {
+func TestStateImpl_Proxy_Upstreams_Bad(t *testing.T) {
 	var p *Proxy
 	if got := p.Upstreams(); got != (UpstreamStats{}) {
 		t.Fatalf("expected nil proxy to return zero upstream stats, got %+v", got)
 	}
 }
 
-func TestProxy_Upstreams_Ugly(t *testing.T) {
+func TestStateImpl_Proxy_Upstreams_Ugly(t *testing.T) {
 	p := &Proxy{}
 	if got := p.Upstreams(); got != (UpstreamStats{}) {
 		t.Fatalf("expected proxy without splitter to return zero upstream stats, got %+v", got)
 	}
 }
 
-func TestProxy_Events_Good(t *testing.T) {
+func TestStateImpl_Proxy_Events_Good(t *testing.T) {
 	bus := NewEventBus()
 	p := &Proxy{events: bus}
 	if got := p.Events(); got != bus {
@@ -102,14 +102,14 @@ func TestProxy_Events_Good(t *testing.T) {
 	}
 }
 
-func TestProxy_Events_Bad(t *testing.T) {
+func TestStateImpl_Proxy_Events_Bad(t *testing.T) {
 	var p *Proxy
 	if got := p.Events(); got != nil {
 		t.Fatalf("expected nil proxy to return nil event bus, got %+v", got)
 	}
 }
 
-func TestProxy_Events_Ugly(t *testing.T) {
+func TestStateImpl_Proxy_Events_Ugly(t *testing.T) {
 	p := &Proxy{}
 	if got := p.Events(); got != nil {
 		t.Fatalf("expected proxy without events to return nil event bus, got %+v", got)

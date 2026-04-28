@@ -226,6 +226,9 @@ func TestWorker_Tick_Good(t *testing.T) {
 func TestWorker_Tick_Bad(t *testing.T) {
 	var workers *Workers
 	workers.Tick()
+	if workers != nil {
+		t.Fatal("expected nil workers to remain nil")
+	}
 }
 
 func TestWorker_Tick_Ugly(t *testing.T) {

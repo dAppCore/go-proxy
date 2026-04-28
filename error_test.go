@@ -41,3 +41,47 @@ func TestError_NewScopedError_Ugly(t *testing.T) {
 		t.Fatalf("expected nil scoped error to unwrap to nil")
 	}
 }
+
+func TestError_ScopedError_Error_Good(t *testing.T) {
+	err := &ScopedError{Scope: "proxy.config", Message: "load failed"}
+	if got := err.Error(); got != "proxy.config: load failed" {
+		t.Fatalf("expected scoped error text, got %q", got)
+	}
+}
+
+func TestError_ScopedError_Error_Bad(t *testing.T) {
+	var err *ScopedError
+	if got := err.Error(); got != "" {
+		t.Fatalf("expected nil scoped error text empty, got %q", got)
+	}
+}
+
+func TestError_ScopedError_Error_Ugly(t *testing.T) {
+	cause := errors.New("root")
+	err := &ScopedError{Scope: "proxy.pool", Message: "connect failed", Cause: cause}
+	if got := err.Error(); got != "proxy.pool: connect failed: root" {
+		t.Fatalf("expected scoped error with cause, got %q", got)
+	}
+}
+
+func TestError_ScopedError_Unwrap_Good(t *testing.T) {
+	cause := errors.New("root")
+	err := &ScopedError{Cause: cause}
+	if got := err.Unwrap(); got != cause {
+		t.Fatalf("expected unwrap cause, got %v", got)
+	}
+}
+
+func TestError_ScopedError_Unwrap_Bad(t *testing.T) {
+	err := &ScopedError{}
+	if got := err.Unwrap(); got != nil {
+		t.Fatalf("expected nil cause unwrap, got %v", got)
+	}
+}
+
+func TestError_ScopedError_Unwrap_Ugly(t *testing.T) {
+	var err *ScopedError
+	if got := err.Unwrap(); got != nil {
+		t.Fatalf("expected nil receiver unwrap nil, got %v", got)
+	}
+}

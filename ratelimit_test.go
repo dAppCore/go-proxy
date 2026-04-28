@@ -9,7 +9,7 @@ import (
 //
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 10})
 //	limiter.Allow("1.2.3.4:3333") // true (first 10 calls)
-func TestRateLimiter_Allow_Good(t *testing.T) {
+func TestCoreImpl_RateLimiter_Allow_Good(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 10, BanDurationSeconds: 60})
 
 	for i := 0; i < 10; i++ {
@@ -23,7 +23,7 @@ func TestRateLimiter_Allow_Good(t *testing.T) {
 //
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 10})
 //	// calls 1-10 pass, call 11 fails
-func TestRateLimiter_Allow_Bad(t *testing.T) {
+func TestCoreImpl_RateLimiter_Allow_Bad(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 10, BanDurationSeconds: 60})
 
 	for i := 0; i < 10; i++ {
@@ -39,7 +39,7 @@ func TestRateLimiter_Allow_Bad(t *testing.T) {
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 300})
 //	limiter.Allow("1.2.3.4:3333") // true (exhausts budget)
 //	limiter.Allow("1.2.3.4:3333") // false (banned for 300 seconds)
-func TestRateLimiter_Allow_Ugly(t *testing.T) {
+func TestCoreImpl_RateLimiter_Allow_Ugly(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 300})
 
 	if !rl.Allow("1.2.3.4:3333") {
@@ -96,7 +96,7 @@ func TestRateLimiter_Allow_ExhaustedBucketStartsBan(t *testing.T) {
 //
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 1})
 //	limiter.Tick()
-func TestRateLimiter_Tick_Good(t *testing.T) {
+func TestCoreImpl_RateLimiter_Tick_Good(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 1})
 
 	rl.Allow("1.2.3.4:3333")
@@ -118,13 +118,16 @@ func TestRateLimiter_Tick_Good(t *testing.T) {
 }
 
 // TestRateLimiter_Tick_Bad verifies that a nil limiter is ignored.
-func TestRateLimiter_Tick_Bad(t *testing.T) {
+func TestCoreImpl_RateLimiter_Tick_Bad(t *testing.T) {
 	var rl *RateLimiter
 	rl.Tick()
+	if rl != nil {
+		t.Fatal("expected nil limiter to remain nil")
+	}
 }
 
 // TestRateLimiter_Tick_Ugly verifies that a disabled limiter can still be ticked safely.
-func TestRateLimiter_Tick_Ugly(t *testing.T) {
+func TestCoreImpl_RateLimiter_Tick_Ugly(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 0})
 
 	rl.Tick()
@@ -167,7 +170,7 @@ func TestRateLimiter_Disabled_Good(t *testing.T) {
 	}
 }
 
-func TestRateLimiter_UpdateConfig_Good(t *testing.T) {
+func TestCoreImpl_RateLimiter_UpdateConfig_Good(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 60})
 	if !rl.Allow("1.2.3.4:3333") {
 		t.Fatal("expected first call to pass")
@@ -186,12 +189,15 @@ func TestRateLimiter_UpdateConfig_Good(t *testing.T) {
 	}
 }
 
-func TestRateLimiter_UpdateConfig_Bad(t *testing.T) {
+func TestCoreImpl_RateLimiter_UpdateConfig_Bad(t *testing.T) {
 	var rl *RateLimiter
 	rl.UpdateConfig(RateLimit{MaxConnectionsPerMinute: 10, BanDurationSeconds: 1})
+	if rl != nil {
+		t.Fatal("expected nil limiter to remain nil")
+	}
 }
 
-func TestRateLimiter_UpdateConfig_Ugly(t *testing.T) {
+func TestCoreImpl_RateLimiter_UpdateConfig_Ugly(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 60})
 	rl.Allow("1.2.3.4:3333")
 

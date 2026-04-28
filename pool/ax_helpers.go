@@ -1,6 +1,6 @@
 package pool
 
-import core "dappco.re/go/core"
+import core "dappco.re/go"
 
 func jsonMarshalString(value any) string {
 	return core.JSONMarshalString(value)

@@ -7,7 +7,7 @@ package api
 import (
 	"net/http"
 
-	core "dappco.re/go/core"
+	core "dappco.re/go"
 	coreapi "dappco.re/go/api"
 	"dappco.re/go/proxy"
 	"github.com/gin-gonic/gin"

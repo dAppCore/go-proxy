@@ -30,7 +30,7 @@ func (s *gcStrategy) IsActive() bool {
 	return s.active
 }
 
-func TestNonceSplitter_GC_Good(t *testing.T) {
+func TestImpl_NonceSplitter_GC_Good(t *testing.T) {
 	strategy := &gcStrategy{active: false}
 	mapper := &NonceMapper{
 		id:       42,
@@ -59,13 +59,16 @@ func TestNonceSplitter_GC_Good(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_GC_Bad(t *testing.T) {
+func TestImpl_NonceSplitter_GC_Bad(t *testing.T) {
 	var splitter *NonceSplitter
 
 	splitter.GC()
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestNonceSplitter_GC_Ugly(t *testing.T) {
+func TestImpl_NonceSplitter_GC_Ugly(t *testing.T) {
 	strategy := &gcStrategy{active: true}
 	mapper := &NonceMapper{
 		id:       99,

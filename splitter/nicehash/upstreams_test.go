@@ -20,7 +20,7 @@ func (s *upstreamStateStrategy) Disconnect() {}
 
 func (s *upstreamStateStrategy) IsActive() bool { return s.active }
 
-func TestNonceSplitter_Upstreams_Good(t *testing.T) {
+func TestImpl_NonceSplitter_Upstreams_Good(t *testing.T) {
 	splitter := &NonceSplitter{
 		mappers: []*NonceMapper{
 			{strategy: &upstreamStateStrategy{active: true}, active: true},
@@ -41,7 +41,7 @@ func TestNonceSplitter_Upstreams_Good(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_Upstreams_Bad(t *testing.T) {
+func TestImpl_NonceSplitter_Upstreams_Bad(t *testing.T) {
 	var splitter *NonceSplitter
 
 	stats := splitter.Upstreams()
@@ -51,7 +51,7 @@ func TestNonceSplitter_Upstreams_Bad(t *testing.T) {
 	}
 }
 
-func TestNonceSplitter_Upstreams_Ugly(t *testing.T) {
+func TestImpl_NonceSplitter_Upstreams_Ugly(t *testing.T) {
 	splitter := &NonceSplitter{
 		mappers: []*NonceMapper{
 			{strategy: &upstreamStateStrategy{active: false}, active: false},

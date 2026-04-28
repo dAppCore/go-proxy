@@ -52,7 +52,7 @@ func TestProxy_buildServers_Bad(t *testing.T) {
 	}
 }
 
-func TestProxy_Start_Good(t *testing.T) {
+func TestStateImpl_Proxy_Start_Good(t *testing.T) {
 	cfg := &Config{
 		Mode:    "simple",
 		Workers: WorkersByRigID,
@@ -110,12 +110,15 @@ func TestProxy_Start_Good(t *testing.T) {
 	<-done
 }
 
-func TestProxy_Start_Bad(t *testing.T) {
+func TestStateImpl_Proxy_Start_Bad(t *testing.T) {
 	var p *Proxy
 	p.Start()
+	if p != nil {
+		t.Fatal("expected nil proxy to remain nil")
+	}
 }
 
-func TestProxy_Start_Ugly(t *testing.T) {
+func TestStateImpl_Proxy_Start_Ugly(t *testing.T) {
 	cfg := &Config{
 		Mode:    "simple",
 		Workers: WorkersByRigID,
@@ -167,7 +170,7 @@ func TestProxy_buildServers_TLSListenerRequiresEnabled_Bad(t *testing.T) {
 	}
 }
 
-func TestServer_Start_Good(t *testing.T) {
+func TestStateImpl_Server_Start_Good(t *testing.T) {
 	accepted := make(chan struct{}, 1)
 	srv, result := NewServer(BindAddr{Host: "127.0.0.1", Port: 0}, nil, nil, func(net.Conn, uint16) {
 		accepted <- struct{}{}
@@ -191,12 +194,15 @@ func TestServer_Start_Good(t *testing.T) {
 	}
 }
 
-func TestServer_Start_Bad(t *testing.T) {
+func TestStateImpl_Server_Start_Bad(t *testing.T) {
 	var srv *Server
 	srv.Start()
+	if srv != nil {
+		t.Fatal("expected nil server to remain nil")
+	}
 }
 
-func TestServer_Start_Ugly(t *testing.T) {
+func TestStateImpl_Server_Start_Ugly(t *testing.T) {
 	dir := t.TempDir()
 	certFile, keyFile := writeTestCertPair(t, dir)
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)

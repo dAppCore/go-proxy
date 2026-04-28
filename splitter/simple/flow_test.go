@@ -25,7 +25,7 @@ func (s *simpleStrategySpy) Disconnect()    { s.disconnects++ }
 func (s *simpleStrategySpy) IsActive() bool { return s.active }
 func (s *simpleStrategySpy) Tick(uint64)    { s.ticks++ }
 
-func TestSimpleSplitter_OnClose_Good(t *testing.T) {
+func TestImpl_SimpleSplitter_OnClose_Good(t *testing.T) {
 	spy := &simpleStrategySpy{active: true}
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -47,7 +47,7 @@ func TestSimpleSplitter_OnClose_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_Connect_Good(t *testing.T) {
+func TestImpl_SimpleSplitter_Connect_Good(t *testing.T) {
 	activeSpy := &simpleStrategySpy{active: true}
 	idleSpy := &simpleStrategySpy{active: true}
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
@@ -63,12 +63,15 @@ func TestSimpleSplitter_Connect_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_Connect_Bad(t *testing.T) {
+func TestImpl_SimpleSplitter_Connect_Bad(t *testing.T) {
 	var splitter *SimpleSplitter
 	splitter.Connect()
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestSimpleSplitter_Connect_Ugly(t *testing.T) {
+func TestImpl_SimpleSplitter_Connect_Ugly(t *testing.T) {
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return &simpleStrategySpy{active: true}
 	})
@@ -78,12 +81,15 @@ func TestSimpleSplitter_Connect_Ugly(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_OnClose_Bad(t *testing.T) {
+func TestImpl_SimpleSplitter_OnClose_Bad(t *testing.T) {
 	var splitter *SimpleSplitter
 	splitter.OnClose(nil)
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestSimpleSplitter_OnClose_Ugly(t *testing.T) {
+func TestImpl_SimpleSplitter_OnClose_Ugly(t *testing.T) {
 	spy := &simpleStrategySpy{active: true}
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 0}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -101,7 +107,7 @@ func TestSimpleSplitter_OnClose_Ugly(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_GC_Good(t *testing.T) {
+func TestImpl_SimpleSplitter_GC_Good(t *testing.T) {
 	spy := &simpleStrategySpy{active: true}
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 1}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -119,12 +125,15 @@ func TestSimpleSplitter_GC_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_GC_Bad(t *testing.T) {
+func TestImpl_SimpleSplitter_GC_Bad(t *testing.T) {
 	var splitter *SimpleSplitter
 	splitter.GC()
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestSimpleSplitter_GC_Ugly(t *testing.T) {
+func TestImpl_SimpleSplitter_GC_Ugly(t *testing.T) {
 	spy := &simpleStrategySpy{active: true}
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -139,7 +148,7 @@ func TestSimpleSplitter_GC_Ugly(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_Tick_Good(t *testing.T) {
+func TestImpl_SimpleSplitter_Tick_Good(t *testing.T) {
 	spy := &simpleStrategySpy{active: true}
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 1}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -153,12 +162,15 @@ func TestSimpleSplitter_Tick_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_Tick_Bad(t *testing.T) {
+func TestImpl_SimpleSplitter_Tick_Bad(t *testing.T) {
 	var splitter *SimpleSplitter
 	splitter.Tick(1)
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestSimpleSplitter_Tick_Ugly(t *testing.T) {
+func TestImpl_SimpleSplitter_Tick_Ugly(t *testing.T) {
 	spy := &simpleStrategySpy{active: true}
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 1}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -172,7 +184,7 @@ func TestSimpleSplitter_Tick_Ugly(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_Disconnect_Good(t *testing.T) {
+func TestImpl_SimpleSplitter_Disconnect_Good(t *testing.T) {
 	spy := &simpleStrategySpy{active: true}
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -190,12 +202,15 @@ func TestSimpleSplitter_Disconnect_Good(t *testing.T) {
 	}
 }
 
-func TestSimpleSplitter_Disconnect_Bad(t *testing.T) {
+func TestImpl_SimpleSplitter_Disconnect_Bad(t *testing.T) {
 	var splitter *SimpleSplitter
 	splitter.Disconnect()
+	if splitter != nil {
+		t.Fatal("expected nil splitter to remain nil")
+	}
 }
 
-func TestSimpleSplitter_Disconnect_Ugly(t *testing.T) {
+func TestImpl_SimpleSplitter_Disconnect_Ugly(t *testing.T) {
 	spy := &simpleStrategySpy{active: true}
 	splitter := NewSimpleSplitter(&proxy.Config{ReuseTimeout: 30}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
@@ -206,7 +221,7 @@ func TestSimpleSplitter_Disconnect_Ugly(t *testing.T) {
 	}
 }
 
-func TestSimpleMapper_OnDisconnect_Good(t *testing.T) {
+func TestImpl_SimpleMapper_OnDisconnect_Good(t *testing.T) {
 	mapper := NewSimpleMapper(1, &simpleStrategySpy{active: true})
 	mapper.OnDisconnect()
 	if !mapper.stopped {
