@@ -3,20 +3,42 @@ package proxy
 import (
 	"bufio"
 	"context"
+	"crypto/subtle"
 	"crypto/tls"
-	"encoding/json"
-	"errors"
-	"io"
 	"net"
 	"net/http"
+	"reflect"
 	"sort"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"time"
 )
 
+const (
+	maxStratumLineLength     = 16384
+	minerLoginTimeout        = 10 * time.Second
+	minerLoginJobWait        = 100 * time.Millisecond
+	minerLoginJobPoll        = 2 * time.Millisecond
+	minerReadyTimeout        = 600 * time.Second
+	minerTLSHandshakeTimeout = 5 * time.Second
+	minerWriteTimeout        = 5 * time.Second
+	submitDrainTimeout       = 5 * time.Second
+	httpReadHeaderTimeout    = 5 * time.Second
+	httpReadTimeout          = 10 * time.Second
+	httpWriteTimeout         = 10 * time.Second
+	httpIdleTimeout          = 60 * time.Second
+	httpMaxHeaderBytes       = 16 * 1024
+	maskedPassword           = "********"
+)
+
 // MinerSnapshot is a serialisable view of one miner connection.
+//
+//	snapshots := p.MinerSnapshots()
+//	for _, s := range snapshots {
+//	    _ = s.ID   // 1
+//	    _ = s.IP   // "10.0.0.1:49152"
+//	    _ = s.Diff // 100000
+//	}
 type MinerSnapshot struct {
 	ID       int64
 	IP       string
@@ -30,74 +52,118 @@ type MinerSnapshot struct {
 	Agent    string
 }
 
-// New creates the proxy and wires the default event handlers.
-func New(cfg *Config) (*Proxy, Result) {
-	if cfg == nil {
-		return nil, errorResult(errors.New("config is nil"))
+// cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}}
+// p, result := proxy.New(cfg)
+//
+//	if !result.OK {
+//	    return result.Error
+//	}
+func New(config *Config) (*Proxy, Result) {
+	if config == nil {
+		return nil, newErrorResult(NewScopedError("proxy", "config is nil", nil))
 	}
-	if cfg.Mode == "" {
-		cfg.Mode = "nicehash"
-	}
-	if result := cfg.Validate(); !result.OK {
+	if result := config.Validate(); !result.OK {
 		return nil, result
 	}
+	normalizeConfigValues(config)
 
 	p := &Proxy{
-		config:     cfg,
-		events:     NewEventBus(),
-		stats:      NewStats(),
-		workers:    NewWorkers(cfg.Workers, nil),
-		miners:     make(map[int64]*Miner),
-		customDiff: NewCustomDiff(cfg.CustomDiff),
-		rateLimit:  NewRateLimiter(cfg.RateLimit),
-		done:       make(chan struct{}),
+		config:            config,
+		events:            NewEventBus(),
+		stats:             NewStats(),
+		workers:           NewWorkers(config.Workers, nil),
+		miners:            make(map[int64]*Miner),
+		customDiff:        NewCustomDiff(config.CustomDiff),
+		customDiffBuckets: NewCustomDiffBuckets(config.CustomDiffStats),
+		rateLimit:         NewRateLimiter(config.RateLimit),
+		accessLog:         newAccessLogSink(config.AccessLogFile),
+		shareLog:          newShareLogSink(config.ShareLogFile),
+		done:              make(chan struct{}),
 	}
-	p.workers.bindEvents(p.events)
-
 	p.events.Subscribe(EventLogin, p.customDiff.OnLogin)
+	p.workers.bindEvents(p.events)
+	if p.accessLog != nil {
+		p.events.Subscribe(EventLogin, p.accessLog.OnLogin)
+		p.events.Subscribe(EventClose, p.accessLog.OnClose)
+	}
 	p.events.Subscribe(EventLogin, p.stats.OnLogin)
-	p.events.Subscribe(EventLogin, p.workers.OnLogin)
 	p.events.Subscribe(EventClose, p.stats.OnClose)
-	p.events.Subscribe(EventClose, p.workers.OnClose)
 	p.events.Subscribe(EventAccept, p.stats.OnAccept)
-	p.events.Subscribe(EventAccept, p.workers.OnAccept)
 	p.events.Subscribe(EventReject, p.stats.OnReject)
-	p.events.Subscribe(EventReject, p.workers.OnReject)
+	shareSinks := make([]ShareSink, 0, 2)
+	if p.shareLog != nil {
+		shareSinks = append(shareSinks, p.shareLog)
+	}
+	if p.customDiffBuckets != nil {
+		shareSinks = append(shareSinks, p.customDiffBuckets)
+	}
+	if len(shareSinks) > 0 {
+		p.shareSink = newShareSinkGroup(shareSinks...)
+		p.events.Subscribe(EventAccept, p.shareSink.OnAccept)
+		p.events.Subscribe(EventReject, p.shareSink.OnReject)
+	}
+	p.events.Subscribe(EventAccept, p.onShareSettled)
+	p.events.Subscribe(EventReject, p.onShareSettled)
+	if config.Watch && config.configPath != "" {
+		p.watcher = NewConfigWatcher(config.configPath, p.Reload)
+	}
 
-	if factory, ok := getSplitterFactory(cfg.Mode); ok {
-		p.splitter = factory(cfg, p.events)
+	factory, ok := splitterFactoryForMode(config.Mode)
+	if !ok && !isSupportedMode(config.Mode) {
+		return nil, newErrorResult(NewScopedError("proxy", "unsupported mode", nil))
+	}
+	if ok {
+		p.splitter = factory(config, p.events)
 	} else {
 		p.splitter = &noopSplitter{}
 	}
 
-	return p, successResult()
+	return p, newSuccessResult()
 }
 
-// Mode returns the active proxy mode.
+// Mode returns the runtime mode, for example "nicehash" or "simple".
+//
+//	mode := p.Mode() // "nicehash"
 func (p *Proxy) Mode() string {
 	if p == nil || p.config == nil {
 		return ""
 	}
+	p.configMu.RLock()
+	defer p.configMu.RUnlock()
 	return p.config.Mode
 }
 
-// WorkersMode returns the worker naming strategy.
+// WorkersMode returns the active worker identity strategy, for example proxy.WorkersByRigID.
+//
+//	mode := p.WorkersMode() // proxy.WorkersByRigID
 func (p *Proxy) WorkersMode() WorkersMode {
 	if p == nil || p.config == nil {
 		return WorkersDisabled
 	}
+	p.configMu.RLock()
+	defer p.configMu.RUnlock()
 	return p.config.Workers
 }
 
-// Summary returns the current global stats snapshot.
+// Summary returns a snapshot of the current global metrics.
+//
+//	summary := p.Summary()
+//	_ = summary.Accepted
 func (p *Proxy) Summary() StatsSummary {
 	if p == nil || p.stats == nil {
 		return StatsSummary{}
 	}
-	return p.stats.Summary()
+	summary := p.stats.Summary()
+	if p.customDiffBuckets != nil {
+		summary.CustomDiffStats = p.customDiffBuckets.Snapshot()
+	}
+	return summary
 }
 
-// WorkerRecords returns a stable snapshot of worker rows.
+// WorkerRecords returns a snapshot of the current worker aggregates.
+//
+//	records := p.WorkerRecords()
+//	for _, r := range records { _ = r.Name }
 func (p *Proxy) WorkerRecords() []WorkerRecord {
 	if p == nil || p.workers == nil {
 		return nil
@@ -105,7 +171,10 @@ func (p *Proxy) WorkerRecords() []WorkerRecord {
 	return p.workers.List()
 }
 
-// MinerSnapshots returns a stable snapshot of connected miners.
+// MinerSnapshots returns a snapshot of the live miner connections.
+//
+//	snapshots := p.MinerSnapshots()
+//	for _, s := range snapshots { _ = s.IP }
 func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 	if p == nil {
 		return nil
@@ -114,24 +183,30 @@ func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 	defer p.minersMu.RUnlock()
 	rows := make([]MinerSnapshot, 0, len(p.miners))
 	for _, miner := range p.miners {
+		ip := miner.RemoteAddr()
+		if ip == "" {
+			ip = miner.IP()
+		}
 		rows = append(rows, MinerSnapshot{
-			ID:       miner.id,
-			IP:       miner.ip,
-			TX:       miner.tx,
-			RX:       miner.rx,
-			State:    miner.state,
-			Diff:     miner.customDiff,
-			User:     miner.user,
-			Password: "********",
-			RigID:    miner.rigID,
-			Agent:    miner.agent,
+			ID:       miner.ID(),
+			IP:       ip,
+			TX:       miner.TX(),
+			RX:       miner.RX(),
+			State:    miner.State(),
+			Diff:     miner.Diff(),
+			User:     miner.User(),
+			Password: maskedPassword,
+			RigID:    miner.RigID(),
+			Agent:    miner.Agent(),
 		})
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
 	return rows
 }
 
-// MinerCount returns current and peak connected miner counts.
+// MinerCount returns the current and peak miner counts.
+//
+//	now, max := p.MinerCount() // 142, 200
 func (p *Proxy) MinerCount() (now, max uint64) {
 	if p == nil || p.stats == nil {
 		return 0, 0
@@ -139,7 +214,20 @@ func (p *Proxy) MinerCount() (now, max uint64) {
 	return p.stats.miners.Load(), p.stats.maxMiners.Load()
 }
 
-// Upstreams returns splitter upstream counts.
+// ConnectionCount returns the total number of TCP connections accepted since process start.
+//
+//	total := p.ConnectionCount()
+func (p *Proxy) ConnectionCount() uint64 {
+	if p == nil || p.stats == nil {
+		return 0
+	}
+	return p.stats.Connections()
+}
+
+// Upstreams returns the current upstream connection counts.
+//
+//	stats := p.Upstreams()
+//	_ = stats.Active // 1
 func (p *Proxy) Upstreams() UpstreamStats {
 	if p == nil || p.splitter == nil {
 		return UpstreamStats{}
@@ -147,32 +235,66 @@ func (p *Proxy) Upstreams() UpstreamStats {
 	return p.splitter.Upstreams()
 }
 
-// Start starts the TCP listeners, ticker loop, and optional HTTP API.
+// Events returns the proxy event bus for subscription.
+//
+//	bus := p.Events()
+//	bus.Subscribe(proxy.EventAccept, handler)
+func (p *Proxy) Events() *EventBus {
+	if p == nil {
+		return nil
+	}
+	return p.events
+}
+
+// p.Start()
+//
+//	go func() {
+//	    time.Sleep(30 * time.Second)
+//	    p.Stop()
+//	}()
+//	p.Start()
 func (p *Proxy) Start() {
 	if p == nil {
 		return
 	}
-	for _, bind := range p.config.Bind {
-		var tlsCfg *tls.Config
-		if bind.TLS && p.config.TLS.Enabled {
-			tlsCfg = buildTLSConfig(p.config.TLS)
-		}
-		server, _ := NewServer(bind, tlsCfg, p.rateLimit, p.acceptMiner)
-		p.servers = append(p.servers, server)
-		server.Start()
+	if p.config == nil {
+		return
+	}
+	if result := p.buildServers(); !result.OK {
+		p.Stop()
+		return
 	}
 	if p.splitter != nil {
 		p.splitter.Connect()
 	}
-	if p.config.HTTP.Enabled {
-		p.startHTTP()
+	p.lifecycleMu.Lock()
+	servers := append([]*Server(nil), p.servers...)
+	p.lifecycleMu.Unlock()
+	for _, server := range servers {
+		if server != nil {
+			server.Start()
+		}
 	}
-	p.ticker = time.NewTicker(time.Second)
+	if p.watcher != nil {
+		p.watcher.Start()
+	}
+	if httpCfg := p.currentHTTPConfig(); httpCfg.Enabled {
+		if !p.startMonitoringServer() {
+			p.Stop()
+			return
+		}
+	}
+	p.lifecycleMu.Lock()
+	if p.ticker == nil {
+		p.ticker = time.NewTicker(time.Second)
+	}
+	ticker := p.ticker
+	p.lifecycleMu.Unlock()
 	go func() {
 		var ticks uint64
 		for {
 			select {
-			case <-p.ticker.C:
+			case <-ticker.C:
 				ticks++
 				if p.stats != nil {
 					p.stats.Tick()
@@ -198,64 +320,326 @@ func (p *Proxy) Start() {
 	p.Stop()
 }
 
-// Stop shuts down listeners, background tasks, and HTTP.
+// Stop shuts down listeners, pool connections, the config watcher, and log sinks.
+//
+//	p.Stop()
 func (p *Proxy) Stop() {
 	if p == nil {
 		return
 	}
 	p.stopOnce.Do(func() {
 		close(p.done)
-		if p.ticker != nil {
-			p.ticker.Stop()
+		p.lifecycleMu.RLock()
+		servers := append([]*Server(nil), p.servers...)
+		ticker := p.ticker
+		accessLog := p.accessLog
+		shareLog := p.shareLog
+		watcher := p.watcher
+		p.lifecycleMu.RUnlock()
+		if ticker != nil {
+			ticker.Stop()
+			p.lifecycleMu.Lock()
+			if p.ticker == ticker {
+				p.ticker = nil
+			}
+			p.lifecycleMu.Unlock()
 		}
-		for _, server := range p.servers {
+		for _, server := range servers {
 			server.Stop()
 		}
-		if p.watcher != nil {
-			p.watcher.Stop()
+		if watcher != nil {
+			watcher.Stop()
 		}
-		if p.httpServer != nil {
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-			defer cancel()
-			_ = p.httpServer.Shutdown(ctx)
+		p.stopMonitoringServer()
+		deadline := time.Now().Add(submitDrainTimeout)
+		for p.submitCount.Load() > 0 && time.Now().Before(deadline) {
+			time.Sleep(10 * time.Millisecond)
+		}
+		p.closeAllMiners()
+		if splitter, ok := p.splitter.(interface{ Disconnect() }); ok {
+			splitter.Disconnect()
+		}
+		if accessLog != nil {
+			accessLog.Close()
+		}
+		if shareLog != nil {
+			shareLog.Close()
 		}
 	})
 }
 
-// Reload swaps the live configuration and updates dependent state.
-func (p *Proxy) Reload(cfg *Config) {
-	if p == nil || cfg == nil {
+func (p *Proxy) closeAllMiners() {
+	if p == nil {
 		return
 	}
-	p.config = cfg
-	if p.customDiff != nil {
-		p.customDiff.globalDiff = cfg.CustomDiff
+	for _, miner := range p.activeMiners() {
+		if miner != nil {
+			miner.Close()
+		}
 	}
-	p.rateLimit = NewRateLimiter(cfg.RateLimit)
+}
+
+func (p *Proxy) activeMiners() []*Miner {
+	if p == nil {
+		return nil
+	}
+	p.minersMu.RLock()
+	defer p.minersMu.RUnlock()
+	miners := make([]*Miner, 0, len(p.miners))
+	for _, miner := range p.miners {
+		miners = append(miners, miner)
+	}
+	sort.Slice(miners, func(i, j int) bool {
+		if miners[i] == nil || miners[j] == nil {
+			return miners[j] != nil
+		}
+		return miners[i].ID() < miners[j].ID()
+	})
+	return miners
+}
+
+// p.Reload(&proxy.Config{Mode: "simple", Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}})
+//
+//	p.Reload(&proxy.Config{
+//	    Mode:  "simple",
+//	    Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//	})
+func (p *Proxy) Reload(config *Config) {
+	if p == nil || config == nil {
+		return
+	}
+	if result := config.Validate(); !result.OK {
+		return
+	}
+	normalizeConfigValues(config)
+	p.configMu.Lock()
+	poolsChanged := p.config == nil || !reflect.DeepEqual(p.config.Pools, config.Pools)
+	workersChanged := p.config == nil || p.config.Workers != config.Workers
+	httpChanged := p.config == nil || monitoringConfigChanged(p.config.HTTP, config.HTTP)
+	nextWorkersMode := config.Workers
+	if p.config == nil {
+		p.config = config
+	} else {
+		preservedBind := append([]BindAddr(nil), p.config.Bind...)
+		// Splitter wiring is established at start-up, so reload only swaps the
+		// knobs that live subsystems can absorb without reconnecting listeners.
+		preservedMode := p.config.Mode
+		preservedConfigPath := p.config.configPath
+		*p.config = *config
+		p.config.Bind = preservedBind
+		p.config.Mode = preservedMode
+		p.config.configPath = preservedConfigPath
+	}
+	p.configMu.Unlock()
+	if workersChanged && p.workers != nil {
+		p.workers.ResetMode(nextWorkersMode, p.activeMiners())
+	}
+	if p.customDiff != nil {
+		p.customDiff.globalDiff.Store(config.CustomDiff)
+	}
+	p.reloadCustomDiff(config.CustomDiff)
+	if p.customDiffBuckets != nil {
+		p.customDiffBuckets.SetEnabled(config.CustomDiffStats)
+	}
+	if p.rateLimit == nil {
+		p.rateLimit = NewRateLimiter(config.RateLimit)
+	} else {
+		p.rateLimit.UpdateConfig(config.RateLimit)
+	}
+	if p.accessLog != nil {
+		p.accessLog.SetPath(config.AccessLogFile)
+	}
+	if p.shareLog != nil {
+		p.shareLog.SetPath(config.ShareLogFile)
+	}
+	p.reloadWatcher(config.Watch)
+	if httpChanged {
+		p.reloadMonitoringServer()
+	}
+	if poolsChanged {
+		if reloadable, ok := p.splitter.(interface{ ReloadPools() }); ok {
+			reloadable.ReloadPools()
+		}
+	}
+}
+
+func (p *Proxy) reloadCustomDiff(globalDiff uint64) {
+	if p == nil {
+		return
+	}
+	for _, miner := range p.activeMiners() {
+		if miner == nil {
+			continue
+		}
+		miner.mu.Lock()
+		miner.globalDiff = globalDiff
+		customDiffFromLogin := miner.customDiffFromLogin
+		if !customDiffFromLogin {
+			miner.customDiff = globalDiff
+		}
+		state := miner.state
+		miner.mu.Unlock()
+		if customDiffFromLogin {
+			continue
+		}
+		switch state {
+		case MinerStateWaitReady, MinerStateReady:
+			job := miner.CurrentJob()
+			if job.IsValid() {
+				miner.ForwardJob(job, job.Algo)
+			}
+		}
+	}
+}
+
+func (p *Proxy) reloadWatcher(enabled bool) {
+	if p == nil || p.config == nil || p.config.configPath == "" {
+		return
+	}
+	if enabled {
+		p.lifecycleMu.RLock()
+		watcher := p.watcher
+		p.lifecycleMu.RUnlock()
+		if watcher != nil {
+			return
+		}
+		watcher = NewConfigWatcher(p.config.configPath, p.Reload)
+		p.lifecycleMu.Lock()
+		p.watcher = watcher
+		p.lifecycleMu.Unlock()
+		watcher.Start()
+		return
+	}
+	p.lifecycleMu.RLock()
+	watcher := p.watcher
+	p.lifecycleMu.RUnlock()
+	if watcher == nil {
+		return
+	}
+	watcher.Stop()
+	p.lifecycleMu.Lock()
+	p.watcher = nil
+	p.lifecycleMu.Unlock()
+}
+
+func (p *Proxy) buildServers() Result {
+	if p == nil || p.config == nil {
+		return newSuccessResult()
+	}
+	servers := make([]*Server, 0, len(p.config.Bind))
+	for _, bind := range p.config.Bind {
+		var tlsConfig *tls.Config
+		if bind.TLS {
+			if !p.config.TLS.Enabled {
+				for _, server := range servers {
+					if server != nil {
+						server.Stop()
+					}
+				}
+				return newErrorResult(NewScopedError("proxy.server", "tls listener requires tls to be enabled", nil))
+			}
+			result := Result{}
+			tlsConfig, result = buildTLSConfig(p.config.TLS)
+			if !result.OK {
+				for _, server := range servers {
+					if server != nil {
+						server.Stop()
+					}
+				}
+				return result
+			}
+		}
+		server, result := NewServer(bind, tlsConfig, p.rateLimit, p.acceptMiner)
+		if !result.OK {
+			for _, server := range servers {
+				if server != nil {
+					server.Stop()
+				}
+			}
+			return result
+		}
+		servers = append(servers, server)
+	}
+	p.lifecycleMu.Lock()
+	p.servers = servers
+	p.lifecycleMu.Unlock()
+	return newSuccessResult()
+}
+
+// ServerListenerAddr returns the bound listener address for one configured server.
+func (p *Proxy) ServerListenerAddr(index int) string {
+	if p == nil || index < 0 {
+		return ""
+	}
+	p.lifecycleMu.RLock()
+	defer p.lifecycleMu.RUnlock()
+	if index >= len(p.servers) || p.servers[index] == nil || p.servers[index].listener == nil {
+		return ""
+	}
+	return p.servers[index].listener.Addr().String()
+}
+
+func (p *Proxy) onShareSettled(Event) {
+	if p == nil {
+		return
+	}
+	for {
+		current := p.submitCount.Load()
+		if current == 0 {
+			return
+		}
+		if p.submitCount.CompareAndSwap(current, current-1) {
+			return
+		}
+	}
 }
 
 func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	if p == nil {
-		_ = conn.Close()
+		if err := conn.Close(); err != nil {
+			// best-effort close for rejected accept path
+		}
 		return
 	}
+	p.configMu.RLock()
+	accessPassword := ""
+	algoExtension := false
+	customDiff := uint64(0)
+	mode := ""
+	if p.config != nil {
+		accessPassword = p.config.AccessPassword
+		algoExtension = p.config.AlgoExtension
+		customDiff = p.config.CustomDiff
+		mode = p.config.Mode
+	}
+	p.configMu.RUnlock()
 	if p.stats != nil {
 		p.stats.connections.Add(1)
 	}
 	miner := NewMiner(conn, localPort, nil)
-	miner.accessPassword = p.config.AccessPassword
-	miner.globalDiff = p.config.CustomDiff
-	miner.extNH = strings.EqualFold(p.config.Mode, "nicehash")
+	miner.accessPassword = accessPassword
+	miner.algoEnabled = algoExtension
+	miner.mu.Lock()
+	miner.globalDiff = customDiff
+	miner.mu.Unlock()
+	miner.extNH = equalFoldString(mode, "nicehash")
 	miner.onLogin = func(m *Miner) {
-		if p.events != nil {
-			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
-		}
 		if p.splitter != nil {
 			p.splitter.OnLogin(&LoginEvent{Miner: m})
 		}
 	}
+	loginEvent := func(m *Miner) {
+		if p.events != nil {
+			p.events.Dispatch(Event{Type: EventLogin, Miner: m})
+		}
+	}
+	miner.onLoginReady = loginEvent
+	miner.onLoginEvent = loginEvent
 	miner.onSubmit = func(m *Miner, event *SubmitEvent) {
 		if p.splitter != nil {
+			if _, ok := p.splitter.(*noopSplitter); !ok {
+				p.submitCount.Add(1)
+			}
 			p.splitter.OnSubmit(event)
 		}
 	}
@@ -276,103 +660,339 @@ func (p *Proxy) acceptMiner(conn net.Conn, localPort uint16) {
 	miner.Start()
 }
 
-func buildTLSConfig(cfg TLSConfig) *tls.Config {
-	if !cfg.Enabled || cfg.CertFile == "" || cfg.KeyFile == "" {
-		return nil
+func buildTLSConfig(cfg TLSConfig) (*tls.Config, Result) {
+	if !cfg.Enabled {
+		return nil, newSuccessResult()
+	}
+	if cfg.CertFile == "" || cfg.KeyFile == "" {
+		return nil, newErrorResult(NewScopedError("proxy.tls", "tls certificate or key path is empty", nil))
 	}
 	cert, err := tls.LoadX509KeyPair(cfg.CertFile, cfg.KeyFile)
 	if err != nil {
-		return nil
+		return nil, newErrorResult(NewScopedError("proxy.tls", "load certificate failed", err))
 	}
-	return &tls.Config{Certificates: []tls.Certificate{cert}}
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		MinVersion:   tls.VersionTLS12,
+	}
+	applyTLSProtocols(tlsConfig, cfg.Protocols)
+	applyTLSCiphers(tlsConfig, cfg.Ciphers)
+	return tlsConfig, newSuccessResult()
 }
 
-func (p *Proxy) startHTTP() {
+func applyTLSProtocols(tlsConfig *tls.Config, protocols string) {
+	if tlsConfig == nil || trimString(protocols) == "" {
+		return
+	}
+	parts := splitTLSConfigList(protocols)
+	minVersion := uint16(0)
+	maxVersion := uint16(0)
+	for _, part := range parts {
+		if part == "" {
+			continue
+		}
+		if containsString(part, "-") {
+			bounds := splitStringN(part, "-", 2)
+			low := parseTLSVersion(bounds[0])
+			high := parseTLSVersion(bounds[1])
+			if low == 0 || high == 0 {
+				continue
+			}
+			if minVersion == 0 || low < minVersion {
+				minVersion = low
+			}
+			if high > maxVersion {
+				maxVersion = high
+			}
+			continue
+		}
+		version := parseTLSVersion(part)
+		if version == 0 {
+			continue
+		}
+		if minVersion == 0 || version < minVersion {
+			minVersion = version
+		}
+		if version > maxVersion {
+			maxVersion = version
+		}
+	}
+	if minVersion != 0 {
+		tlsConfig.MinVersion = minVersion
+	}
+	if maxVersion != 0 {
+		tlsConfig.MaxVersion = maxVersion
+	}
+}
+
+func applyTLSCiphers(tlsConfig *tls.Config, ciphers string) {
+	if tlsConfig == nil || trimString(ciphers) == "" {
+		return
+	}
+	parts := splitTLSConfigList(ciphers)
+	for _, part := range parts {
+		if id, ok := lookupTLSCipherSuite(part); ok {
+			tlsConfig.CipherSuites = append(tlsConfig.CipherSuites, id)
+		}
+	}
+}
+
+func lookupTLSCipherSuite(value string) (uint16, bool) {
+	name := lowerString(trimString(value))
+	if name == "" {
+		return 0, false
+	}
+
+	allowed := map[string]uint16{}
+	for _, suite := range tls.CipherSuites() {
+		allowed[lowerString(suite.Name)] = suite.ID
+	}
+	for _, suite := range tls.InsecureCipherSuites() {
+		allowed[lowerString(suite.Name)] = suite.ID
+	}
+	if id, ok := allowed[name]; ok {
+		return id, true
+	}
+
+	if alias, ok := tlsCipherSuiteAliases[name]; ok {
+		if id, ok := allowed[lowerString(alias)]; ok {
+			return id, true
+		}
+	}
+
+	return 0, false
+}
+
+var tlsCipherSuiteAliases = map[string]string{
+	"ecdhe-ecdsa-aes128-gcm-sha256": "TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256",
+	"ecdhe-rsa-aes128-gcm-sha256":   "TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256",
+	"ecdhe-ecdsa-aes256-gcm-sha384": "TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384",
+	"ecdhe-rsa-aes256-gcm-sha384":   "TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384",
+	"ecdhe-ecdsa-chacha20-poly1305": "TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305",
+	"ecdhe-rsa-chacha20-poly1305":   "TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305",
+	"dhe-rsa-aes128-gcm-sha256":     "TLS_DHE_RSA_WITH_AES_128_GCM_SHA256",
+	"dhe-rsa-aes256-gcm-sha384":     "TLS_DHE_RSA_WITH_AES_256_GCM_SHA384",
+	"aes128-gcm-sha256":             "TLS_RSA_WITH_AES_128_GCM_SHA256",
+	"aes256-gcm-sha384":             "TLS_RSA_WITH_AES_256_GCM_SHA384",
+	"aes128-sha":                    "TLS_RSA_WITH_AES_128_CBC_SHA",
+	"aes256-sha":                    "TLS_RSA_WITH_AES_256_CBC_SHA",
+	"ecdhe-ecdsa-aes128-sha256":     "TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA256",
+	"ecdhe-rsa-aes128-sha256":       "TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256",
+	"ecdhe-ecdsa-aes256-sha384":     "TLS_ECDHE_ECDSA_WITH_AES_256_CBC_SHA384",
+	"ecdhe-rsa-aes256-sha384":       "TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA384",
+}
+
+func splitTLSConfigList(value string) []string {
+	return splitFieldsBySeparators(value)
+}
+
+func parseTLSVersion(value string) uint16 {
+	switch lowerString(trimString(value)) {
+	case "tls1.0", "tlsv1.0", "tls1", "tlsv1", "1.0", "1", "tls10", "tlsv10":
+		return tls.VersionTLS10
+	case "tls1.1", "tlsv1.1", "1.1", "tls11", "tlsv11":
+		return tls.VersionTLS11
+	case "tls1.2", "tlsv1.2", "1.2", "tls12", "tlsv12":
+		return tls.VersionTLS12
+	case "tls1.3", "tlsv1.3", "1.3", "tls13", "tlsv13":
+		return tls.VersionTLS13
+	default:
+		return 0
+	}
+}
+
+func (p *Proxy) startMonitoringServer() bool {
+	if p == nil || p.config == nil {
+		return false
+	}
+	httpCfg := p.currentHTTPConfig()
+	if !httpCfg.Enabled {
+		return false
+	}
+	if trimString(httpCfg.Host) == "" {
+		return false
+	}
+	if !isLoopbackHTTPHost(httpCfg.Host) && trimString(httpCfg.AccessToken) == "" {
+		return false
+	}
 	mux := http.NewServeMux()
-	mux.HandleFunc("/1/summary", func(w http.ResponseWriter, r *http.Request) {
-		if !p.allowHTTP(r) {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		p.writeJSON(w, p.summaryDocument())
-	})
-	mux.HandleFunc("/1/workers", func(w http.ResponseWriter, r *http.Request) {
-		if !p.allowHTTP(r) {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		p.writeJSON(w, p.workersDocument())
-	})
-	mux.HandleFunc("/1/miners", func(w http.ResponseWriter, r *http.Request) {
-		if !p.allowHTTP(r) {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			return
-		}
-		p.writeJSON(w, p.minersDocument())
-	})
-	addr := net.JoinHostPort(p.config.HTTP.Host, strconv.Itoa(int(p.config.HTTP.Port)))
-	p.httpServer = &http.Server{Addr: addr, Handler: mux}
+	p.registerMonitoringRoute(mux, MonitoringRouteSummary, func() any { return p.SummaryDocument() })
+	p.registerMonitoringRoute(mux, MonitoringRouteWorkers, func() any { return p.WorkersDocument() })
+	p.registerMonitoringRoute(mux, MonitoringRouteMiners, func() any { return p.MinersDocument() })
+	addr := net.JoinHostPort(httpCfg.Host, strconv.Itoa(int(httpCfg.Port)))
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return false
+	}
+	httpServer := &http.Server{
+		Addr:              addr,
+		Handler:           mux,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		ReadTimeout:       httpReadTimeout,
+		WriteTimeout:      httpWriteTimeout,
+		IdleTimeout:       httpIdleTimeout,
+		MaxHeaderBytes:    httpMaxHeaderBytes,
+	}
+	p.lifecycleMu.Lock()
+	p.httpServer = httpServer
+	p.lifecycleMu.Unlock()
 	go func() {
-		_ = p.httpServer.ListenAndServe()
-	}()
-}
-
-func (p *Proxy) allowHTTP(r *http.Request) bool {
-	if p == nil {
-		return false
-	}
-	if p.config.HTTP.Restricted && r.Method != http.MethodGet {
-		return false
-	}
-	if token := p.config.HTTP.AccessToken; token != "" {
-		parts := strings.SplitN(r.Header.Get("Authorization"), " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") || parts[1] != token {
-			return false
+		err := httpServer.Serve(listener)
+		if err != nil && err != http.ErrServerClosed {
+			p.Stop()
 		}
-	}
+	}()
 	return true
 }
 
-func (p *Proxy) writeJSON(w http.ResponseWriter, payload any) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(payload)
+func (p *Proxy) reloadMonitoringServer() {
+	if p == nil || !p.isRunning() {
+		return
+	}
+	httpCfg := p.currentHTTPConfig()
+	if !httpCfg.Enabled {
+		p.stopMonitoringServer()
+		return
+	}
+	p.stopMonitoringServer()
+	if ok := p.startMonitoringServer(); !ok {
+		return
+	}
 }
 
-func (p *Proxy) summaryDocument() any {
+func (p *Proxy) stopMonitoringServer() {
+	if p == nil {
+		return
+	}
+	p.lifecycleMu.Lock()
+	httpServer := p.httpServer
+	p.httpServer = nil
+	p.lifecycleMu.Unlock()
+	if httpServer == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), submitDrainTimeout)
+	defer cancel()
+	if err := httpServer.Shutdown(ctx); err != nil {
+		return
+	}
+}
+
+func (p *Proxy) isRunning() bool {
+	if p == nil {
+		return false
+	}
+	p.lifecycleMu.RLock()
+	defer p.lifecycleMu.RUnlock()
+	return p.ticker != nil
+}
+
+func (p *Proxy) registerMonitoringRoute(mux *http.ServeMux, pattern string, renderDocument func() any) {
+	if p == nil || mux == nil || renderDocument == nil {
+		return
+	}
+	mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+		if status, ok := p.AllowMonitoringRequest(r); !ok {
+			switch status {
+			case http.StatusUnauthorized:
+				w.Header().Set("WWW-Authenticate", "Bearer")
+			case http.StatusMethodNotAllowed:
+				w.Header().Set("Allow", http.MethodGet)
+			}
+			w.WriteHeader(status)
+			return
+		}
+		p.writeJSONResponse(w, renderDocument())
+	})
+}
+
+// AllowMonitoringRequest applies the configured monitoring API access checks.
+// Monitoring documents are GET-only regardless of HTTP.Restricted.
+//
+//	status, ok := p.AllowMonitoringRequest(request)
+func (p *Proxy) AllowMonitoringRequest(r *http.Request) (int, bool) {
+	if p == nil || p.config == nil {
+		return http.StatusServiceUnavailable, false
+	}
+	if r == nil {
+		return http.StatusServiceUnavailable, false
+	}
+	httpCfg := p.currentHTTPConfig()
+	if r.Method != http.MethodGet {
+		return http.StatusMethodNotAllowed, false
+	}
+	if host := trimString(httpCfg.Host); host != "" && !isLoopbackHTTPHost(host) && trimString(httpCfg.AccessToken) == "" {
+		return http.StatusUnauthorized, false
+	}
+	if token := httpCfg.AccessToken; token != "" {
+		parts := splitStringN(r.Header.Get("Authorization"), " ", 2)
+		if len(parts) != 2 || !equalFoldString(parts[0], "bearer") || !secureStringEqual(parts[1], token) {
+			return http.StatusUnauthorized, false
+		}
+	}
+	return http.StatusOK, true
+}
+
+func (p *Proxy) currentHTTPConfig() HTTPConfig {
+	if p == nil || p.config == nil {
+		return HTTPConfig{}
+	}
+	p.configMu.RLock()
+	defer p.configMu.RUnlock()
+	return p.config.HTTP
+}
+
+func (p *Proxy) writeJSONResponse(w http.ResponseWriter, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write([]byte(jsonMarshalString(payload) + "\n"))
+}
+
+// SummaryDocument builds the RFC-shaped /1/summary response body.
+//
+//	doc := p.SummaryDocument()
+//	_ = doc.Results.Accepted
+func (p *Proxy) SummaryDocument() SummaryDocument {
 	summary := p.Summary()
 	now, max := p.MinerCount()
 	upstreams := p.Upstreams()
-	workerCount := uint64(len(p.WorkerRecords()))
-	return map[string]any{
-		"version": "1.0.0",
-		"mode":    p.Mode(),
-		"hashrate": map[string]any{
-			"total": summary.Hashrate,
+	return SummaryDocument{
+		Version: SummaryDocumentVersion,
+		Mode:    p.Mode(),
+		Hashrate: HashrateDocument{
+			Total: summary.Hashrate,
 		},
-		"miners": map[string]any{
-			"now": now,
-			"max": max,
+		Miners: MinersCountDocument{
+			Now: now,
+			Max: max,
 		},
-		"workers":   workerCount,
-		"upstreams": map[string]any{"active": upstreams.Active, "sleep": upstreams.Sleep, "error": upstreams.Error, "total": upstreams.Total, "ratio": upstreamRatio(now, upstreams)},
-		"results": map[string]any{
-			"accepted":     summary.Accepted,
-			"rejected":     summary.Rejected,
-			"invalid":      summary.Invalid,
-			"expired":      summary.Expired,
-			"avg_time":     summary.AvgTime,
-			"latency":      summary.AvgLatency,
-			"hashes_total": summary.Hashes,
-			"best":         summary.TopDiff,
+		Workers:   uint64(len(p.WorkerRecords())),
+		Upstreams: UpstreamDocument{Active: upstreams.Active, Sleep: upstreams.Sleep, Error: upstreams.Error, Total: upstreams.Total, Ratio: upstreamRatio(now, upstreams)},
+		Results: ResultsDocument{
+			Accepted:    summary.Accepted,
+			Rejected:    summary.Rejected,
+			Invalid:     summary.Invalid,
+			Expired:     summary.Expired,
+			AvgTime:     summary.AvgTime,
+			Latency:     summary.AvgLatency,
+			HashesTotal: summary.Hashes,
+			Best:        summary.TopDiff,
 		},
 	}
 }
 
-func (p *Proxy) workersDocument() any {
+// WorkersDocument builds the RFC-shaped /1/workers response body.
+//
+//	doc := p.WorkersDocument()
+//	_ = doc.Workers[0][0]
+func (p *Proxy) WorkersDocument() WorkersDocument {
 	records := p.WorkerRecords()
-	rows := make([]any, 0, len(records))
+	rows := make([]WorkerRow, 0, len(records))
 	for _, record := range records {
-		rows = append(rows, []any{
+		hashrates := make([]float64, len(workerHashrateWindows))
+		for index, seconds := range workerHashrateWindows {
+			hashrates[index] = record.Hashrate(seconds)
+		}
+		rows = append(rows, WorkerRow{
 			record.Name,
 			record.LastIP,
 			record.Connections,
@@ -380,25 +1000,29 @@ func (p *Proxy) workersDocument() any {
 			record.Rejected,
 			record.Invalid,
 			record.Hashes,
-			record.LastHashAt.Unix(),
-			record.Hashrate(60),
-			record.Hashrate(600),
-			record.Hashrate(3600),
-			record.Hashrate(43200),
-			record.Hashrate(86400),
+			unixOrZero(record.LastHashAt),
+			hashrates[0],
+			hashrates[1],
+			hashrates[2],
+			hashrates[3],
+			hashrates[4],
 		})
 	}
-	return map[string]any{
-		"mode":    string(p.WorkersMode()),
-		"workers": rows,
+	return WorkersDocument{
+		Mode:    string(p.WorkersMode()),
+		Workers: rows,
 	}
 }
 
-func (p *Proxy) minersDocument() any {
+// MinersDocument builds the RFC-shaped /1/miners response body.
+//
+//	doc := p.MinersDocument()
+//	_ = doc.Miners[0][7]
+func (p *Proxy) MinersDocument() MinersDocument {
 	records := p.MinerSnapshots()
-	rows := make([]any, 0, len(records))
+	rows := make([]MinerRow, 0, len(records))
 	for _, miner := range records {
-		rows = append(rows, []any{
+		rows = append(rows, MinerRow{
 			miner.ID,
 			miner.IP,
 			miner.TX,
@@ -406,14 +1030,14 @@ func (p *Proxy) minersDocument() any {
 			miner.State,
 			miner.Diff,
 			miner.User,
-			miner.Password,
+			"********",
 			miner.RigID,
 			miner.Agent,
 		})
 	}
-	return map[string]any{
-		"format": []string{"id", "ip", "tx", "rx", "state", "diff", "user", "password", "rig_id", "agent"},
-		"miners": rows,
+	return MinersDocument{
+		Format: append([]string(nil), MinersDocumentFormat...),
+		Miners: rows,
 	}
 }
 
@@ -422,6 +1046,47 @@ func upstreamRatio(now uint64, upstreams UpstreamStats) float64 {
 		return 0
 	}
 	return float64(now) / float64(upstreams.Total)
+}
+
+func unixOrZero(value time.Time) int64 {
+	if value.IsZero() {
+		return 0
+	}
+	return value.Unix()
+}
+
+func monitoringConfigChanged(current, next HTTPConfig) bool {
+	if current.Enabled != next.Enabled {
+		return true
+	}
+	if !current.Enabled && !next.Enabled {
+		return false
+	}
+	return current.Host != next.Host ||
+		current.Port != next.Port ||
+		current.AccessToken != next.AccessToken ||
+		current.Restricted != next.Restricted
+}
+
+func secureStringEqual(a, b string) bool {
+	max := len(a)
+	if len(b) > max {
+		max = len(b)
+	}
+	var diff byte
+	diff |= byte(len(a) ^ len(b))
+	for index := 0; index < max; index++ {
+		var left byte
+		var right byte
+		if index < len(a) {
+			left = a[index]
+		}
+		if index < len(b) {
+			right = b[index]
+		}
+		diff |= left ^ right
+	}
+	return subtle.ConstantTimeByteEq(diff, 0) == 1
 }
 
 func NewMiner(conn net.Conn, localPort uint16, tlsCfg *tls.Config) *Miner {
@@ -444,66 +1109,241 @@ func NewMiner(conn net.Conn, localPort uint16, tlsCfg *tls.Config) *Miner {
 		miner.tlsConn = tlsConn
 	}
 	if remote := conn.RemoteAddr(); remote != nil {
-		miner.ip = hostOnly(remote.String())
+		miner.remoteAddr = remote.String()
+		miner.ip = hostOnly(miner.remoteAddr)
 	}
 	return miner
 }
 
-func (m *Miner) SetID(id int64) { m.id = id }
-func (m *Miner) ID() int64      { return m.id }
-func (m *Miner) SetMapperID(id int64) {
-	m.mapperID = id
+// SetID assigns the miner's internal ID. Used by NonceStorage tests.
+//
+//	m.SetID(42)
+func (m *Miner) SetID(id int64) {
+	m.mu.Lock()
+	m.id = id
+	m.mu.Unlock()
 }
+
+// ID returns the miner's monotonically increasing per-process identifier.
+//
+//	id := m.ID() // 42
+func (m *Miner) ID() int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.id
+}
+
+// SetMapperID assigns which NonceMapper owns this miner in NiceHash mode.
+//
+//	m.SetMapperID(0) // assigned to mapper 0
+func (m *Miner) SetMapperID(id int64) {
+	m.mu.Lock()
+	m.mapperID = id
+	m.mu.Unlock()
+}
+
+// MapperID returns the owning NonceMapper's ID, or -1 if unassigned.
+//
+//	if m.MapperID() < 0 { /* miner not assigned to any mapper */ }
 func (m *Miner) MapperID() int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.mapperID
 }
+
+// SetRouteID assigns the SimpleMapper ID in simple mode.
+//
+//	m.SetRouteID(3)
 func (m *Miner) SetRouteID(id int64) {
+	m.mu.Lock()
 	m.routeID = id
+	m.mu.Unlock()
 }
+
+// RouteID returns the SimpleMapper ID, or -1 if unassigned.
+//
+//	if m.RouteID() < 0 { /* miner not routed */ }
 func (m *Miner) RouteID() int64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.routeID
 }
+
+// SetExtendedNiceHash enables or disables NiceHash nonce-splitting mode for this miner.
+//
+//	m.SetExtendedNiceHash(true)
 func (m *Miner) SetExtendedNiceHash(enabled bool) {
+	m.mu.Lock()
 	m.extNH = enabled
+	m.mu.Unlock()
 }
+
+// ExtendedNiceHash reports whether this miner is in NiceHash nonce-splitting mode.
+//
+//	if m.ExtendedNiceHash() { /* blob byte 39 is patched */ }
 func (m *Miner) ExtendedNiceHash() bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.extNH
 }
+
+// SetCurrentJob assigns the current pool work unit to this miner.
+//
+//	m.SetCurrentJob(proxy.Job{Blob: "...", JobID: "job-1"})
 func (m *Miner) SetCurrentJob(job Job) {
+	m.mu.Lock()
 	m.currentJob = job
+	m.mu.Unlock()
 }
+
+// CurrentJob returns the last job forwarded to this miner.
+//
+//	job := m.CurrentJob()
+//	if job.IsValid() { /* miner has a valid job */ }
 func (m *Miner) CurrentJob() Job {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.currentJob
 }
+
+// LoginAlgos returns the algorithm list sent by the miner during login, or nil if empty.
+//
+//	algos := m.LoginAlgos() // ["cn/r", "rx/0"]
+func (m *Miner) LoginAlgos() []string {
+	if m == nil {
+		return nil
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if len(m.loginAlgos) == 0 {
+		return nil
+	}
+	return append([]string(nil), m.loginAlgos...)
+}
+
+// FixedByte returns the NiceHash slot index (0-255) assigned to this miner.
+//
+//	slot := m.FixedByte() // 0x2A
 func (m *Miner) FixedByte() uint8 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.fixedByte
 }
+
+// SetFixedByte assigns the NiceHash slot index for this miner.
+//
+//	m.SetFixedByte(0x2A)
 func (m *Miner) SetFixedByte(value uint8) {
+	m.mu.Lock()
 	m.fixedByte = value
+	m.mu.Unlock()
 }
+
+// IP returns the remote IP address (without port) for logging.
+//
+//	ip := m.IP() // "10.0.0.1"
 func (m *Miner) IP() string {
 	return m.ip
 }
+
+// RemoteAddr returns the full remote address including port.
+//
+//	addr := m.RemoteAddr() // "10.0.0.1:49152"
+func (m *Miner) RemoteAddr() string {
+	if m == nil {
+		return ""
+	}
+	return m.remoteAddr
+}
+
+// User returns the wallet address from login params, with any custom diff suffix stripped.
+//
+//	user := m.User() // "WALLET" (even if login was "WALLET+50000")
 func (m *Miner) User() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.user
 }
+
+// Password returns the login params.pass value.
+//
+//	pass := m.Password() // "x"
 func (m *Miner) Password() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.password
 }
+
+// Agent returns the mining software identifier from login params.
+//
+//	agent := m.Agent() // "XMRig/6.21.0"
 func (m *Miner) Agent() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.agent
 }
+
+// RigID returns the optional rigid extension field from login params.
+//
+//	rigid := m.RigID() // "rig-alpha"
 func (m *Miner) RigID() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.rigID
 }
+
+// RX returns the total bytes received from this miner.
+//
+//	rx := m.RX() // 4096
 func (m *Miner) RX() uint64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.rx
 }
+
+// TX returns the total bytes sent to this miner.
+//
+//	tx := m.TX() // 8192
 func (m *Miner) TX() uint64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.tx
 }
+
+// Diff returns the last difficulty sent to this miner from the pool.
+//
+//	diff := m.Diff() // 100000
+func (m *Miner) Diff() uint64 {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.diff
+}
+
+// State returns the current lifecycle state of this miner connection.
+//
+//	if m.State() == proxy.MinerStateReady { /* miner is active */ }
 func (m *Miner) State() MinerState {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.state
+}
+
+func (m *Miner) sessionID() string {
+	if m == nil {
+		return ""
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.rpcID
+}
+
+func (m *Miner) supportsAlgoExtension() bool {
+	if m == nil {
+		return false
+	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.algoEnabled && m.extAlgo
 }
 
 // Start launches the read loop.
@@ -521,69 +1361,88 @@ func (m *Miner) readLoop() {
 		}
 	}()
 
-	reader := bufio.NewReader(m.conn)
+	m.mu.RLock()
+	conn := m.conn
+	m.mu.RUnlock()
+	if conn == nil {
+		return
+	}
+	reader := bufio.NewReaderSize(conn, maxStratumLineLength+1)
 	for {
-		if m.state == MinerStateClosing {
+		if m.State() == MinerStateClosing {
 			return
 		}
 		if timeout := m.readTimeout(); timeout > 0 {
-			_ = m.conn.SetReadDeadline(time.Now().Add(timeout))
+			if err := conn.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+				m.Close()
+				return
+			}
+		} else if m.State() == MinerStateWaitLogin {
+			m.Close()
+			return
 		}
 		line, isPrefix, err := reader.ReadLine()
 		if err != nil {
-			if ne, ok := err.(net.Error); ok && ne.Timeout() {
-				return
-			}
-			if err != io.EOF {
-				return
-			}
+			m.Close()
 			return
 		}
-		if isPrefix {
+		if isPrefix || len(line) > maxStratumLineLength {
 			m.Close()
 			return
 		}
 		if len(line) == 0 {
 			continue
 		}
+		m.mu.Lock()
 		m.rx += uint64(len(line) + 1)
-		m.lastActivityAt = time.Now().UTC()
+		m.mu.Unlock()
 		if !m.handleLine(line) {
+			m.Close()
 			return
 		}
 	}
 }
 
 func (m *Miner) readTimeout() time.Duration {
-	switch m.state {
+	m.mu.RLock()
+	lastActivityAt := m.lastActivityAt
+	connectedAt := m.connectedAt
+	m.mu.RUnlock()
+	switch m.State() {
 	case MinerStateWaitLogin:
-		return 10 * time.Second
+		if connectedAt.IsZero() {
+			return minerLoginTimeout
+		}
+		return time.Until(connectedAt.Add(minerLoginTimeout))
 	case MinerStateWaitReady, MinerStateReady:
-		return 600 * time.Second
+		if lastActivityAt.IsZero() {
+			return minerReadyTimeout
+		}
+		return time.Until(lastActivityAt.Add(minerReadyTimeout))
 	default:
 		return 0
 	}
 }
 
 type stratumRequest struct {
-	ID      any             `json:"id"`
-	JSONRPC string          `json:"jsonrpc"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params"`
+	ID      any    `json:"id"`
+	JSONRPC string `json:"jsonrpc"`
+	Method  string `json:"method"`
+	Params  any    `json:"params"`
 }
 
 func (m *Miner) handleLine(line []byte) bool {
-	var req stratumRequest
-	if err := json.Unmarshal(line, &req); err != nil {
+	var request stratumRequest
+	if !jsonUnmarshalBytes(line, &request) {
 		return false
 	}
-	switch req.Method {
+	switch request.Method {
 	case "login":
-		m.handleLogin(req)
+		m.handleLogin(request)
 	case "submit":
-		m.handleSubmit(req)
+		m.handleSubmit(request)
 	case "keepalived":
-		m.handleKeepalived(req)
+		m.handleKeepalived(request)
 	}
 	return true
 }
@@ -596,50 +1455,162 @@ type loginParams struct {
 	RigID string   `json:"rigid"`
 }
 
-func (m *Miner) handleLogin(req stratumRequest) {
-	if m.state != MinerStateWaitLogin {
+func (m *Miner) handleLogin(request stratumRequest) {
+	if m.State() != MinerStateWaitLogin {
 		return
 	}
-	var params loginParams
-	if err := json.Unmarshal(req.Params, &params); err != nil || strings.TrimSpace(params.Login) == "" {
-		m.ReplyWithError(requestID(req.ID), "Invalid payment address provided")
+	paramsMap := valueMap(request.Params)
+	if paramsMap == nil {
+		var params loginParams
+		if data, ok := request.Params.([]byte); ok && jsonUnmarshalBytes(data, &params) {
+			paramsMap = map[string]any{
+				"login": params.Login,
+				"pass":  params.Pass,
+				"agent": params.Agent,
+				"algo":  params.Algo,
+				"rigid": params.RigID,
+			}
+		}
+	}
+	params := loginParams{
+		Login: valueString(paramsMap["login"]),
+		Pass:  valueString(paramsMap["pass"]),
+		Agent: valueString(paramsMap["agent"]),
+		Algo:  valueStringSlice(paramsMap["algo"]),
+		RigID: valueString(paramsMap["rigid"]),
+	}
+	if trimString(params.Login) == "" {
+		m.rejectLogin(requestID(request.ID), "Invalid payment address provided")
 		return
 	}
-	if m.accessPassword != "" && params.Pass != m.accessPassword {
-		m.ReplyWithError(requestID(req.ID), "Invalid password")
+	m.mu.RLock()
+	accessPassword := m.accessPassword
+	globalDiff := m.globalDiff
+	extNH := m.extNH
+	m.mu.RUnlock()
+	if accessPassword != "" && !secureStringEqual(params.Pass, accessPassword) {
+		m.rejectLogin(requestID(request.ID), "Invalid password")
 		return
 	}
-	m.user = params.Login
-	m.customDiff = 0
+	resolved := resolveLoginCustomDiff(params.Login, globalDiff)
+	m.mu.Lock()
+	m.user = resolved.user
+	m.customDiff = resolved.diff
+	m.customDiffFromLogin = resolved.fromLogin
+	m.customDiffResolved = true
 	m.password = params.Pass
 	m.agent = params.Agent
 	m.rigID = params.RigID
-	m.extAlgo = len(params.Algo) > 0
-	m.rpcID = generateUUID()
+	m.loginAlgos = append([]string(nil), params.Algo...)
+	m.extAlgo = len(m.loginAlgos) > 0
+	rpcID, err := generateUUID()
+	if err != nil || rpcID == "" {
+		m.mu.Unlock()
+		m.rejectLogin(requestID(request.ID), "Proxy is unavailable, try again later")
+		return
+	}
+	m.rpcID = rpcID
 	m.state = MinerStateWaitReady
+	m.loginReplyPending = true
+	m.mu.Unlock()
 	if m.onLogin != nil {
 		m.onLogin(m)
 	}
-	m.Success(requestID(req.ID), "OK")
+	if m.State() == MinerStateClosing {
+		return
+	}
+	if extNH {
+		if m.MapperID() < 0 {
+			m.rejectLogin(requestID(request.ID), "Proxy is full, try again later")
+			return
+		}
+	} else if m.RouteID() < 0 {
+		m.rejectLogin(requestID(request.ID), "Proxy is unavailable, try again later")
+		return
+	}
+	m.mu.Lock()
+	m.state = MinerStateWaitReady
+	m.mu.Unlock()
+	m.touchActivity()
+	if pinger := m.onLoginEvent; pinger != nil {
+		pinger(m)
+	} else if pinger := m.onLoginReady; pinger != nil {
+		pinger(m)
+	}
+	if m.State() == MinerStateClosing {
+		return
+	}
+	if extNH {
+		m.waitForLoginJob(minerLoginJobWait)
+	}
+	m.replyLoginSuccess(requestID(request.ID))
 }
 
-func parseLoginUser(login string, globalDiff uint64) (string, uint64) {
-	plus := strings.LastIndex(login, "+")
-	if plus >= 0 && plus < len(login)-1 {
-		if parsed, err := strconv.ParseUint(login[plus+1:], 10, 64); err == nil {
-			return login[:plus], parsed
+func (m *Miner) rejectLogin(id int64, message string) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	if m.state != MinerStateClosing {
+		m.state = MinerStateWaitLogin
+	}
+	m.loginReplyPending = false
+	m.mu.Unlock()
+	m.ReplyWithError(id, message)
+	m.closeTransport()
+}
+
+func (m *Miner) waitForLoginJob(timeout time.Duration) {
+	if m == nil || timeout <= 0 {
+		return
+	}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if m.CurrentJob().IsValid() || m.State() == MinerStateClosing {
+			return
 		}
-		return login, 0
+		time.Sleep(minerLoginJobPoll)
+	}
+}
+
+type resolvedCustomDiff struct {
+	user      string
+	diff      uint64
+	fromLogin bool
+}
+
+func resolveLoginCustomDiff(login string, globalDiff uint64) resolvedCustomDiff {
+	plus := lastIndexByte(login, '+')
+	if plus >= 0 && plus < len(login)-1 {
+		suffix := login[plus+1:]
+		if isDecimalDigits(suffix) {
+			if parsed, err := strconv.ParseUint(suffix, 10, 64); err == nil {
+				return resolvedCustomDiff{user: login[:plus], diff: parsed, fromLogin: true}
+			}
+		}
+		return resolvedCustomDiff{user: login}
 	}
 	if globalDiff > 0 {
-		return login, globalDiff
+		return resolvedCustomDiff{user: login, diff: globalDiff}
 	}
-	return login, 0
+	return resolvedCustomDiff{user: login}
 }
 
-func (m *Miner) handleSubmit(req stratumRequest) {
-	if m.state != MinerStateReady {
-		m.ReplyWithError(requestID(req.ID), "Unauthenticated")
+func isDecimalDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
+}
+
+func (m *Miner) handleSubmit(request stratumRequest) {
+	if m.State() != MinerStateReady {
+		m.ReplyWithError(requestID(request.ID), "Unauthenticated")
 		return
 	}
 	var params struct {
@@ -649,20 +1620,31 @@ func (m *Miner) handleSubmit(req stratumRequest) {
 		Result string `json:"result"`
 		Algo   string `json:"algo"`
 	}
-	if err := json.Unmarshal(req.Params, &params); err != nil {
-		m.ReplyWithError(requestID(req.ID), "Invalid nonce")
-		return
+	paramsMap := valueMap(request.Params)
+	if paramsMap == nil {
+		if data, ok := request.Params.([]byte); ok {
+			jsonUnmarshalBytes(data, &params)
+		}
+	} else {
+		params.ID = valueString(paramsMap["id"])
+		params.JobID = valueString(paramsMap["job_id"])
+		params.Nonce = valueString(paramsMap["nonce"])
+		params.Result = valueString(paramsMap["result"])
+		params.Algo = valueString(paramsMap["algo"])
 	}
-	if params.ID != m.rpcID {
-		m.ReplyWithError(requestID(req.ID), "Unauthenticated")
+	m.mu.RLock()
+	rpcID := m.rpcID
+	m.mu.RUnlock()
+	if params.ID != rpcID {
+		m.ReplyWithError(requestID(request.ID), "Unauthenticated")
 		return
 	}
 	if params.JobID == "" {
-		m.ReplyWithError(requestID(req.ID), "Missing job id")
+		m.ReplyWithError(requestID(request.ID), "Missing job id")
 		return
 	}
 	if !isLowerHex8(params.Nonce) {
-		m.ReplyWithError(requestID(req.ID), "Invalid nonce")
+		m.ReplyWithError(requestID(request.ID), "Invalid nonce")
 		return
 	}
 	if m.onSubmit != nil {
@@ -672,15 +1654,15 @@ func (m *Miner) handleSubmit(req stratumRequest) {
 			Nonce:     params.Nonce,
 			Result:    params.Result,
 			Algo:      params.Algo,
-			RequestID: requestID(req.ID),
+			RequestID: requestID(request.ID),
 		})
 	}
-	m.lastActivityAt = time.Now().UTC()
+	m.touchActivity()
 }
 
-func (m *Miner) handleKeepalived(req stratumRequest) {
-	m.lastActivityAt = time.Now().UTC()
-	m.Success(requestID(req.ID), "KEEPALIVED")
+func (m *Miner) handleKeepalived(request stratumRequest) {
+	m.touchActivity()
+	m.Success(requestID(request.ID), "KEEPALIVED")
 }
 
 func requestID(id any) int64 {
@@ -715,31 +1697,111 @@ func (m *Miner) ForwardJob(job Job, algo string) {
 	if m == nil || !job.IsValid() {
 		return
 	}
+	m.mu.Lock()
 	m.currentJob = job
-	if algo == "" {
-		algo = job.Algo
+	deferNotification := m.loginReplyPending
+	m.mu.Unlock()
+	if !deferNotification {
+		renderedJob, effectiveAlgo := m.renderJob(job, algo)
+		payload := map[string]any{
+			"jsonrpc": "2.0",
+			"method":  "job",
+			"params":  buildMinerJobPayload(renderedJob, m.sessionID(), m.supportsAlgoExtension(), effectiveAlgo),
+		}
+		if err := m.writeJSON(payload); err != nil {
+			return
+		}
 	}
-	blob := job.Blob
-	if m.extNH {
-		blob = job.BlobWithFixedByte(m.fixedByte)
-	}
-	payload := map[string]any{
-		"jsonrpc": "2.0",
-		"method":  "job",
-		"params": map[string]any{
-			"blob":      blob,
-			"job_id":    job.JobID,
-			"target":    job.Target,
-			"algo":      algo,
-			"id":        m.rpcID,
-			"height":    job.Height,
-			"seed_hash": job.SeedHash,
-		},
-	}
-	_ = m.writeJSON(payload)
+	m.touchActivity()
+	m.mu.Lock()
 	if m.state == MinerStateWaitReady {
 		m.state = MinerStateReady
 	}
+	m.mu.Unlock()
+}
+
+func (m *Miner) replyLoginSuccess(id int64) {
+	if m == nil {
+		return
+	}
+	m.sendMu.Lock()
+	defer m.sendMu.Unlock()
+	m.mu.Lock()
+	sessionID := m.rpcID
+	includeAlgo := m.algoEnabled && m.extAlgo
+	job := m.currentJob
+	m.loginReplyPending = false
+	if job.IsValid() {
+		m.state = MinerStateReady
+	}
+	m.mu.Unlock()
+	result := map[string]any{
+		"id":     sessionID,
+		"status": "OK",
+	}
+	if includeAlgo {
+		result["extensions"] = []string{"algo"}
+	}
+	if job.IsValid() {
+		renderedJob, effectiveAlgo := m.renderJob(job, job.Algo)
+		result["job"] = buildMinerJobPayload(renderedJob, sessionID, includeAlgo, effectiveAlgo)
+		m.touchActivity()
+	}
+	payload := map[string]any{
+		"id":      id,
+		"jsonrpc": "2.0",
+		"error":   nil,
+		"result":  result,
+	}
+	if err := m.writeJSONLocked(payload); err != nil {
+		return
+	}
+}
+
+func (m *Miner) renderJob(job Job, algo string) (Job, string) {
+	if m == nil {
+		return job, algo
+	}
+	rendered := job
+	m.mu.RLock()
+	fixedByte := m.fixedByte
+	customDiff := m.customDiff
+	extNH := m.extNH
+	m.mu.RUnlock()
+	if algo == "" {
+		algo = job.Algo
+	}
+	if extNH {
+		rendered.Blob = job.BlobWithFixedByte(fixedByte)
+	}
+	effectiveDiff := job.DifficultyFromTarget()
+	if customDiff > 0 && effectiveDiff > 0 && effectiveDiff > customDiff {
+		rendered.Target = targetFromDifficulty(customDiff)
+		effectiveDiff = rendered.DifficultyFromTarget()
+	}
+	m.mu.Lock()
+	m.diff = effectiveDiff
+	m.mu.Unlock()
+	return rendered, algo
+}
+
+func buildMinerJobPayload(job Job, sessionID string, includeAlgo bool, algo string) map[string]any {
+	payload := map[string]any{
+		"blob":   job.Blob,
+		"job_id": job.JobID,
+		"target": job.Target,
+		"id":     sessionID,
+	}
+	if includeAlgo && algo != "" {
+		payload["algo"] = algo
+	}
+	if job.Height > 0 {
+		payload["height"] = job.Height
+	}
+	if job.SeedHash != "" {
+		payload["seed_hash"] = job.SeedHash
+	}
+	return payload
 }
 
 func (m *Miner) ReplyWithError(id int64, message string) {
@@ -754,7 +1816,9 @@ func (m *Miner) ReplyWithError(id int64, message string) {
 			"message": message,
 		},
 	}
-	_ = m.writeJSON(payload)
+	if err := m.writeJSON(payload); err != nil {
+		return
+	}
 }
 
 func (m *Miner) Success(id int64, status string) {
@@ -769,22 +1833,65 @@ func (m *Miner) Success(id int64, status string) {
 			"status": status,
 		},
 	}
-	_ = m.writeJSON(payload)
+	if err := m.writeJSON(payload); err != nil {
+		return
+	}
+}
+
+func (m *Miner) touchActivity() {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	m.lastActivityAt = time.Now().UTC()
+	state := m.state
+	conn := m.conn
+	m.mu.Unlock()
+	if state == MinerStateWaitLogin {
+		return
+	}
+	if conn != nil {
+		if err := conn.SetReadDeadline(time.Now().Add(minerReadyTimeout)); err != nil {
+			return
+		}
+	}
 }
 
 func (m *Miner) writeJSON(payload any) error {
 	m.sendMu.Lock()
 	defer m.sendMu.Unlock()
-	if m.conn == nil {
+	return m.writeJSONLocked(payload)
+}
+
+func (m *Miner) writeJSONLocked(payload any) error {
+	m.mu.RLock()
+	conn := m.conn
+	m.mu.RUnlock()
+	if conn == nil {
 		return nil
 	}
-	data, err := json.Marshal(payload)
-	if err != nil {
+	if err := conn.SetWriteDeadline(time.Now().Add(minerWriteTimeout)); err != nil {
+		m.Close()
 		return err
 	}
+	defer func() {
+		if err := conn.SetWriteDeadline(time.Time{}); err != nil {
+			return
+		}
+	}()
+	data := []byte(jsonMarshalString(payload))
 	data = append(data, '\n')
-	n, err := m.conn.Write(data)
-	m.tx += uint64(n)
+	var written int
+	var err error
+	if len(data) <= len(m.buf) {
+		copy(m.buf[:], data)
+		written, err = conn.Write(m.buf[:len(data)])
+	} else {
+		written, err = conn.Write(data)
+	}
+	m.mu.Lock()
+	m.tx += uint64(written)
+	m.mu.Unlock()
 	if err != nil {
 		m.Close()
 	}
@@ -796,14 +1903,33 @@ func (m *Miner) Close() {
 		return
 	}
 	m.closeOnce.Do(func() {
+		m.mu.Lock()
 		m.state = MinerStateClosing
-		if m.conn != nil {
-			_ = m.conn.Close()
-		}
+		m.mu.Unlock()
+		m.closeTransport()
 	})
 }
 
+func (m *Miner) closeTransport() {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	conn := m.conn
+	m.conn = nil
+	m.tlsConn = nil
+	m.mu.Unlock()
+	if conn != nil {
+		if err := conn.Close(); err != nil {
+			return
+		}
+	}
+}
+
 // NewStats creates zeroed global metrics.
+//
+// stats := proxy.NewStats()
+// _ = stats.Summary()
 func NewStats() *Stats {
 	stats := &Stats{startTime: time.Now().UTC(), latency: make([]uint16, 0, 1024)}
 	stats.windows[HashrateWindow60s] = newTickWindow(60)
@@ -842,6 +1968,8 @@ func (s *Stats) OnClose(e Event) {
 }
 
 // OnAccept records an accepted share.
+//
+// stats.OnAccept(proxy.Event{Diff: 100000, Latency: 82})
 func (s *Stats) OnAccept(e Event) {
 	if s == nil {
 		return
@@ -867,17 +1995,28 @@ func (s *Stats) OnAccept(e Event) {
 }
 
 // OnReject records a rejected share.
+//
+// stats.OnReject(proxy.Event{Error: "Low difficulty share"})
 func (s *Stats) OnReject(e Event) {
 	if s == nil {
 		return
 	}
 	s.rejected.Add(1)
-	if strings.Contains(strings.ToLower(e.Error), "difficulty") || strings.Contains(strings.ToLower(e.Error), "invalid") || strings.Contains(strings.ToLower(e.Error), "nonce") {
+	if isInvalidShareReason(e.Error) {
 		s.invalid.Add(1)
+	}
+	if e.Latency > 0 {
+		s.mu.Lock()
+		if len(s.latency) < 10000 {
+			s.latency = append(s.latency, e.Latency)
+		}
+		s.mu.Unlock()
 	}
 }
 
 // Tick advances the rolling windows.
+//
+// stats.Tick()
 func (s *Stats) Tick() {
 	if s == nil {
 		return
@@ -894,6 +2033,8 @@ func (s *Stats) Tick() {
 }
 
 // Summary returns a snapshot of the current metrics.
+//
+//	summary := stats.Summary()
 func (s *Stats) Summary() StatsSummary {
 	if s == nil {
 		return StatsSummary{}
@@ -917,7 +2058,14 @@ func (s *Stats) Summary() StatsSummary {
 	if len(s.latency) > 0 {
 		samples := append([]uint16(nil), s.latency...)
 		sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
-		summary.AvgLatency = uint32(samples[len(samples)/2])
+		middle := len(samples) / 2
+		if len(samples)%2 == 0 {
+			left := uint32(samples[middle-1])
+			right := uint32(samples[middle])
+			summary.AvgLatency = (left + right) / 2
+		} else {
+			summary.AvgLatency = uint32(samples[middle])
+		}
 	}
 	summary.TopDiff = s.topDiff
 	for i := range s.windows {
@@ -955,20 +2103,33 @@ func insertTopDiff(top *[10]uint64, diff uint64) {
 }
 
 // NewWorkers creates a worker aggregate tracker.
-func NewWorkers(mode WorkersMode, _ *EventBus) *Workers {
-	return &Workers{
+//
+//	workers := proxy.NewWorkers(proxy.WorkersByRigID, bus)
+//	workers.OnLogin(proxy.Event{Miner: miner})
+func NewWorkers(mode WorkersMode, eventBus *EventBus) *Workers {
+	workers := &Workers{
 		mode:      mode,
 		nameIndex: make(map[string]int),
 		idIndex:   make(map[int64]int),
 	}
+	workers.bindEvents(eventBus)
+	return workers
 }
 
-func (w *Workers) bindEvents(bus *EventBus) {
-	if w == nil || bus == nil {
+func (w *Workers) bindEvents(eventBus *EventBus) {
+	if w == nil || eventBus == nil {
 		return
 	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.subscribed {
+		return
+	}
+	eventBus.Subscribe(EventLogin, w.OnLogin)
+	eventBus.Subscribe(EventAccept, w.OnAccept)
+	eventBus.Subscribe(EventReject, w.OnReject)
+	eventBus.Subscribe(EventClose, w.OnClose)
+	w.subscribed = true
 }
 
 func workerNameFor(mode WorkersMode, miner *Miner) string {
@@ -977,56 +2138,35 @@ func workerNameFor(mode WorkersMode, miner *Miner) string {
 	}
 	switch mode {
 	case WorkersByRigID:
-		if miner.rigID != "" {
-			return miner.rigID
+		if rigID := miner.RigID(); rigID != "" {
+			return rigID
 		}
-		return miner.user
+		return miner.User()
 	case WorkersByUser:
-		return miner.user
+		return miner.User()
 	case WorkersByPass:
-		return miner.password
+		return miner.Password()
 	case WorkersByAgent:
-		return miner.agent
+		return miner.Agent()
 	case WorkersByIP:
-		return miner.ip
+		return miner.IP()
 	case WorkersDisabled:
 		return ""
 	default:
-		return miner.user
+		return miner.User()
 	}
 }
 
 // OnLogin creates or updates a worker record.
+//
+//	workers.OnLogin(proxy.Event{Miner: miner})
 func (w *Workers) OnLogin(e Event) {
 	if w == nil || e.Miner == nil {
 		return
 	}
-	if w.mode == WorkersDisabled {
-		return
-	}
-	name := workerNameFor(w.mode, e.Miner)
-	if name == "" {
-		return
-	}
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	index, ok := w.nameIndex[name]
-	if !ok {
-		index = len(w.entries)
-		record := WorkerRecord{Name: name}
-		record.windows[0] = newTickWindow(60)
-		record.windows[1] = newTickWindow(600)
-		record.windows[2] = newTickWindow(3600)
-		record.windows[3] = newTickWindow(43200)
-		record.windows[4] = newTickWindow(86400)
-		w.entries = append(w.entries, record)
-		w.nameIndex[name] = index
-	}
-	record := &w.entries[index]
-	record.Name = name
-	record.LastIP = e.Miner.ip
-	record.Connections++
-	w.idIndex[e.Miner.id] = index
+	w.recordLoginLocked(e.Miner)
 }
 
 func newTickWindow(size int) tickWindow {
@@ -1036,7 +2176,33 @@ func newTickWindow(size int) tickWindow {
 	}
 }
 
+// ResetMode switches the worker identity strategy and rebuilds the live worker index.
+//
+//	workers.ResetMode(proxy.WorkersByUser, activeMiners)
+func (w *Workers) ResetMode(mode WorkersMode, miners []*Miner) {
+	if w == nil {
+		return
+	}
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.mode = mode
+	w.entries = nil
+	w.nameIndex = make(map[string]int)
+	w.idIndex = make(map[int64]int)
+	sort.Slice(miners, func(i, j int) bool {
+		if miners[i] == nil || miners[j] == nil {
+			return miners[j] != nil
+		}
+		return miners[i].ID() < miners[j].ID()
+	})
+	for _, miner := range miners {
+		w.recordLoginLocked(miner)
+	}
+}
+
 // OnAccept updates the owning worker with the accepted share.
+//
+//	workers.OnAccept(proxy.Event{Miner: miner, Diff: 100000})
 func (w *Workers) OnAccept(e Event) {
 	if w == nil || e.Miner == nil {
 		return
@@ -1060,6 +2226,8 @@ func (w *Workers) OnAccept(e Event) {
 }
 
 // OnReject updates the owning worker with the rejected share.
+//
+//	workers.OnReject(proxy.Event{Miner: miner, Error: "Low difficulty share"})
 func (w *Workers) OnReject(e Event) {
 	if w == nil || e.Miner == nil {
 		return
@@ -1072,13 +2240,13 @@ func (w *Workers) OnReject(e Event) {
 	}
 	record := &w.entries[index]
 	record.Rejected++
-	if strings.Contains(strings.ToLower(e.Error), "difficulty") || strings.Contains(strings.ToLower(e.Error), "invalid") || strings.Contains(strings.ToLower(e.Error), "nonce") {
+	if isInvalidShareReason(e.Error) {
 		record.Invalid++
 	}
 	record.LastIP = e.Miner.ip
 }
 
-// OnClose removes the miner mapping from the worker table.
+// OnClose removes the live miner-to-worker lookup without changing cumulative totals.
 func (w *Workers) OnClose(e Event) {
 	if w == nil || e.Miner == nil {
 		return
@@ -1089,6 +2257,8 @@ func (w *Workers) OnClose(e Event) {
 }
 
 // List returns a snapshot of all workers.
+//
+//	records := workers.List()
 func (w *Workers) List() []WorkerRecord {
 	if w == nil {
 		return nil
@@ -1096,11 +2266,15 @@ func (w *Workers) List() []WorkerRecord {
 	w.mu.RLock()
 	defer w.mu.RUnlock()
 	out := make([]WorkerRecord, len(w.entries))
-	copy(out, w.entries)
+	for i := range w.entries {
+		out[i] = cloneWorkerRecord(w.entries[i])
+	}
 	return out
 }
 
 // Tick advances worker hash windows.
+//
+//	workers.Tick()
 func (w *Workers) Tick() {
 	if w == nil {
 		return
@@ -1119,6 +2293,8 @@ func (w *Workers) Tick() {
 }
 
 // Hashrate returns the configured worker hashrate window.
+//
+// hr60 := record.Hashrate(60)
 func (r *WorkerRecord) Hashrate(seconds int) float64 {
 	if r == nil || seconds <= 0 {
 		return 0
@@ -1149,66 +2325,157 @@ func (r *WorkerRecord) Hashrate(seconds int) float64 {
 	return float64(total) / float64(seconds)
 }
 
-// Apply parses login suffixes and applies the configured global difficulty.
+func cloneWorkerRecord(record WorkerRecord) WorkerRecord {
+	cloned := record
+	for i := range record.windows {
+		if len(record.windows[i].buckets) == 0 {
+			continue
+		}
+		cloned.windows[i].buckets = append([]uint64(nil), record.windows[i].buckets...)
+	}
+	return cloned
+}
+
+func (w *Workers) recordLoginLocked(miner *Miner) {
+	if w == nil || miner == nil || w.mode == WorkersDisabled {
+		return
+	}
+	name := workerNameFor(w.mode, miner)
+	if name == "" {
+		return
+	}
+	index, ok := w.nameIndex[name]
+	if !ok {
+		index = len(w.entries)
+		record := WorkerRecord{Name: name}
+		record.windows[0] = newTickWindow(60)
+		record.windows[1] = newTickWindow(600)
+		record.windows[2] = newTickWindow(3600)
+		record.windows[3] = newTickWindow(43200)
+		record.windows[4] = newTickWindow(86400)
+		w.entries = append(w.entries, record)
+		w.nameIndex[name] = index
+	}
+	record := &w.entries[index]
+	record.Name = name
+	record.LastIP = miner.ip
+	record.Connections++
+	w.idIndex[miner.id] = index
+}
+
+// Apply normalises one miner login at the same point the handshake does.
+//
+//	cd.Apply(&proxy.Miner{user: "WALLET+50000"})
 func (cd *CustomDiff) Apply(miner *Miner) {
 	if cd == nil || miner == nil {
 		return
 	}
-	miner.user, miner.customDiff = parseLoginUser(miner.user, cd.globalDiff)
+	cd.OnLogin(Event{Miner: miner})
 }
 
 // NewServer constructs a server instance.
-func NewServer(bind BindAddr, tlsCfg *tls.Config, limiter *RateLimiter, onAccept func(net.Conn, uint16)) (*Server, Result) {
+//
+//	server, result := proxy.NewServer(bind, tlsConfig, limiter, func(conn net.Conn, port uint16) {
+//	    _ = conn
+//	    _ = port
+//	})
+func NewServer(bind BindAddr, tlsConfig *tls.Config, limiter *RateLimiter, onAccept func(net.Conn, uint16)) (*Server, Result) {
 	if onAccept == nil {
 		onAccept = func(net.Conn, uint16) {}
 	}
-	return &Server{
-		addr:     bind,
-		tlsCfg:   tlsCfg,
-		limiter:  limiter,
-		onAccept: onAccept,
-		done:     make(chan struct{}),
-	}, successResult()
+	server := &Server{
+		addr:      bind,
+		tlsConfig: tlsConfig,
+		limiter:   limiter,
+		onAccept:  onAccept,
+		done:      make(chan struct{}),
+	}
+	if result := server.listen(); !result.OK {
+		return nil, result
+	}
+	return server, newSuccessResult()
 }
 
 // Start begins accepting connections in a goroutine.
+//
+//	server.Start()
 func (s *Server) Start() {
 	if s == nil {
 		return
 	}
+	if result := s.listen(); !result.OK {
+		return
+	}
 	go func() {
-		ln, err := net.Listen("tcp", net.JoinHostPort(s.addr.Host, strconv.Itoa(int(s.addr.Port))))
-		if err != nil {
-			return
-		}
-		if s.tlsCfg != nil || s.addr.TLS {
-			if s.tlsCfg != nil {
-				ln = tls.NewListener(ln, s.tlsCfg)
-			}
-		}
-		s.listener = ln
 		for {
-			conn, err := ln.Accept()
+			conn, err := s.listener.Accept()
 			if err != nil {
 				select {
 				case <-s.done:
 					return
 				default:
+					time.Sleep(100 * time.Millisecond)
 					continue
 				}
 			}
 			if s.limiter != nil && !s.limiter.Allow(conn.RemoteAddr().String()) {
-				_ = conn.Close()
+				if err := conn.Close(); err != nil {
+					// best-effort close for rate-limited connection
+				}
 				continue
 			}
-			if s.onAccept != nil {
-				s.onAccept(conn, s.addr.Port)
-			}
+			go s.handleAcceptedConn(conn)
 		}
 	}()
 }
 
+func (s *Server) handleAcceptedConn(conn net.Conn) {
+	if s == nil || conn == nil {
+		if conn != nil {
+			if err := conn.Close(); err != nil {
+				// best-effort close for orphaned connection
+			}
+		}
+		return
+	}
+	if s.tlsConfig != nil {
+		tlsConn := tls.Server(conn, s.tlsConfig)
+		if err := conn.SetDeadline(time.Now().Add(minerTLSHandshakeTimeout)); err != nil {
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after deadline failure
+			}
+			return
+		}
+		if err := tlsConn.Handshake(); err != nil {
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after handshake failure
+			}
+			return
+		}
+		if err := tlsConn.SetDeadline(time.Time{}); err != nil {
+			if closeErr := conn.Close(); closeErr != nil {
+				// best-effort close after deadline reset failure
+			}
+			return
+		}
+		conn = tlsConn
+	}
+	select {
+	case <-s.done:
+		if err := conn.Close(); err != nil {
+			// best-effort close during server shutdown
+		}
+		return
+	default:
+	}
+	if s.onAccept != nil {
+		s.onAccept(conn, s.addr.Port)
+	}
+}
+
 // Stop closes the listener.
+//
+//	server.Stop()
 func (s *Server) Stop() {
 	if s == nil {
 		return
@@ -1219,17 +2486,38 @@ func (s *Server) Stop() {
 		close(s.done)
 	}
 	if s.listener != nil {
-		_ = s.listener.Close()
+		if err := s.listener.Close(); err != nil {
+			return
+		}
 	}
 }
 
-// NewConfig returns a minimal config? not used.
-
-// NewRateLimiter, Allow, Tick are defined in core_impl.go.
+func (s *Server) listen() Result {
+	if s == nil {
+		return newErrorResult(NewScopedError("proxy.server", "server is nil", nil))
+	}
+	if s.listener != nil {
+		return newSuccessResult()
+	}
+	if trimString(s.addr.Host) == "" {
+		return newErrorResult(NewScopedError("proxy.server", "listener host is empty", nil))
+	}
+	if s.addr.TLS && s.tlsConfig == nil {
+		return newErrorResult(NewScopedError("proxy.server", "tls listener requires a tls config", nil))
+	}
+	ln, err := net.Listen("tcp", net.JoinHostPort(s.addr.Host, strconv.Itoa(int(s.addr.Port))))
+	if err != nil {
+		return newErrorResult(NewScopedError("proxy.server", "listen failed", err))
+	}
+	s.listener = ln
+	return newSuccessResult()
+}
 
 // IsActive reports whether the limiter has enabled rate limiting.
+//
+//	if rl.IsActive() { /* rate limiting is enabled */ }
 func (rl *RateLimiter) IsActive() bool {
-	return rl != nil && rl.cfg.MaxConnectionsPerMinute > 0
+	return rl != nil && rl.limit.MaxConnectionsPerMinute > 0
 }
 
 func nextMinerID() int64 { return atomic.AddInt64(&minerSeq, 1) }
@@ -1245,8 +2533,3 @@ func (n *noopSplitter) OnClose(event *CloseEvent)   {}
 func (n *noopSplitter) Tick(ticks uint64)           {}
 func (n *noopSplitter) GC()                         {}
 func (n *noopSplitter) Upstreams() UpstreamStats    { return UpstreamStats{} }
-
-// Difficulty helper for the HTTP summary.
-func workerSummaryNow(workers []WorkerRecord) uint64 {
-	return uint64(len(workers))
-}

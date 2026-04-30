@@ -3,94 +3,175 @@ package proxy
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
-	"encoding/json"
-	"errors"
 	"io"
 	"math"
 	"net"
-	"os"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
+
+	core "dappco.re/go"
 )
 
-// Result is a small success/error carrier used by constructors and loaders.
+// Result is the success/error carrier used by constructors and loaders.
+//
+//	cfg, result := proxy.LoadConfig("config.json")
+//	if !result.OK {
+//	    return result.Error
+//	}
 type Result struct {
-	OK    bool
+	core.Result
 	Error error
 }
 
-func successResult() Result {
-	return Result{OK: true}
+func newSuccessResult() Result {
+	return Result{Result: core.Result{OK: true}}
 }
 
-func errorResult(err error) Result {
-	return Result{OK: false, Error: err}
+func newErrorResult(err error) Result {
+	return Result{Result: core.Result{Value: err, OK: false}, Error: err}
 }
 
-var splitterRegistryMu sync.RWMutex
-var splitterRegistry = map[string]func(*Config, *EventBus) Splitter{}
+var splitterFactoriesMu sync.RWMutex
+var splitterFactoriesByMode = map[string]func(*Config, *EventBus) Splitter{}
 
-// RegisterSplitterFactory registers a mode-specific splitter constructor.
-// Packages such as splitter/nicehash and splitter/simple call this from init.
+// RegisterSplitterFactory installs the constructor used for one proxy mode.
+//
+//	proxy.RegisterSplitterFactory("simple", func(cfg *proxy.Config, bus *proxy.EventBus) proxy.Splitter {
+//	    return simple.NewSimpleSplitter(cfg, bus, nil)
+//	})
 func RegisterSplitterFactory(mode string, factory func(*Config, *EventBus) Splitter) {
-	splitterRegistryMu.Lock()
-	defer splitterRegistryMu.Unlock()
-	splitterRegistry[strings.ToLower(mode)] = factory
+	splitterFactoriesMu.Lock()
+	defer splitterFactoriesMu.Unlock()
+	splitterFactoriesByMode[lowerString(trimString(mode))] = factory
 }
 
-func getSplitterFactory(mode string) (func(*Config, *EventBus) Splitter, bool) {
-	splitterRegistryMu.RLock()
-	defer splitterRegistryMu.RUnlock()
-	factory, ok := splitterRegistry[strings.ToLower(mode)]
+func splitterFactoryForMode(mode string) (func(*Config, *EventBus) Splitter, bool) {
+	splitterFactoriesMu.RLock()
+	defer splitterFactoriesMu.RUnlock()
+	factory, ok := splitterFactoriesByMode[lowerString(trimString(mode))]
 	return factory, ok
 }
 
-// LoadConfig reads and unmarshals a JSON config file.
+// cfg, result := proxy.LoadConfig("/etc/proxy.json")
+//
+//	if !result.OK {
+//	    return result.Error
+//	}
 func LoadConfig(path string) (*Config, Result) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, errorResult(err)
+	readResult := proxyFileSystem().Read(path)
+	if !readResult.OK {
+		cause, _ := readResult.Value.(error)
+		return nil, newErrorResult(NewScopedError("proxy.config", "read config failed", cause))
 	}
 
-	cfg := &Config{}
-	if err := json.Unmarshal(data, cfg); err != nil {
-		return nil, errorResult(err)
+	config := &Config{}
+	data, _ := readResult.Value.(string)
+	if parseResult := core.JSONUnmarshalString(data, config); !parseResult.OK {
+		cause, _ := parseResult.Value.(error)
+		return nil, newErrorResult(NewScopedError("proxy.config", "parse failed", cause))
 	}
-
-	if cfg.Mode == "" {
-		cfg.Mode = "nicehash"
-	}
-	return cfg, cfg.Validate()
+	normalizeConfigValues(config)
+	config.configPath = path
+	return config, Result{Result: core.Result{Value: config, OK: true}}
 }
 
-// Validate checks that mandatory bind and pool settings are present.
+//	cfg := &proxy.Config{
+//	    Mode:    "nicehash",
+//	    Bind:    []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}},
+//	    Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//	    Workers: proxy.WorkersByRigID,
+//	}
+//
+//	if result := cfg.Validate(); !result.OK {
+//	    return result
+//	}
 func (c *Config) Validate() Result {
 	if c == nil {
-		return errorResult(errors.New("config is nil"))
+		return newErrorResult(NewScopedError("proxy.config", "config is nil", nil))
 	}
-	if len(c.Bind) == 0 {
-		return errorResult(errors.New("bind list is empty"))
+	mode := lowerString(trimString(c.Mode))
+	if mode == "" {
+		return newErrorResult(NewScopedError("proxy.config", "mode is empty", nil))
 	}
-	if len(c.Pools) == 0 {
-		return errorResult(errors.New("pool list is empty"))
-	}
-	for _, pool := range c.Pools {
-		if pool.Enabled && strings.TrimSpace(pool.URL) == "" {
-			return errorResult(errors.New("enabled pool url is empty"))
+	if !isSupportedMode(mode) {
+		if _, ok := splitterFactoryForMode(mode); !ok {
+			return newErrorResult(NewScopedError("proxy.config", "unsupported mode", nil))
 		}
 	}
-	return successResult()
+	if len(c.Bind) == 0 {
+		return newErrorResult(NewScopedError("proxy.config", "bind list is empty", nil))
+	}
+	if len(c.Pools) == 0 {
+		return newErrorResult(NewScopedError("proxy.config", "pool list is empty", nil))
+	}
+	for _, bind := range c.Bind {
+		if trimString(bind.Host) == "" {
+			return newErrorResult(NewScopedError("proxy.config", "bind host is empty", nil))
+		}
+	}
+	if c.HTTP.Enabled && trimString(c.HTTP.Host) == "" {
+		return newErrorResult(NewScopedError("proxy.config", "http host is empty", nil))
+	}
+	if c.HTTP.Enabled && trimString(c.HTTP.AccessToken) == "" && !isLoopbackHTTPHost(c.HTTP.Host) {
+		return newErrorResult(NewScopedError("proxy.config", "public http monitoring requires an access token", nil))
+	}
+	if c.ReuseTimeout < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "reuse timeout is negative", nil))
+	}
+	if c.Retries < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "retries is negative", nil))
+	}
+	if c.RetryPause < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "retry pause is negative", nil))
+	}
+	if c.RateLimit.MaxConnectionsPerMinute < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "rate limit is negative", nil))
+	}
+	if c.RateLimit.BanDurationSeconds < 0 {
+		return newErrorResult(NewScopedError("proxy.config", "ban duration is negative", nil))
+	}
+	workers := lowerString(trimString(string(c.Workers)))
+	if workers != "" && !isSupportedWorkersMode(workers) {
+		return newErrorResult(NewScopedError("proxy.config", "unsupported workers mode", nil))
+	}
+	for _, pool := range c.Pools {
+		if pool.Enabled && trimString(pool.URL) == "" {
+			return newErrorResult(NewScopedError("proxy.config", "enabled pool url is empty", nil))
+		}
+	}
+	return newSuccessResult()
 }
 
-// NewEventBus creates an empty synchronous event dispatcher.
+func isSupportedMode(mode string) bool {
+	switch lowerString(trimString(mode)) {
+	case "nicehash", "simple":
+		return true
+	default:
+		return false
+	}
+}
+
+func isSupportedWorkersMode(mode string) bool {
+	switch lowerString(trimString(mode)) {
+	case "", string(WorkersByRigID), string(WorkersByUser), string(WorkersByPass), string(WorkersByAgent), string(WorkersByIP), string(WorkersDisabled):
+		return true
+	default:
+		return false
+	}
+}
+
+// bus := proxy.NewEventBus()
+//
+//	bus.Subscribe(proxy.EventLogin, func(e proxy.Event) {
+//	    _ = e.Miner
+//	})
 func NewEventBus() *EventBus {
 	return &EventBus{listeners: make(map[EventType][]EventHandler)}
 }
 
-// Subscribe registers a handler for the given event type.
+// bus.Subscribe(proxy.EventAccept, stats.OnAccept)
 func (b *EventBus) Subscribe(t EventType, h EventHandler) {
 	if b == nil || h == nil {
 		return
@@ -103,7 +184,7 @@ func (b *EventBus) Subscribe(t EventType, h EventHandler) {
 	b.listeners[t] = append(b.listeners[t], h)
 }
 
-// Dispatch calls all registered handlers for the event's type.
+// bus.Dispatch(proxy.Event{Type: proxy.EventLogin, Miner: miner})
 func (b *EventBus) Dispatch(e Event) {
 	if b == nil {
 		return
@@ -112,18 +193,71 @@ func (b *EventBus) Dispatch(e Event) {
 	handlers := append([]EventHandler(nil), b.listeners[e.Type]...)
 	b.mu.RUnlock()
 	for _, handler := range handlers {
-		handler(e)
+		func() {
+			defer func() {
+				recover()
+			}()
+			handler(e)
+		}()
 	}
 }
 
-// IsValid returns true when the job contains a blob and job id.
+type shareSinkGroup struct {
+	sinks []ShareSink
+}
+
+func newShareSinkGroup(sinks ...ShareSink) *shareSinkGroup {
+	group := &shareSinkGroup{sinks: make([]ShareSink, 0, len(sinks))}
+	for _, sink := range sinks {
+		if sink != nil {
+			group.sinks = append(group.sinks, sink)
+		}
+	}
+	return group
+}
+
+func (g *shareSinkGroup) OnAccept(e Event) {
+	if g == nil {
+		return
+	}
+	for _, sink := range g.sinks {
+		func() {
+			defer func() {
+				recover()
+			}()
+			sink.OnAccept(e)
+		}()
+	}
+}
+
+func (g *shareSinkGroup) OnReject(e Event) {
+	if g == nil {
+		return
+	}
+	for _, sink := range g.sinks {
+		func() {
+			defer func() {
+				recover()
+			}()
+			sink.OnReject(e)
+		}()
+	}
+}
+
+// IsValid returns true when the job matches the RFC shape.
+//
+//	if !job.IsValid() {
+//	    return
+//	}
 func (j Job) IsValid() bool {
-	return j.Blob != "" && j.JobID != ""
+	return len(j.JobID) > 0 && isHexStringLen(j.Blob, 160) && isHexStringLen(j.Target, 8)
 }
 
 // BlobWithFixedByte replaces the blob byte at position 39 with fixedByte.
+//
+//	partitioned := job.BlobWithFixedByte(0x2A)
 func (j Job) BlobWithFixedByte(fixedByte uint8) string {
-	if len(j.Blob) < 80 {
+	if len(j.Blob) != 160 || !isHexString(j.Blob) {
 		return j.Blob
 	}
 	blob := []byte(j.Blob)
@@ -134,7 +268,9 @@ func (j Job) BlobWithFixedByte(fixedByte uint8) string {
 	return string(blob)
 }
 
-// DifficultyFromTarget converts the target to a rough integer difficulty.
+// DifficultyFromTarget converts the 8-char little-endian target into a difficulty.
+//
+//	diff := job.DifficultyFromTarget()
 func (j Job) DifficultyFromTarget() uint64 {
 	if len(j.Target) != 8 {
 		return 0
@@ -147,46 +283,92 @@ func (j Job) DifficultyFromTarget() uint64 {
 	if target == 0 {
 		return 0
 	}
-	return uint64(math.MaxUint32 / uint64(target))
+	return uint64(math.MaxUint32) / uint64(target)
+}
+
+// targetFromDifficulty converts a difficulty into the 8-char little-endian hex target.
+//
+//	target := targetFromDifficulty(10000) // "b88d0600"
+func targetFromDifficulty(diff uint64) string {
+	if diff <= 1 {
+		return "ffffffff"
+	}
+	maxTarget := uint64(math.MaxUint32)
+	target := (maxTarget + diff - 1) / diff
+	if target == 0 {
+		target = 1
+	}
+	if target > maxTarget {
+		target = maxTarget
+	}
+	var raw [4]byte
+	binary.LittleEndian.PutUint32(raw[:], uint32(target))
+	return hex.EncodeToString(raw[:])
+}
+
+// EffectiveShareDifficulty returns the share difficulty capped by the miner's custom diff.
+// If no custom diff is set or the pool diff is already lower, the pool diff is returned.
+//
+//	diff := proxy.EffectiveShareDifficulty(job, miner) // 25000 when customDiff < poolDiff
+func EffectiveShareDifficulty(job Job, miner *Miner) uint64 {
+	diff := job.DifficultyFromTarget()
+	if miner == nil {
+		return diff
+	}
+	miner.mu.RLock()
+	customDiff := miner.customDiff
+	miner.mu.RUnlock()
+	if customDiff == 0 || diff == 0 || diff <= customDiff {
+		return diff
+	}
+	return customDiff
 }
 
 // NewCustomDiff creates a login-time custom difficulty resolver.
+//
+//	resolver := proxy.NewCustomDiff(50000)
+//	resolver.OnLogin(proxy.Event{Miner: miner})
 func NewCustomDiff(globalDiff uint64) *CustomDiff {
-	return &CustomDiff{globalDiff: globalDiff}
+	cd := &CustomDiff{}
+	cd.globalDiff.Store(globalDiff)
+	return cd
 }
 
-// OnLogin parses +N suffixes and applies global difficulty fallbacks.
+// OnLogin normalises the login user once during handshake.
+//
+//	cd.OnLogin(proxy.Event{Miner: &proxy.Miner{user: "WALLET+50000"}})
 func (cd *CustomDiff) OnLogin(e Event) {
 	if cd == nil || e.Miner == nil {
 		return
 	}
-	miner := e.Miner
-	user := miner.user
-	plus := strings.LastIndex(user, "+")
-	if plus >= 0 && plus < len(user)-1 {
-		if parsed, err := strconv.ParseUint(user[plus+1:], 10, 64); err == nil {
-			miner.user = user[:plus]
-			miner.customDiff = parsed
-		}
+	if e.Miner.customDiffResolved {
 		return
 	}
-	if cd.globalDiff > 0 {
-		miner.customDiff = cd.globalDiff
-	}
+	resolved := resolveLoginCustomDiff(e.Miner.user, cd.globalDiff.Load())
+	e.Miner.user = resolved.user
+	e.Miner.customDiff = resolved.diff
+	e.Miner.customDiffFromLogin = resolved.fromLogin
+	e.Miner.customDiffResolved = true
 }
 
-// NewRateLimiter creates a per-IP token bucket limiter.
-func NewRateLimiter(cfg RateLimit) *RateLimiter {
+// limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+//
+//	if limiter.Allow("203.0.113.42:3333") {
+//	    // first 30 connection attempts per minute are allowed
+//	}
+func NewRateLimiter(config RateLimit) *RateLimiter {
 	return &RateLimiter{
-		cfg:     cfg,
-		buckets: make(map[string]*tokenBucket),
-		banned:  make(map[string]time.Time),
+		limit:          config,
+		bucketByHost:   make(map[string]*tokenBucket),
+		banUntilByHost: make(map[string]time.Time),
 	}
 }
 
-// Allow returns true if the IP address is permitted to open a new connection.
+//	if limiter.Allow("203.0.113.42:3333") {
+//	    // hostOnly("203.0.113.42:3333") == "203.0.113.42"
+//	}
 func (rl *RateLimiter) Allow(ip string) bool {
-	if rl == nil || rl.cfg.MaxConnectionsPerMinute <= 0 {
+	if rl == nil || rl.limit.MaxConnectionsPerMinute <= 0 {
 		return true
 	}
 	host := hostOnly(ip)
@@ -195,35 +377,40 @@ func (rl *RateLimiter) Allow(ip string) bool {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	if until, banned := rl.banned[host]; banned {
+	if until, banned := rl.banUntilByHost[host]; banned {
 		if now.Before(until) {
 			return false
 		}
-		delete(rl.banned, host)
+		delete(rl.banUntilByHost, host)
 	}
 
-	bucket, ok := rl.buckets[host]
+	bucket, ok := rl.bucketByHost[host]
 	if !ok {
-		bucket = &tokenBucket{tokens: rl.cfg.MaxConnectionsPerMinute, lastRefill: now}
-		rl.buckets[host] = bucket
+		bucket = &tokenBucket{tokens: rl.limit.MaxConnectionsPerMinute, lastRefill: now}
+		rl.bucketByHost[host] = bucket
 	}
 
-	refillBucket(bucket, rl.cfg.MaxConnectionsPerMinute, now)
+	refillBucket(bucket, rl.limit.MaxConnectionsPerMinute, now)
 	if bucket.tokens <= 0 {
-		if rl.cfg.BanDurationSeconds > 0 {
-			rl.banned[host] = now.Add(time.Duration(rl.cfg.BanDurationSeconds) * time.Second)
+		if rl.limit.BanDurationSeconds > 0 {
+			rl.banUntilByHost[host] = now.Add(time.Duration(rl.limit.BanDurationSeconds) * time.Second)
 		}
 		return false
 	}
 
 	bucket.tokens--
 	bucket.lastRefill = now
+	if bucket.tokens == 0 && rl.limit.BanDurationSeconds > 0 {
+		rl.banUntilByHost[host] = now.Add(time.Duration(rl.limit.BanDurationSeconds) * time.Second)
+	}
 	return true
 }
 
 // Tick removes expired ban entries and refills token buckets.
+//
+//	limiter.Tick()
 func (rl *RateLimiter) Tick() {
-	if rl == nil || rl.cfg.MaxConnectionsPerMinute <= 0 {
+	if rl == nil || rl.limit.MaxConnectionsPerMinute <= 0 {
 		return
 	}
 	now := time.Now()
@@ -231,64 +418,122 @@ func (rl *RateLimiter) Tick() {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
-	for host, until := range rl.banned {
+	for host, until := range rl.banUntilByHost {
 		if !now.Before(until) {
-			delete(rl.banned, host)
+			delete(rl.banUntilByHost, host)
 		}
 	}
-	for _, bucket := range rl.buckets {
-		refillBucket(bucket, rl.cfg.MaxConnectionsPerMinute, now)
+	for _, bucket := range rl.bucketByHost {
+		refillBucket(bucket, rl.limit.MaxConnectionsPerMinute, now)
 	}
 }
 
-// NewConfigWatcher creates a polling watcher for a config file.
-func NewConfigWatcher(path string, onChange func(*Config)) *ConfigWatcher {
-	return &ConfigWatcher{
-		path:     path,
-		onChange: onChange,
-		done:     make(chan struct{}),
-	}
-}
-
-// Start begins the 1-second polling loop.
-func (w *ConfigWatcher) Start() {
-	if w == nil || w.path == "" || w.onChange == nil {
+// UpdateConfig replaces the active rate-limit policy without swapping the limiter pointer.
+//
+//	rl.UpdateConfig(proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300})
+func (rl *RateLimiter) UpdateConfig(config RateLimit) {
+	if rl == nil {
 		return
 	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	rl.limit = config
+	rl.bucketByHost = make(map[string]*tokenBucket)
+	rl.banUntilByHost = make(map[string]time.Time)
+}
+
+//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
+//	    p.Reload(cfg)
+//	})
+//
+// watcher.Start() // polls once per second and reloads after the file mtime changes
+func NewConfigWatcher(configPath string, onChange func(*Config)) *ConfigWatcher {
+	watcher := &ConfigWatcher{
+		configPath:     configPath,
+		onConfigChange: onChange,
+		stopCh:         make(chan struct{}),
+	}
+	if infoResult := proxyFileSystem().Stat(configPath); infoResult.OK {
+		if info, ok := infoResult.Value.(interface{ ModTime() time.Time }); ok {
+			watcher.lastModifiedAt = info.ModTime()
+		}
+	}
+	return watcher
+}
+
+// watcher.Start()
+func (w *ConfigWatcher) Start() {
+	if w == nil || w.configPath == "" || w.onConfigChange == nil {
+		return
+	}
+	w.mu.Lock()
+	if w.started {
+		w.mu.Unlock()
+		return
+	}
+	if w.stopCh == nil {
+		w.stopCh = make(chan struct{})
+	} else {
+		select {
+		case <-w.stopCh:
+			w.stopCh = make(chan struct{})
+		default:
+		}
+	}
+	stopCh := w.stopCh
+	configPath := w.configPath
+	onConfigChange := w.onConfigChange
+	w.started = true
+	w.mu.Unlock()
+
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				info, err := os.Stat(w.path)
-				if err != nil {
-					continue
-				}
-				mod := info.ModTime()
-				if mod.After(w.lastMod) {
-					w.lastMod = mod
-					cfg, result := LoadConfig(w.path)
-					if result.OK && cfg != nil {
-						w.onChange(cfg)
+				if infoResult := proxyFileSystem().Stat(configPath); infoResult.OK {
+					info, ok := infoResult.Value.(interface{ ModTime() time.Time })
+					if !ok {
+						continue
+					}
+					w.mu.Lock()
+					changed := info.ModTime() != w.lastModifiedAt
+					if changed {
+						w.lastModifiedAt = info.ModTime()
+					}
+					w.mu.Unlock()
+					if !changed {
+						continue
+					}
+					config, result := LoadConfig(configPath)
+					if result.OK && config != nil {
+						onConfigChange(config)
 					}
 				}
-			case <-w.done:
+			case <-stopCh:
 				return
 			}
 		}
 	}()
 }
 
-// Stop ends the watcher goroutine.
+// watcher.Stop()
 func (w *ConfigWatcher) Stop() {
 	if w == nil {
 		return
 	}
+	w.mu.Lock()
+	stopCh := w.stopCh
+	w.started = false
+	w.mu.Unlock()
+	if stopCh == nil {
+		return
+	}
 	select {
-	case <-w.done:
+	case <-stopCh:
 	default:
-		close(w.done)
+		close(stopCh)
 	}
 }
 
@@ -298,6 +543,20 @@ func hostOnly(ip string) string {
 		return host
 	}
 	return ip
+}
+
+func isLoopbackHTTPHost(host string) bool {
+	host = trimString(host)
+	if host == "" {
+		return false
+	}
+	if equalFoldString(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 func refillBucket(bucket *tokenBucket, limit int, now time.Time) {
@@ -311,9 +570,9 @@ func refillBucket(bucket *tokenBucket, limit int, now time.Time) {
 		}
 		return
 	}
-	interval := time.Duration(60/limit) * time.Second
+	interval := time.Duration(time.Minute) / time.Duration(limit)
 	if interval <= 0 {
-		interval = time.Second
+		interval = time.Nanosecond
 	}
 	elapsed := now.Sub(bucket.lastRefill)
 	if elapsed < interval {
@@ -327,10 +586,10 @@ func refillBucket(bucket *tokenBucket, limit int, now time.Time) {
 	bucket.lastRefill = bucket.lastRefill.Add(time.Duration(add) * interval)
 }
 
-func generateUUID() string {
+func generateUUID() (string, error) {
 	var b [16]byte
 	if _, err := io.ReadFull(rand.Reader, b[:]); err != nil {
-		return strconv.FormatInt(time.Now().UnixNano(), 16)
+		return "", err
 	}
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
@@ -344,10 +603,30 @@ func generateUUID() string {
 	hex.Encode(out[19:23], b[8:10])
 	out[23] = '-'
 	hex.Encode(out[24:36], b[10:16])
-	return string(out[:])
+	return string(out[:]), nil
 }
 
 func sha256Hex(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+func isHexStringLen(value string, length int) bool {
+	return len(value) == length && isHexString(value)
+}
+
+func isHexString(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		switch {
+		case r >= '0' && r <= '9':
+		case r >= 'a' && r <= 'f':
+		case r >= 'A' && r <= 'F':
+		default:
+			return false
+		}
+	}
+	return true
 }

@@ -8,21 +8,21 @@ import (
 )
 
 func init() {
-	proxy.RegisterSplitterFactory("simple", func(cfg *proxy.Config, events *proxy.EventBus) proxy.Splitter {
-		return NewSimpleSplitter(cfg, events, pool.NewStrategyFactory(cfg))
+	proxy.RegisterSplitterFactory("simple", func(config *proxy.Config, eventBus *proxy.EventBus) proxy.Splitter {
+		return NewSimpleSplitter(config, eventBus, pool.NewStrategyFactory(config))
 	})
 }
 
 // NewSimpleSplitter creates the passthrough splitter.
-func NewSimpleSplitter(cfg *proxy.Config, events *proxy.EventBus, factory pool.StrategyFactory) *SimpleSplitter {
+func NewSimpleSplitter(config *proxy.Config, eventBus *proxy.EventBus, factory pool.StrategyFactory) *SimpleSplitter {
 	if factory == nil {
-		factory = pool.NewStrategyFactory(cfg)
+		factory = pool.NewStrategyFactory(config)
 	}
 	return &SimpleSplitter{
 		active:  make(map[int64]*SimpleMapper),
 		idle:    make(map[int64]*SimpleMapper),
-		cfg:     cfg,
-		events:  events,
+		config:  config,
+		events:  eventBus,
 		factory: factory,
 	}
 }
@@ -33,16 +33,20 @@ func (s *SimpleSplitter) Connect() {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	strategies := make([]pool.Strategy, 0, len(s.active)+len(s.idle))
 	for _, mapper := range s.active {
 		if mapper.strategy != nil {
-			mapper.strategy.Connect()
+			strategies = append(strategies, mapper.strategy)
 		}
 	}
 	for _, mapper := range s.idle {
 		if mapper.strategy != nil {
-			mapper.strategy.Connect()
+			strategies = append(strategies, mapper.strategy)
 		}
+	}
+	s.mu.Unlock()
+	for _, strategy := range strategies {
+		strategy.Connect()
 	}
 }
 
@@ -52,17 +56,24 @@ func (s *SimpleSplitter) OnLogin(event *proxy.LoginEvent) {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	var toConnect pool.Strategy
+	now := time.Now()
 
-	if s.cfg.ReuseTimeout > 0 {
+	if s.config.ReuseTimeout > 0 {
 		for id, mapper := range s.idle {
-			if mapper.strategy != nil && mapper.strategy.IsActive() {
+			if mapper.strategy != nil && mapper.strategy.IsActive() && !mapper.idleAt.IsZero() && now.Sub(mapper.idleAt) <= time.Duration(s.config.ReuseTimeout)*time.Second {
 				delete(s.idle, id)
 				mapper.miner = event.Miner
 				mapper.idleAt = time.Time{}
+				mapper.mu.Lock()
 				mapper.stopped = false
+				mapper.mu.Unlock()
 				s.active[event.Miner.ID()] = mapper
 				event.Miner.SetRouteID(mapper.id)
+				if mapper.currentJob.IsValid() {
+					event.Miner.SetCurrentJob(mapper.currentJob)
+				}
+				s.mu.Unlock()
 				return
 			}
 		}
@@ -73,7 +84,11 @@ func (s *SimpleSplitter) OnLogin(event *proxy.LoginEvent) {
 	s.active[event.Miner.ID()] = mapper
 	event.Miner.SetRouteID(mapper.id)
 	if mapper.strategy != nil {
-		mapper.strategy.Connect()
+		toConnect = mapper.strategy
+	}
+	s.mu.Unlock()
+	if toConnect != nil {
+		toConnect.Connect()
 	}
 }
 
@@ -83,11 +98,13 @@ func (s *SimpleSplitter) OnSubmit(event *proxy.SubmitEvent) {
 		return
 	}
 	s.mu.Lock()
-	mapper := s.active[event.Miner.ID()]
+	mapper := s.activeMapperByRouteIDLocked(event.Miner.RouteID())
 	s.mu.Unlock()
 	if mapper != nil {
 		mapper.Submit(event)
+		return
 	}
+	rejectUnavailableSubmit(s.events, event)
 }
 
 // OnClose moves a mapper to the idle pool or stops it.
@@ -105,11 +122,13 @@ func (s *SimpleSplitter) OnClose(event *proxy.CloseEvent) {
 	mapper.miner = nil
 	mapper.idleAt = time.Now()
 	event.Miner.SetRouteID(-1)
-	if s.cfg.ReuseTimeout > 0 {
+	if s.config.ReuseTimeout > 0 {
 		s.idle[mapper.id] = mapper
 		return
 	}
+	mapper.mu.Lock()
 	mapper.stopped = true
+	mapper.mu.Unlock()
 	if mapper.strategy != nil {
 		mapper.strategy.Disconnect()
 	}
@@ -121,20 +140,50 @@ func (s *SimpleSplitter) GC() {
 		return
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	now := time.Now()
+	stale := make([]pool.Strategy, 0)
 	for id, mapper := range s.idle {
-		if mapper.stopped || (s.cfg.ReuseTimeout > 0 && now.Sub(mapper.idleAt) > time.Duration(s.cfg.ReuseTimeout)*time.Second) {
+		mapper.mu.Lock()
+		stopped := mapper.stopped
+		mapper.mu.Unlock()
+		if stopped || (s.config.ReuseTimeout > 0 && now.Sub(mapper.idleAt) > time.Duration(s.config.ReuseTimeout)*time.Second) {
 			if mapper.strategy != nil {
-				mapper.strategy.Disconnect()
+				stale = append(stale, mapper.strategy)
 			}
 			delete(s.idle, id)
 		}
 	}
+	s.mu.Unlock()
+	for _, strategy := range stale {
+		strategy.Disconnect()
+	}
 }
 
-// Tick is a no-op for simple mode.
-func (s *SimpleSplitter) Tick(ticks uint64) {}
+// Tick advances timeout checks in simple mode.
+func (s *SimpleSplitter) Tick(ticks uint64) {
+	if s == nil {
+		return
+	}
+	s.mu.Lock()
+	strategies := make([]pool.Strategy, 0, len(s.active)+len(s.idle))
+	for _, mapper := range s.active {
+		if mapper != nil && mapper.strategy != nil {
+			strategies = append(strategies, mapper.strategy)
+		}
+	}
+	for _, mapper := range s.idle {
+		if mapper != nil && mapper.strategy != nil {
+			strategies = append(strategies, mapper.strategy)
+		}
+	}
+	s.mu.Unlock()
+	for _, strategy := range strategies {
+		if ticker, ok := strategy.(interface{ Tick(uint64) }); ok {
+			ticker.Tick(ticks)
+		}
+	}
+	s.GC()
+}
 
 // Upstreams returns active/idle/error counts.
 func (s *SimpleSplitter) Upstreams() proxy.UpstreamStats {
@@ -144,20 +193,91 @@ func (s *SimpleSplitter) Upstreams() proxy.UpstreamStats {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var stats proxy.UpstreamStats
-	stats.Active = uint64(len(s.active))
-	stats.Sleep = uint64(len(s.idle))
-	stats.Total = stats.Active + stats.Sleep
+	for _, mapper := range s.active {
+		if mapper == nil {
+			continue
+		}
+		mapper.mu.Lock()
+		stopped := mapper.stopped
+		mapper.mu.Unlock()
+		if stopped || mapper.strategy == nil || !mapper.strategy.IsActive() {
+			stats.Error++
+			continue
+		}
+		stats.Active++
+	}
+	for _, mapper := range s.idle {
+		if mapper == nil {
+			continue
+		}
+		mapper.mu.Lock()
+		stopped := mapper.stopped
+		mapper.mu.Unlock()
+		if stopped || mapper.strategy == nil || !mapper.strategy.IsActive() {
+			stats.Error++
+			continue
+		}
+		stats.Sleep++
+	}
+	stats.Total = stats.Active + stats.Sleep + stats.Error
 	return stats
 }
 
-func (s *SimpleSplitter) newMapperLocked() *SimpleMapper {
-	id := s.seq
-	s.seq++
-	mapper := &SimpleMapper{
-		id:      id,
-		events:  s.events,
-		pending: make(map[int64]*proxy.SubmitEvent),
+// Disconnect closes every active or idle upstream connection and clears the mapper tables.
+func (s *SimpleSplitter) Disconnect() {
+	if s == nil {
+		return
 	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, mapper := range s.active {
+		if mapper != nil && mapper.strategy != nil {
+			mapper.strategy.Disconnect()
+		}
+	}
+	for _, mapper := range s.idle {
+		if mapper != nil && mapper.strategy != nil {
+			mapper.strategy.Disconnect()
+		}
+	}
+	s.active = make(map[int64]*SimpleMapper)
+	s.idle = make(map[int64]*SimpleMapper)
+}
+
+// ReloadPools reconnects each active or idle mapper using the updated pool list.
+//
+//	s.ReloadPools()
+func (s *SimpleSplitter) ReloadPools() {
+	if s == nil {
+		return
+	}
+	strategies := make([]pool.Strategy, 0, len(s.active)+len(s.idle))
+	s.mu.Lock()
+	for _, mapper := range s.active {
+		if mapper == nil || mapper.strategy == nil {
+			continue
+		}
+		strategies = append(strategies, mapper.strategy)
+	}
+	for _, mapper := range s.idle {
+		if mapper == nil || mapper.strategy == nil {
+			continue
+		}
+		strategies = append(strategies, mapper.strategy)
+	}
+	s.mu.Unlock()
+	for _, strategy := range strategies {
+		if reloadable, ok := strategy.(pool.ReloadableStrategy); ok {
+			reloadable.ReloadPools()
+		}
+	}
+}
+
+func (s *SimpleSplitter) newMapperLocked() *SimpleMapper {
+	id := s.nextMapperID
+	s.nextMapperID++
+	mapper := NewSimpleMapper(id, nil)
+	mapper.events = s.events
 	mapper.strategy = s.factory(mapper)
 	if mapper.strategy == nil {
 		mapper.strategy = s.factory(mapper)
@@ -165,23 +285,107 @@ func (s *SimpleSplitter) newMapperLocked() *SimpleMapper {
 	return mapper
 }
 
+func (s *SimpleSplitter) activeMapperByRouteIDLocked(routeID int64) *SimpleMapper {
+	if s == nil || routeID < 0 {
+		return nil
+	}
+	for _, mapper := range s.active {
+		if mapper != nil && mapper.id == routeID {
+			return mapper
+		}
+	}
+	return nil
+}
+
 // Submit forwards a share to the pool.
 func (m *SimpleMapper) Submit(event *proxy.SubmitEvent) {
 	if m == nil || event == nil || m.strategy == nil {
+		rejectUnavailableSubmit(m.events, event)
 		return
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	seq := m.strategy.Submit(event.JobID, event.Nonce, event.Result, event.Algo)
-	m.pending[seq] = event
+	jobID := event.JobID
+	if jobID == "" {
+		m.rejectInvalidJobLocked(event, m.currentJob)
+		return
+	}
+	if jobID != m.currentJob.JobID && jobID != m.prevJob.JobID {
+		m.rejectInvalidJobLocked(event, m.currentJob)
+		return
+	}
+	submissionJob := m.currentJob
+	if jobID == m.prevJob.JobID && m.prevJob.JobID != "" {
+		submissionJob = m.prevJob
+	}
+	seq := m.strategy.Submit(jobID, event.Nonce, event.Result, event.Algo)
+	if seq == 0 {
+		m.rejectUnavailableLocked(event, submissionJob)
+		return
+	}
+	m.pending[seq] = submitContext{
+		RequestID: event.RequestID,
+		Diff:      proxy.EffectiveShareDifficulty(submissionJob, event.Miner),
+		StartedAt: time.Now(),
+		JobID:     jobID,
+	}
+}
+
+func (m *SimpleMapper) rejectInvalidJobLocked(event *proxy.SubmitEvent, job proxy.Job) {
+	if event == nil || event.Miner == nil {
+		return
+	}
+	event.Miner.ReplyWithError(event.RequestID, "Invalid job id")
+	if m.events != nil {
+		jobCopy := job
+		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: event.Miner, Job: &jobCopy, Error: "Invalid job id"})
+	}
+}
+
+func (m *SimpleMapper) rejectUnavailableLocked(event *proxy.SubmitEvent, job proxy.Job) {
+	if event == nil || event.Miner == nil {
+		return
+	}
+	event.Miner.ReplyWithError(event.RequestID, "Proxy is unavailable, try again later")
+	if m.events != nil {
+		jobCopy := job
+		m.events.Dispatch(proxy.Event{
+			Type:  proxy.EventReject,
+			Miner: event.Miner,
+			Job:   &jobCopy,
+			Diff:  proxy.EffectiveShareDifficulty(job, event.Miner),
+			Error: "Proxy is unavailable, try again later",
+		})
+	}
+}
+
+func rejectUnavailableSubmit(events *proxy.EventBus, event *proxy.SubmitEvent) {
+	if event == nil || event.Miner == nil {
+		return
+	}
+	event.Miner.ReplyWithError(event.RequestID, "Proxy is unavailable, try again later")
+	if events != nil {
+		events.Dispatch(proxy.Event{
+			Type:  proxy.EventReject,
+			Miner: event.Miner,
+			Error: "Proxy is unavailable, try again later",
+		})
+	}
 }
 
 // OnJob forwards the latest pool job to the active miner.
 func (m *SimpleMapper) OnJob(job proxy.Job) {
-	if m == nil {
+	if m == nil || !job.IsValid() {
 		return
 	}
 	m.mu.Lock()
+	m.prevJob = m.currentJob
+	if !shouldRetainPreviousJob(m.prevJob, job) {
+		m.prevJob = proxy.Job{}
+	}
+	m.currentJob = job
+	m.stopped = false
+	m.idleAt = time.Time{}
 	miner := m.miner
 	m.mu.Unlock()
 	if miner == nil {
@@ -196,25 +400,42 @@ func (m *SimpleMapper) OnResultAccepted(sequence int64, accepted bool, errorMess
 		return
 	}
 	m.mu.Lock()
-	ctx := m.pending[sequence]
-	delete(m.pending, sequence)
+	ctx, ok := m.pending[sequence]
+	if ok {
+		delete(m.pending, sequence)
+	}
 	miner := m.miner
+	currentJob := m.currentJob
+	prevJob := m.prevJob
 	m.mu.Unlock()
-	if ctx == nil || miner == nil {
+	if !ok || miner == nil {
 		return
+	}
+	latency := uint16(0)
+	if !ctx.StartedAt.IsZero() {
+		elapsed := time.Since(ctx.StartedAt).Milliseconds()
+		if elapsed > int64(^uint16(0)) {
+			latency = ^uint16(0)
+		} else {
+			latency = uint16(elapsed)
+		}
+	}
+	job := currentJob
+	expired := false
+	if ctx.JobID != "" && ctx.JobID == prevJob.JobID && ctx.JobID != currentJob.JobID {
+		job = prevJob
+		expired = true
 	}
 	if accepted {
 		miner.Success(ctx.RequestID, "OK")
 		if m.events != nil {
-			job := miner.CurrentJob()
-			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job})
+			m.events.Dispatch(proxy.Event{Type: proxy.EventAccept, Miner: miner, Diff: ctx.Diff, Job: &job, Latency: latency, Expired: expired})
 		}
 		return
 	}
 	miner.ReplyWithError(ctx.RequestID, errorMessage)
 	if m.events != nil {
-		job := miner.CurrentJob()
-		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Diff: job.DifficultyFromTarget(), Job: &job, Error: errorMessage})
+		m.events.Dispatch(proxy.Event{Type: proxy.EventReject, Miner: miner, Diff: ctx.Diff, Job: &job, Error: errorMessage, Latency: latency})
 	}
 }
 
@@ -223,5 +444,14 @@ func (m *SimpleMapper) OnDisconnect() {
 	if m == nil {
 		return
 	}
+	m.mu.Lock()
 	m.stopped = true
+	m.mu.Unlock()
+}
+
+func shouldRetainPreviousJob(previous, next proxy.Job) bool {
+	if previous.ClientID == "" || next.ClientID == "" {
+		return false
+	}
+	return previous.ClientID == next.ClientID
 }

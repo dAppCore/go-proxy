@@ -1,9 +1,14 @@
 package proxy
 
-// Config is the top-level proxy configuration, loaded from JSON and hot-reloaded on change.
+// Config is the top-level proxy configuration loaded from JSON.
 //
-//	cfg, result := proxy.LoadConfig("config.json")
-//	if !result.OK { log.Fatal(result.Error) }
+//	cfg := &proxy.Config{
+//	    Mode:   "nicehash",
+//	    Bind:   []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}},
+//	    Pools:  []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//	    Watch:  true,
+//	    Workers: proxy.WorkersByRigID,
+//	}
 type Config struct {
 	Mode            string       `json:"mode"`              // "nicehash" or "simple"
 	Bind            []BindAddr   `json:"bind"`              // listen addresses
@@ -16,11 +21,13 @@ type Config struct {
 	AlgoExtension   bool         `json:"algo-ext"`          // forward algo field in jobs
 	Workers         WorkersMode  `json:"workers"`           // "rig-id", "user", "password", "agent", "ip", "false"
 	AccessLogFile   string       `json:"access-log-file"`   // "" = disabled
+	ShareLogFile    string       `json:"share-log-file"`    // "" = disabled
 	ReuseTimeout    int          `json:"reuse-timeout"`     // seconds; simple mode upstream reuse
 	Retries         int          `json:"retries"`           // pool reconnect attempts
 	RetryPause      int          `json:"retry-pause"`       // seconds between retries
 	Watch           bool         `json:"watch"`             // hot-reload on file change
 	RateLimit       RateLimit    `json:"rate-limit"`        // per-IP connection rate limit
+	configPath      string
 }
 
 // BindAddr is one TCP listen endpoint.
@@ -47,7 +54,7 @@ type PoolConfig struct {
 	Enabled        bool   `json:"enabled"`
 }
 
-// TLSConfig controls inbound TLS on bind addresses that have TLS: true.
+// TLSConfig controls inbound TLS for miner listeners.
 //
 //	proxy.TLSConfig{Enabled: true, CertFile: "/etc/proxy/cert.pem", KeyFile: "/etc/proxy/key.pem"}
 type TLSConfig struct {
@@ -69,15 +76,20 @@ type HTTPConfig struct {
 	Restricted  bool   `json:"restricted"`   // true = read-only GET only
 }
 
-// RateLimit controls per-IP connection rate limiting using a token bucket.
+// RateLimit caps connection attempts per source IP.
 //
-//	proxy.RateLimit{MaxConnectionsPerMinute: 30, BanDurationSeconds: 300}
+//	limiter := proxy.NewRateLimiter(proxy.RateLimit{
+//	    MaxConnectionsPerMinute: 30,
+//	    BanDurationSeconds:      300,
+//	})
 type RateLimit struct {
 	MaxConnectionsPerMinute int `json:"max-connections-per-minute"` // 0 = disabled
 	BanDurationSeconds      int `json:"ban-duration"`               // 0 = no ban
 }
 
-// WorkersMode controls which login field becomes the worker name.
+// WorkersMode picks the login field used as the worker name.
+//
+//	cfg.Workers = proxy.WorkersByRigID
 type WorkersMode string
 
 const (
@@ -88,3 +100,11 @@ const (
 	WorkersByIP     WorkersMode = "ip"
 	WorkersDisabled WorkersMode = "false"
 )
+
+func normalizeConfigValues(config *Config) {
+	if config == nil {
+		return
+	}
+	config.Mode = lowerString(trimString(config.Mode))
+	config.Workers = WorkersMode(lowerString(trimString(string(config.Workers))))
+}

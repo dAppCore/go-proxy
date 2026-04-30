@@ -18,11 +18,11 @@ import (
 //
 //	s := simple.NewSimpleSplitter(cfg, eventBus, strategyFactory)
 type SimpleSplitter struct {
-	active  map[int64]*SimpleMapper // minerID → mapper
-	idle    map[int64]*SimpleMapper // mapperID → mapper (reuse pool, keyed by mapper seq)
-	cfg     *proxy.Config
-	events  *proxy.EventBus
-	factory pool.StrategyFactory
-	mu      sync.Mutex
-	seq     int64 // monotonic mapper sequence counter
+	active       map[int64]*SimpleMapper // minerID → mapper
+	idle         map[int64]*SimpleMapper // mapperID → mapper (reuse pool, keyed by mapper ID)
+	config       *proxy.Config
+	events       *proxy.EventBus
+	factory      pool.StrategyFactory
+	mu           sync.Mutex
+	nextMapperID int64 // monotonic mapper ID counter
 }

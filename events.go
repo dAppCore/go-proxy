@@ -2,18 +2,21 @@ package proxy
 
 import "sync"
 
-// EventBus dispatches proxy lifecycle events to registered listeners.
-// Dispatch is synchronous on the calling goroutine. Listeners must not block.
+// EventBus dispatches proxy lifecycle events to synchronous listeners.
 //
 //	bus := proxy.NewEventBus()
-//	bus.Subscribe(proxy.EventLogin, customDiff.OnLogin)
+//	bus.Subscribe(proxy.EventLogin, func(e proxy.Event) {
+//	    _ = e.Miner.User()
+//	})
 //	bus.Subscribe(proxy.EventAccept, stats.OnAccept)
 type EventBus struct {
 	listeners map[EventType][]EventHandler
 	mu        sync.RWMutex
 }
 
-// EventType identifies the proxy lifecycle event.
+// EventType identifies one proxy lifecycle event.
+//
+// proxy.EventLogin
 type EventType int
 
 const (
@@ -24,12 +27,13 @@ const (
 )
 
 // EventHandler is the callback signature for all event types.
+//
+// handler := func(e proxy.Event) { _ = e.Miner }
 type EventHandler func(Event)
 
 // Event carries the data for any proxy lifecycle event.
-// Fields not relevant to the event type are zero/nil.
 //
-//	bus.Dispatch(proxy.Event{Type: proxy.EventLogin, Miner: m})
+// bus.Dispatch(proxy.Event{Type: proxy.EventLogin, Miner: m})
 type Event struct {
 	Type    EventType
 	Miner   *Miner // always set

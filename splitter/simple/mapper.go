@@ -14,12 +14,32 @@ import (
 //
 //	m := simple.NewSimpleMapper(id, strategy)
 type SimpleMapper struct {
-	id       int64
-	miner    *proxy.Miner // nil when idle
-	strategy pool.Strategy
-	idleAt   time.Time // zero when active
-	stopped  bool
-	events   *proxy.EventBus
-	pending  map[int64]*proxy.SubmitEvent
-	mu       sync.Mutex
+	id         int64
+	miner      *proxy.Miner // nil when idle
+	currentJob proxy.Job
+	prevJob    proxy.Job
+	strategy   pool.Strategy
+	idleAt     time.Time // zero when active
+	stopped    bool
+	events     *proxy.EventBus
+	pending    map[int64]submitContext
+	mu         sync.Mutex
+}
+
+type submitContext struct {
+	RequestID int64
+	Diff      uint64
+	StartedAt time.Time
+	JobID     string
+}
+
+// NewSimpleMapper creates a passthrough mapper for one pool connection.
+//
+//	m := simple.NewSimpleMapper(7, strategy)
+func NewSimpleMapper(id int64, strategy pool.Strategy) *SimpleMapper {
+	return &SimpleMapper{
+		id:       id,
+		strategy: strategy,
+		pending:  make(map[int64]submitContext),
+	}
 }

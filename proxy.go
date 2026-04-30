@@ -1,45 +1,61 @@
-// Package proxy is a CryptoNote stratum mining proxy library.
+// Package proxy is the mining proxy library.
 //
-// It accepts miner connections over TCP (optionally TLS), splits the 32-bit nonce
-// space across up to 256 simultaneous miners per upstream pool connection (NiceHash
-// mode), and presents a small monitoring API.
-//
-// Full specification: docs/RFC.md
-//
+//	cfg := &proxy.Config{Mode: "nicehash", Bind: []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}}, Pools: []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}}, Workers: proxy.WorkersByRigID}
 //	p, result := proxy.New(cfg)
-//	if result.OK { p.Start() }
+//	if result.OK {
+//	    p.Start()
+//	}
 package proxy
 
 import (
+	// Note: AX-6 — structural HTTP boundary for monitoring server wiring.
 	"net/http"
-	"sync"
 	"time"
+
+	core "dappco.re/go"
 )
 
-// Proxy is the top-level orchestrator. It owns the server, splitter, stats, workers,
-// event bus, tick goroutine, and optional HTTP API.
+// Proxy wires the configured listeners, splitters, stats, workers, and log sinks.
 //
+//	cfg := &proxy.Config{
+//	    Mode:    "nicehash",
+//	    Bind:    []proxy.BindAddr{{Host: "0.0.0.0", Port: 3333}},
+//	    Pools:   []proxy.PoolConfig{{URL: "pool.example:3333", Enabled: true}},
+//	    Workers: proxy.WorkersByRigID,
+//	}
 //	p, result := proxy.New(cfg)
-//	if result.OK { p.Start() }
+//	if result.OK {
+//	    p.Start()
+//	}
 type Proxy struct {
-	config     *Config
-	splitter   Splitter
-	stats      *Stats
-	workers    *Workers
-	events     *EventBus
-	servers    []*Server
-	ticker     *time.Ticker
-	watcher    *ConfigWatcher
-	done       chan struct{}
-	stopOnce   sync.Once
-	minersMu   sync.RWMutex
-	miners     map[int64]*Miner
-	customDiff *CustomDiff
-	rateLimit  *RateLimiter
-	httpServer *http.Server
+	config            *Config
+	configMu          core.RWMutex
+	lifecycleMu       core.RWMutex
+	splitter          Splitter
+	shareSink         ShareSink
+	stats             *Stats
+	workers           *Workers
+	events            *EventBus
+	servers           []*Server
+	ticker            *time.Ticker
+	watcher           *ConfigWatcher
+	done              chan struct{}
+	stopOnce          core.Once
+	minersMu          core.RWMutex
+	miners            map[int64]*Miner
+	customDiff        *CustomDiff
+	customDiffBuckets *CustomDiffBuckets
+	rateLimit         *RateLimiter
+	httpServer        *http.Server
+	accessLog         *accessLogSink
+	shareLog          *shareLogSink
+	submitCount       core.AtomicInt64
 }
 
-// Splitter is the interface both NonceSplitter and SimpleSplitter satisfy.
+// Splitter routes miner logins, submits, and disconnects to the active upstream strategy.
+//
+//	splitter := nicehash.NewNonceSplitter(cfg, bus, pool.NewStrategyFactory(cfg))
+//	splitter.Connect()
 type Splitter interface {
 	// Connect establishes the first pool upstream connection.
 	Connect()
@@ -57,7 +73,18 @@ type Splitter interface {
 	Upstreams() UpstreamStats
 }
 
-// UpstreamStats carries pool connection state counts for monitoring.
+// ShareSink consumes share outcomes from the proxy event stream.
+//
+//	sink.OnAccept(proxy.Event{Miner: miner, Diff: 100000})
+//	sink.OnReject(proxy.Event{Miner: miner, Error: "Invalid nonce"})
+type ShareSink interface {
+	OnAccept(Event)
+	OnReject(Event)
+}
+
+// UpstreamStats reports pool connection counts.
+//
+//	stats := proxy.UpstreamStats{Active: 1, Sleep: 0, Error: 0, Total: 1}
 type UpstreamStats struct {
 	Active uint64 // connections currently receiving jobs
 	Sleep  uint64 // idle connections (simple mode reuse pool)
@@ -65,12 +92,16 @@ type UpstreamStats struct {
 	Total  uint64 // Active + Sleep + Error
 }
 
-// LoginEvent is dispatched when a miner completes the login handshake.
+// LoginEvent is dispatched when a miner completes login.
+//
+//	event := proxy.LoginEvent{Miner: miner}
 type LoginEvent struct {
 	Miner *Miner
 }
 
-// SubmitEvent is dispatched when a miner submits a share.
+// SubmitEvent carries one miner share submission.
+//
+//	event := proxy.SubmitEvent{Miner: miner, JobID: "job-1", Nonce: "deadbeef", Result: "HASH", RequestID: 2}
 type SubmitEvent struct {
 	Miner     *Miner
 	JobID     string
@@ -80,50 +111,56 @@ type SubmitEvent struct {
 	RequestID int64
 }
 
-// CloseEvent is dispatched when a miner TCP connection closes.
+// CloseEvent is dispatched when a miner connection closes.
+//
+//	event := proxy.CloseEvent{Miner: miner}
 type CloseEvent struct {
 	Miner *Miner
 }
 
-// ConfigWatcher polls a config file for mtime changes and calls onChange on modification.
-// Uses 1-second polling; does not require fsnotify.
+// ConfigWatcher polls a config file every second and reloads on modification.
 //
-//	w := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
+//	watcher := proxy.NewConfigWatcher("config.json", func(cfg *proxy.Config) {
 //	    p.Reload(cfg)
 //	})
-//	w.Start()
+//	watcher.Start()
 type ConfigWatcher struct {
-	path     string
-	onChange func(*Config)
-	lastMod  time.Time
-	done     chan struct{}
+	configPath     string
+	onConfigChange func(*Config)
+	lastModifiedAt time.Time
+	stopCh         chan struct{}
+	mu             core.Mutex
+	started        bool
 }
 
-// RateLimiter implements per-IP token bucket connection rate limiting.
-// Each unique IP has a bucket initialised to MaxConnectionsPerMinute tokens.
-// Each connection attempt consumes one token. Tokens refill at 1 per (60/max) seconds.
-// An IP that empties its bucket is added to a ban list for BanDurationSeconds.
+// RateLimiter throttles new connections per source IP.
 //
-//	rl := proxy.NewRateLimiter(cfg.RateLimit)
-//	if !rl.Allow("1.2.3.4") { conn.Close(); return }
+//	limiter := proxy.NewRateLimiter(proxy.RateLimit{
+//	    MaxConnectionsPerMinute: 30,
+//	    BanDurationSeconds:      300,
+//	})
+//	if limiter.Allow("1.2.3.4:3333") {
+//	    // accept the socket
+//	}
 type RateLimiter struct {
-	cfg     RateLimit
-	buckets map[string]*tokenBucket
-	banned  map[string]time.Time
-	mu      sync.Mutex
+	limit          RateLimit
+	bucketByHost   map[string]*tokenBucket
+	banUntilByHost map[string]time.Time
+	mu             core.Mutex
 }
 
-// tokenBucket is a simple token bucket for one IP.
+// tokenBucket is the per-IP refillable counter.
+//
+//	bucket := tokenBucket{tokens: 30, lastRefill: time.Now()}
 type tokenBucket struct {
 	tokens     int
 	lastRefill time.Time
 }
 
-// CustomDiff resolves and applies per-miner difficulty overrides at login time.
-// Resolution order: user-suffix (+N) > Config.CustomDiff > pool difficulty.
+// CustomDiff applies a login-time difficulty override.
 //
-//	cd := proxy.NewCustomDiff(cfg.CustomDiff)
-//	bus.Subscribe(proxy.EventLogin, cd.OnLogin)
+//	resolver := proxy.NewCustomDiff(50000)
+//	resolver.Apply(&Miner{user: "WALLET+75000"})
 type CustomDiff struct {
-	globalDiff uint64
+	globalDiff core.AtomicUint64
 }
