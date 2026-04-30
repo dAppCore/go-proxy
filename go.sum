@@ -50,8 +50,8 @@ github.com/gin-contrib/expvar v1.0.3 h1:nIbUaokxZfUEC/35h+RyWCP1SMF/suV/ARbXL3H3
 github.com/gin-contrib/expvar v1.0.3/go.mod h1:bwqqmhty1Zl2JYVLzBIL6CSHDWDbQoQoicalAnBvUnY=
 github.com/gin-contrib/gzip v1.2.5 h1:fIZs0S+l17pIu1P5XRJOo/YNqfIuPCrZZ3TWB7pjckI=
 github.com/gin-contrib/gzip v1.2.5/go.mod h1:aomRgR7ftdZV3uWY0gW/m8rChfxau0n8YVvwlOHONzw=
-github.com/gin-contrib/httpsign v1.0.3 h1:NpeDQjmUV0qFjGCm/rkXSp3HH0hU7r84q1v+VtTiI5I=
-github.com/gin-contrib/httpsign v1.0.3/go.mod h1:n4GC7StmHNBhIzWzuW2njKbZMeEWh4tDbmn3bD1ab+k=
+github.com/gin-contrib/httpsign v1.0.3 h1:esNSpF24m/vkoaCybxaJ67MmjRvZkA90Y01tC6Ofq7E=
+github.com/gin-contrib/httpsign v1.0.3/go.mod h1:U59O1y570HMaRXDYAvkpr2ZrFoSyYpzSNP7IdDoBjaI=
 github.com/gin-contrib/location/v2 v2.0.0 h1:iLx5RatHQHSxgC0tm2AG0sIuQKecI7FhREessVd6RWY=
 github.com/gin-contrib/location/v2 v2.0.0/go.mod h1:276TDNr25NENBA/NQZUuEIlwxy/I5CYVFIr/d2TgOdU=
 github.com/gin-contrib/pprof v1.5.3 h1:Bj5SxJ3kQDVez/s/+f9+meedJIqLS+xlkIVDe/lcvgM=
