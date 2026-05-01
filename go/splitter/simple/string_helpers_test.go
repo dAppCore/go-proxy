@@ -1,0 +1,14 @@
+package simple
+
+import core "dappco.re/go"
+
+func repeatString(value string, count int) string {
+	if count <= 0 || value == "" {
+		return ""
+	}
+	builder := core.NewBuilder()
+	for i := 0; i < count; i++ {
+		builder.WriteString(value)
+	}
+	return builder.String()
+}
