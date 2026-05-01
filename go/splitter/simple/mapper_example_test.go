@@ -1,0 +1,4 @@
+package simple
+
+func ExampleNewSimpleMapper() {
+}
