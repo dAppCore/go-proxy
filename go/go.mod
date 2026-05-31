@@ -3,7 +3,7 @@ module dappco.re/go/proxy
 go 1.26.2
 
 require (
-	dappco.re/go v0.9.0
+	dappco.re/go v0.10.3
 	github.com/gin-gonic/gin v1.12.0
 )
 
