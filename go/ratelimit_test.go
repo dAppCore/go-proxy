@@ -92,6 +92,42 @@ func TestRateLimiter_Allow_ExhaustedBucketStartsBan(t *testing.T) {
 	}
 }
 
+// TestRateLimiter_Allow_RejectsWhileBanned verifies a host with a live ban is
+// rejected outright, before any token-bucket accounting.
+func TestRateLimiter_Allow_RejectsWhileBanned(t *testing.T) {
+	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 10, BanDurationSeconds: 60})
+
+	rl.mu.Lock()
+	rl.banUntilByHost["9.9.9.9"] = time.Now().Add(time.Minute)
+	rl.mu.Unlock()
+
+	if rl.Allow("9.9.9.9:3333") {
+		t.Fatal("expected a host with a live ban to be rejected")
+	}
+}
+
+// TestRateLimiter_Allow_AfterBanExpiry verifies that once a ban deadline has
+// passed, the stale ban entry is dropped and the host is allowed again.
+func TestRateLimiter_Allow_AfterBanExpiry(t *testing.T) {
+	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 10, BanDurationSeconds: 60})
+
+	// Seed an already-expired ban for the host.
+	rl.mu.Lock()
+	rl.banUntilByHost["8.8.8.8"] = time.Now().Add(-time.Minute)
+	rl.mu.Unlock()
+
+	if !rl.Allow("8.8.8.8:3333") {
+		t.Fatal("expected an expired ban to be cleared and the host allowed")
+	}
+
+	rl.mu.Lock()
+	_, stillBanned := rl.banUntilByHost["8.8.8.8"]
+	rl.mu.Unlock()
+	if stillBanned {
+		t.Fatal("expected the expired ban entry to be deleted")
+	}
+}
+
 // TestRateLimiter_Tick_Good verifies Tick removes expired bans.
 //
 //	limiter := proxy.NewRateLimiter(proxy.RateLimit{MaxConnectionsPerMinute: 1, BanDurationSeconds: 1})
