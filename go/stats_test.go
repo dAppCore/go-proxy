@@ -130,6 +130,29 @@ func TestStats_Stats_OnReject_Ugly(t *testing.T) {
 	}
 }
 
+// TestStats_OnReject_RecordsLatency verifies a rejection carrying a latency
+// sample feeds the rolling latency series — rejected shares still contribute
+// to the round-trip-time distribution.
+func TestStats_OnReject_RecordsLatency(t *testing.T) {
+	stats := NewStats()
+
+	stats.OnReject(Event{Error: "Stale share", Latency: 42})
+
+	summary := stats.Summary()
+	if summary.Rejected != 1 {
+		t.Fatalf("expected one rejected, got %d", summary.Rejected)
+	}
+	if summary.AvgLatency == 0 {
+		t.Fatal("expected a latency sample to be recorded from the rejection")
+	}
+}
+
+// TestStats_OnReject_NilReceiver verifies a nil Stats tolerates OnReject.
+func TestStats_OnReject_NilReceiver(t *testing.T) {
+	var stats *Stats
+	stats.OnReject(Event{Error: "Stale share", Latency: 10}) // must not panic
+}
+
 // TestStats_Tick_Good verifies that Tick advances the rolling window position.
 //
 //	stats := proxy.NewStats()

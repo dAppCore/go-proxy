@@ -72,3 +72,47 @@ func TestPoolAxHelpers_Ugly(t *testing.T) {
 		t.Fatal("expected empty needle to match")
 	}
 }
+
+func TestPoolAxHelpers_repeatString_Good(t *testing.T) {
+	if got := repeatString("xo", 3); got != "xoxoxo" {
+		t.Fatalf("expected xoxoxo, got %q", got)
+	}
+}
+
+func TestPoolAxHelpers_repeatString_Bad(t *testing.T) {
+	if got := repeatString("xo", 0); got != "" {
+		t.Fatalf("expected empty for zero count, got %q", got)
+	}
+	if got := repeatString("xo", -3); got != "" {
+		t.Fatalf("expected empty for negative count, got %q", got)
+	}
+}
+
+func TestPoolAxHelpers_repeatString_Ugly(t *testing.T) {
+	if got := repeatString("", 5); got != "" {
+		t.Fatalf("expected empty for empty value, got %q", got)
+	}
+}
+
+func TestPoolAxHelpers_jsonRoundTrip_Good(t *testing.T) {
+	encoded := jsonMarshalString(map[string]any{"id": float64(7), "ok": true})
+	var decoded struct {
+		ID float64 `json:"id"`
+		OK bool    `json:"ok"`
+	}
+	if !jsonUnmarshalBytes([]byte(encoded), &decoded) {
+		t.Fatalf("expected round-trip to decode, got %q", encoded)
+	}
+	if decoded.ID != 7 || !decoded.OK {
+		t.Fatalf("expected populated struct, got %+v", decoded)
+	}
+}
+
+func TestPoolAxHelpers_jsonUnmarshalBytes_Bad(t *testing.T) {
+	var decoded struct {
+		ID float64 `json:"id"`
+	}
+	if jsonUnmarshalBytes([]byte(`{"id":`), &decoded) {
+		t.Fatal("expected malformed JSON to fail")
+	}
+}
