@@ -99,7 +99,7 @@ func TestFlow_NonceSplitter_OnLogin_Ugly(t *testing.T) {
 	splitter := NewNonceSplitter(&proxy.Config{Mode: "nicehash"}, proxy.NewEventBus(), func(pool.StratumListener) pool.Strategy {
 		return spy
 	})
-	for i := 0; i < 257; i++ {
+	for i := range 257 {
 		miner := &proxy.Miner{}
 		miner.SetID(int64(i + 1))
 		splitter.OnLogin(&proxy.LoginEvent{Miner: miner})

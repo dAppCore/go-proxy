@@ -61,7 +61,7 @@ func TestService_Start_ContextCancel_StopsProxy(t *testing.T) {
 	c := core.New(core.WithService(NewService(serviceTestConfig())))
 	svc := c.Service("proxy").Value.(*Service)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(t.Context())
 	if r := svc.Start(ctx); !r.OK {
 		t.Fatalf("expected Start to succeed, got %v", r.Error())
 	}
@@ -127,7 +127,7 @@ func TestNewService_NilConfig_RegistersWithoutProxy(t *testing.T) {
 		t.Fatalf("expected nil Proxy with nil config, got %#v", svc.Proxy)
 	}
 
-	if start := svc.Start(context.Background()); start.OK {
+	if start := svc.Start(t.Context()); start.OK {
 		t.Fatal("expected nil-Proxy Start to fail")
 	}
 	if stop := svc.Stop(); stop.OK {
@@ -154,7 +154,7 @@ func TestRegister_DefaultsRegistersWithoutProxy(t *testing.T) {
 // pointer.
 func TestService_NilReceiver_GuardsStartStop(t *testing.T) {
 	var svc *Service
-	if r := svc.Start(context.Background()); r.OK {
+	if r := svc.Start(t.Context()); r.OK {
 		t.Fatal("expected nil-receiver Start to fail")
 	}
 	if r := svc.Stop(); r.OK {

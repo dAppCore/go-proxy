@@ -41,7 +41,7 @@ func (c *recordingConn) SetWriteDeadline(time.Time) error { return nil }
 func TestStorage_Add_Good(t *testing.T) {
 	storage := NewNonceStorage()
 	seen := make(map[uint8]bool)
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		m := &proxy.Miner{}
 		m.SetID(int64(i + 1))
 		ok := storage.Add(m)
@@ -62,7 +62,7 @@ func TestStorage_Add_Good(t *testing.T) {
 //	ok := storage.Add(overflowMiner) // false — table is full
 func TestStorage_Add_Bad(t *testing.T) {
 	storage := NewNonceStorage()
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		m := &proxy.Miner{}
 		m.SetID(int64(i + 1))
 		storage.Add(m)

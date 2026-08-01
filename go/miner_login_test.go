@@ -353,7 +353,7 @@ func TestProxy_New_Watch_Good(t *testing.T) {
 
 func TestMiner_HandleLogin_Ugly(t *testing.T) {
 	// target symbol: HandleLogin
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		miner := &Miner{}
 		miner.SetID(int64(i + 1))
 		miner.SetMapperID(int64(i + 1))

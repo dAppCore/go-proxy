@@ -204,7 +204,7 @@ func TestStrategyFlow_FailoverStrategy_ReloadPools_Good(t *testing.T) {
 	handlerErrs := make(chan string, 2)
 	go func() {
 		defer close(done)
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			conn, err := ln.Accept()
 			if err != nil {
 				return
@@ -262,7 +262,7 @@ func TestStrategyFlow_FailoverStrategy_ReloadPools_Good(t *testing.T) {
 	<-accepts
 	_ = ln.Close()
 	<-done
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		if msg := <-handlerErrs; msg != "" {
 			t.Fatal(msg)
 		}

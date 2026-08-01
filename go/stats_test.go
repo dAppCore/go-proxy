@@ -37,7 +37,7 @@ func TestStats_Stats_OnAccept_Good(t *testing.T) {
 func TestStats_Stats_OnAccept_Bad(t *testing.T) {
 	stats := NewStats()
 	var wg sync.WaitGroup
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		wg.Add(1)
 		go func(diff uint64) {
 			defer wg.Done()

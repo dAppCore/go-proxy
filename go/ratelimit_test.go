@@ -12,7 +12,7 @@ import (
 func TestRatelimit_RateLimiter_Allow_Good(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 10, BanDurationSeconds: 60})
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if !rl.Allow("1.2.3.4:3333") {
 			t.Fatalf("expected call %d to be allowed", i+1)
 		}
@@ -26,7 +26,7 @@ func TestRatelimit_RateLimiter_Allow_Good(t *testing.T) {
 func TestRatelimit_RateLimiter_Allow_Bad(t *testing.T) {
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 10, BanDurationSeconds: 60})
 
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		rl.Allow("1.2.3.4:3333")
 	}
 	if rl.Allow("1.2.3.4:3333") {
@@ -200,7 +200,7 @@ func TestRateLimiter_Disabled_Good(t *testing.T) {
 	// target symbol: Disabled
 	rl := NewRateLimiter(RateLimit{MaxConnectionsPerMinute: 0})
 
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		if !rl.Allow("1.2.3.4:3333") {
 			t.Fatalf("expected disabled limiter to allow all connections")
 		}
@@ -240,7 +240,7 @@ func TestRatelimit_RateLimiter_UpdateConfig_Ugly(t *testing.T) {
 
 	rl.UpdateConfig(RateLimit{MaxConnectionsPerMinute: 0, BanDurationSeconds: 0})
 
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		if !rl.Allow("1.2.3.4:3333") {
 			t.Fatalf("expected disabled limiter after update to allow call %d", i+1)
 		}

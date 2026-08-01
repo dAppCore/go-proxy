@@ -56,7 +56,7 @@ func TestNicehash_FullFlow_Good(t *testing.T) {
 
 	var miners []net.Conn
 	firstSessionID := ""
-	for index := 0; index < 3; index++ {
+	for index := range 3 {
 		conn, _, response := loginMiner(t, minerAddress.address, core.Sprintf("wallet-%d", index))
 		miners = append(miners, conn)
 		if response.Result == nil || response.Result.Job.JobID != "job-1" {
@@ -159,7 +159,7 @@ func TestNicehash_FullFlow_Ugly(t *testing.T) {
 	defer proxyInstance.Stop()
 
 	miners := make([]net.Conn, 0, 257)
-	for index := 0; index < 257; index++ {
+	for index := range 257 {
 		conn, _, response := loginMiner(t, minerAddress.address, core.Sprintf("wallet-%03d", index))
 		if response.Error != nil {
 			t.Fatalf("expected miner %d to log in successfully, got %+v", index, response.Error)
