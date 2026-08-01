@@ -465,7 +465,7 @@ func (s *NonceStorage) Add(miner *proxy.Miner) bool {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		index := (s.cursor + i) % 256
 		if s.slots[index] != 0 {
 			continue

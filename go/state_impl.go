@@ -2,12 +2,14 @@ package proxy
 
 import (
 	"bufio"
+	"cmp"
 	"context"
 	"crypto/subtle"
 	"crypto/tls"
 	"net"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"sync/atomic"
@@ -202,7 +204,7 @@ func (p *Proxy) MinerSnapshots() []MinerSnapshot {
 			Agent:    miner.Agent(),
 		})
 	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+	slices.SortFunc(rows, func(a, b MinerSnapshot) int { return cmp.Compare(a.ID, b.ID) })
 	return rows
 }
 
@@ -1077,7 +1079,7 @@ func secureStringEqual(a, b string) bool {
 	}
 	var diff byte
 	diff |= byte(len(a) ^ len(b))
-	for index := 0; index < max; index++ {
+	for index := range max {
 		var left byte
 		var right byte
 		if index < len(a) {
@@ -2061,7 +2063,7 @@ func (s *Stats) Summary() StatsSummary {
 	}
 	if len(s.latency) > 0 {
 		samples := append([]uint16(nil), s.latency...)
-		sort.Slice(samples, func(i, j int) bool { return samples[i] < samples[j] })
+		slices.Sort(samples)
 		middle := len(samples) / 2
 		if len(samples)%2 == 0 {
 			left := uint32(samples[middle-1])

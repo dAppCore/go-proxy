@@ -462,11 +462,11 @@ func (s *FailoverStrategy) connectLocked(start int) {
 			retryPause = time.Duration(s.config.RetryPause) * time.Second
 		}
 	}
-	for attempt := 0; attempt < retries; attempt++ {
+	for range retries {
 		if s.isClosing() {
 			return
 		}
-		for i := 0; i < len(enabled); i++ {
+		for i := range enabled {
 			if s.isClosing() {
 				return
 			}
