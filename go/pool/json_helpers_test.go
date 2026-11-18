@@ -1,6 +1,6 @@
 package pool
 
-import core "dappco.re/go"
+import core "github.com/dappcore/go"
 
 func testJSONMarshal(value any) ([]byte, error) {
 	r := core.JSONMarshal(value)

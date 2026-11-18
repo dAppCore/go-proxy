@@ -3,7 +3,7 @@ package simple
 import (
 	"testing"
 
-	"dappco.re/go/proxy/pool"
+	"github.com/dappcore/go-proxy/go/pool"
 )
 
 type reloadableStrategy struct {

@@ -11,7 +11,7 @@ import (
 	"net"
 	"sync"
 
-	"dappco.re/go/proxy"
+	"github.com/dappcore/go-proxy/go"
 )
 
 // client := pool.NewStratumClient(poolCfg, listener)

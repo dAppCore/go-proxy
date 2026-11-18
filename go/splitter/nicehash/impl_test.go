@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"dappco.re/go/proxy"
-	"dappco.re/go/proxy/pool"
+	"github.com/dappcore/go-proxy/go"
+	"github.com/dappcore/go-proxy/go/pool"
 )
 
 func TestNonceStorage_NewNonceStorage_Good(t *testing.T) {

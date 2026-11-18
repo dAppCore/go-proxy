@@ -3,7 +3,7 @@ package simple
 import (
 	"testing"
 
-	"dappco.re/go/proxy"
+	"github.com/dappcore/go-proxy/go"
 )
 
 // TestSimpleMapper_rejectInvalidJobLocked_NilGuards verifies the invalid-job

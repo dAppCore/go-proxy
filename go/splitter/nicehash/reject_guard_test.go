@@ -3,7 +3,7 @@ package nicehash
 import (
 	"testing"
 
-	"dappco.re/go/proxy"
+	"github.com/dappcore/go-proxy/go"
 )
 
 // TestNonceMapper_rejectUnavailableLocked_NilGuards verifies the unavailable

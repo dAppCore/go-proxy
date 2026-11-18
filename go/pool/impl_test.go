@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"dappco.re/go/proxy"
+	"github.com/dappcore/go-proxy/go"
 )
 
 // TestFailoverStrategy_CurrentPools_Good verifies that currentPools follows the live config.

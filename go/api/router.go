@@ -7,8 +7,8 @@ package api
 import (
 	"net/http"
 
-	core "dappco.re/go"
-	"dappco.re/go/proxy"
+	core "github.com/dappcore/go"
+	"github.com/dappcore/go-proxy/go"
 	"github.com/gin-gonic/gin"
 )
 

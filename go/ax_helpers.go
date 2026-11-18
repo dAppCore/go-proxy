@@ -4,7 +4,7 @@ import (
 	"io"
 	"unicode"
 
-	core "dappco.re/go"
+	core "github.com/dappcore/go"
 )
 
 var proxyCoreRuntime = core.New()

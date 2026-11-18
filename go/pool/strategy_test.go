@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"dappco.re/go/proxy"
+	"github.com/dappcore/go-proxy/go"
 )
 
 type strategyListenerSpy struct {

@@ -1,6 +1,6 @@
 package proxylog
 
-import core "dappco.re/go"
+import core "github.com/dappcore/go"
 
 func pathJoin(parts ...string) string {
 	return core.PathJoin(parts...)

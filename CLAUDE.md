@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-CryptoNote stratum mining proxy library with NiceHash nonce-splitting (256-slot), simple passthrough mode, pool failover, TLS, HTTP monitoring API, and per-IP rate limiting. Module: `dappco.re/go/core/proxy`
+CryptoNote stratum mining proxy library with NiceHash nonce-splitting (256-slot), simple passthrough mode, pool failover, TLS, HTTP monitoring API, and per-IP rate limiting. Module: `github.com/dappcore/go-proxy/go`
 
 ## Spec
 

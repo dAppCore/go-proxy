@@ -4,8 +4,8 @@ import (
 	"sync"
 	"time"
 
-	"dappco.re/go/proxy"
-	"dappco.re/go/proxy/pool"
+	"github.com/dappcore/go-proxy/go"
+	"github.com/dappcore/go-proxy/go/pool"
 )
 
 // NonceMapper manages one outbound pool connection and the 256-slot NonceStorage.

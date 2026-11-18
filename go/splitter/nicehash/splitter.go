@@ -12,8 +12,8 @@ package nicehash
 import (
 	"sync"
 
-	"dappco.re/go/proxy"
-	"dappco.re/go/proxy/pool"
+	"github.com/dappcore/go-proxy/go"
+	"github.com/dappcore/go-proxy/go/pool"
 )
 
 // NonceSplitter is the Splitter implementation for NiceHash mode.

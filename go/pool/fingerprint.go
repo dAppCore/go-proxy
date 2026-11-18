@@ -7,7 +7,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 
-	core "dappco.re/go"
+	core "github.com/dappcore/go"
 )
 
 type peerCertificateVerifier func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error

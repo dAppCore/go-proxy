@@ -3,7 +3,7 @@ package nicehash
 import (
 	"sync"
 
-	"dappco.re/go/proxy"
+	"github.com/dappcore/go-proxy/go"
 )
 
 // NonceStorage is the 256-slot fixed-byte allocation table for one NonceMapper.
