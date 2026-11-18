@@ -3,8 +3,8 @@ package nicehash
 import (
 	"time"
 
-	"dappco.re/go/proxy"
-	"dappco.re/go/proxy/pool"
+	"github.com/dappcore/go-proxy/go"
+	"github.com/dappcore/go-proxy/go/pool"
 )
 
 func init() {

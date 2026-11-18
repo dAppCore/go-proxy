@@ -3,7 +3,7 @@ package simple
 import (
 	"testing"
 
-	"dappco.re/go/proxy"
+	"github.com/dappcore/go-proxy/go"
 )
 
 func TestSimpleMapperFile_NewSimpleMapper_Good(t *testing.T) {

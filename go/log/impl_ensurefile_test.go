@@ -3,7 +3,7 @@ package proxylog
 import (
 	"testing"
 
-	"dappco.re/go/proxy"
+	"github.com/dappcore/go-proxy/go"
 )
 
 // TestImpl_AccessLog_OpenFailure verifies that when the configured access-log

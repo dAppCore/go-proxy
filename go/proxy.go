@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"time"
 
-	core "dappco.re/go"
+	core "github.com/dappcore/go"
 )
 
 // Proxy wires the configured listeners, splitters, stats, workers, and log sinks.

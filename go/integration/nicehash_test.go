@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	core "dappco.re/go"
-	"dappco.re/go/proxy"
-	_ "dappco.re/go/proxy/splitter/nicehash"
+	core "github.com/dappcore/go"
+	"github.com/dappcore/go-proxy/go"
+	_ "github.com/dappcore/go-proxy/go/splitter/nicehash"
 )
 
 type poolRequest struct {

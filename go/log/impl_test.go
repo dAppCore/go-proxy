@@ -7,8 +7,8 @@ import (
 	"time"
 	"unsafe"
 
-	core "dappco.re/go"
-	"dappco.re/go/proxy"
+	core "github.com/dappcore/go"
+	"github.com/dappcore/go-proxy/go"
 )
 
 // TestAccessLog_OnLogin_Good verifies a CONNECT line is written with the expected columns.

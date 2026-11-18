@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"dappco.re/go/proxy"
+	"github.com/dappcore/go-proxy/go"
 )
 
 func TestStrategyFlow_FailoverStrategy_Connect_Good(t *testing.T) {

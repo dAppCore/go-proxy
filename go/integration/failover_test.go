@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"dappco.re/go/proxy"
-	_ "dappco.re/go/proxy/splitter/simple"
+	"github.com/dappcore/go-proxy/go"
+	_ "github.com/dappcore/go-proxy/go/splitter/simple"
 )
 
 func TestFailover_PrimaryDown_Good(t *testing.T) {

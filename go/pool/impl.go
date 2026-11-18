@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	core "dappco.re/go"
-	"dappco.re/go/proxy"
+	core "github.com/dappcore/go"
+	"github.com/dappcore/go-proxy/go"
 )
 
 const maxStratumLineLength = 16384

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	core "dappco.re/go"
+	core "github.com/dappcore/go"
 )
 
 // Result is the success/error carrier used by constructors and loaders.

@@ -3,7 +3,7 @@ package proxy
 import (
 	"testing"
 
-	core "dappco.re/go"
+	core "github.com/dappcore/go"
 )
 
 func TestError_NewScopedError_Good(t *testing.T) {

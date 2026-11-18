@@ -1,6 +1,6 @@
 package simple
 
-import core "dappco.re/go"
+import core "github.com/dappcore/go"
 
 func testJSONUnmarshal(data []byte, target any) error {
 	r := core.JSONUnmarshal(data, target)

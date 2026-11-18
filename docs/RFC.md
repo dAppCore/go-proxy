@@ -1,5 +1,5 @@
 ---
-module: dappco.re/go/core/proxy
+module: github.com/dappcore/go-proxy/go
 repo: core/go-proxy
 lang: go
 tier: lib
@@ -18,7 +18,7 @@ tags:
 
 > An agent should be able to implement this library from this document alone.
 
-**Module:** `dappco.re/go/core/proxy`
+**Module:** `github.com/dappcore/go-proxy/go`
 **Repository:** `core/go-proxy`
 **Files:** 18
 
